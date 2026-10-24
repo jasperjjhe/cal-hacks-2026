@@ -32,6 +32,10 @@ npm run dev
 Open `http://localhost:5173`. Restart Vite if it was running before `.env.local`
 was generated. Authentication keys and the local database are ignored by Git.
 Do not rerun the auth initializer on every startup: it rotates signing keys.
+For a local catalog seeded before the diagnostic fix, run
+`npx convex run buyerAdmin:upgradeDemoDiagnostics '{}'` once. This creates new
+listing versions and preserves allocations and historical order snapshots.
+
 Seeding is idempotent for the same revision and refuses to reset a nonempty
 catalog with another revision. Existing purchases are never silently reset.
 

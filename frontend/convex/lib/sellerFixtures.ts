@@ -405,7 +405,12 @@ function makeSnapshots(merchantId: Id): CatalogSnapshot[] {
   const snapshots: CatalogSnapshot[] = []
   for (const [variantId, reference, floor, quantity, condition] of laptopListings[merchantId] ?? []) {
     const variant = variantById.get(variantId)
-    if (variant) snapshots.push({ variant, listing: listing(merchantId, variantId, reference, floor, quantity, condition), availableQuantity: quantity })
+    if (variant) {
+      const stock=listing(merchantId,variantId,reference,floor,quantity,condition);
+      const knownHealth:Record<string,number>={'merchant_a:P1':92,'merchant_a:P5':90,'merchant_b:P2':88,'merchant_c:P5':85};
+      stock.diagnosticAttributes={healthPercent:synthetic(condition==='refurbished'?knownHealth[stock.listing.id]??null:null,'%'),includedCharger:synthetic(true)};
+      snapshots.push({variant,listing:stock,availableQuantity:quantity});
+    }
   }
   for (const [variantId, reference] of nonTechListings[merchantId] ?? []) {
     const variant = variantById.get(variantId)

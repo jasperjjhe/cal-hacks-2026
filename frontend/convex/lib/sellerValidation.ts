@@ -420,10 +420,26 @@ function attributeFor(
   fieldId: string,
 ): Attribute | null {
   return (
-    snapshot.variant.attributes[fieldId] ??
     snapshot.listing.diagnosticAttributes[fieldId] ??
+    snapshot.variant.attributes[fieldId] ??
     null
   );
+}
+
+// One shared score for initial offers, baskets and evidence reassessment.
+export function weightedCoverage(
+  requirements: readonly RequirementResult[],
+): number | null {
+  const soft = requirements.filter((r) => r.strength === "soft");
+  const denominator = soft.reduce((sum, r) => sum + r.weight, 0);
+  return denominator
+    ? (100 *
+        soft.reduce(
+          (sum, r) => sum + (r.status === "satisfied" ? r.weight : 0),
+          0,
+        )) /
+        denominator
+    : null;
 }
 
 export function assessLine(
@@ -500,20 +516,7 @@ export function assessLine(
           "CONDITION_NOT_ALLOWED",
         ].includes(reason.code),
     );
-  const soft = requirements.filter(
-    (requirement) => requirement.strength === "soft",
-  );
-  const softWeight = soft.reduce(
-    (sum, requirement) => sum + requirement.weight,
-    0,
-  );
-  const softMatches = soft.reduce(
-    (sum, requirement) =>
-      sum + (requirement.status === "satisfied" ? requirement.weight : 0),
-    0,
-  );
-  const coverage =
-    softWeight === 0 ? null : Math.round((100 * softMatches) / softWeight);
+  const coverage = weightedCoverage(requirements);
   return { hardRequirementsPassed, coverage, requirements, reasons };
 }
 
@@ -769,15 +772,19 @@ export function validateSellerProposal(
         ),
       );
   }
-  const sourceIds = new Set(
-    context.catalog.flatMap((s) =>
-      [
-        ...Object.values(s.variant.attributes),
-        ...Object.values(s.listing.diagnosticAttributes),
-      ].flatMap((a) => (a.sourceId ? [a.sourceId] : [])),
-    ),
-  );
-  for (const claim of proposal.claims)
+  for (const claim of proposal.claims) {
+    const line = proposal.lines.find(
+      (l) => l.requestLineId === claim.requestLineId,
+    );
+    const snapshot = line ? findSnapshot(context, line) : null;
+    const sourceIds = new Set(
+      snapshot
+        ? [
+            ...Object.values(snapshot.variant.attributes),
+            ...Object.values(snapshot.listing.diagnosticAttributes),
+          ].flatMap((a) => (a.sourceId ? [a.sourceId] : []))
+        : [],
+    );
     if (
       !claim.sourceIds.length ||
       claim.sourceIds.some((id) => !sourceIds.has(id)) ||
@@ -786,20 +793,12 @@ export function validateSellerProposal(
       reasons.push(
         safeReason(
           "INVALID_INPUT",
-          "A factual claim must cite an allowed source for its own request line.",
+          "A factual claim must cite an allowed exact-product source for its own request line.",
           `claims.${claim.id}`,
         ),
       );
-  const allSoft = combinedFit.requirements.filter((r) => r.strength === "soft");
-  const totalWeight = allSoft.reduce((s, r) => s + r.weight, 0);
-  combinedFit.coverage = totalWeight
-    ? (100 *
-        allSoft.reduce(
-          (s, r) => s + (r.status === "satisfied" ? r.weight : 0),
-          0,
-        )) /
-      totalWeight
-    : null;
+  }
+  combinedFit.coverage = weightedCoverage(combinedFit.requirements);
   reasons.push(...combinedFit.reasons);
   if (!combinedFit.hardRequirementsPassed)
     reasons.push(

@@ -119,7 +119,7 @@ function Workspace() {
   const active = requests?.find((r) => r.requestId === requestId)?.activeRunId;
   const run = useQuery(
     api.buyer.getBuyerRun,
-    requestId && active ? { requestId, runId: active } : "skip",
+    requestId && active ? { requestId } : "skip",
   );
   const purchase = useQuery(
     api.buyer.getPurchase,
@@ -219,7 +219,12 @@ function Workspace() {
       setCompared([]);
     });
   }
-  useEffect(()=>{if(purchase?.execution?.executionId)document.getElementById("purchase-status")?.scrollIntoView({block:"start"});},[purchase?.execution?.executionId]);
+  useEffect(() => {
+    if (purchase?.execution?.executionId)
+      document
+        .getElementById("purchase-status")
+        ?.scrollIntoView({ block: "start" });
+  }, [purchase?.execution?.executionId]);
   const locked =
     run && ["executing", "unknown", "complete"].includes(run.purchaseStage);
   const selectedCards = (run?.offers ?? []).filter((o) =>
@@ -409,6 +414,27 @@ function Workspace() {
                       onClick={() => void edit()}
                     >
                       Edit brief
+                    </button>
+                  )}
+                  {run?.stage === "results" && !locked && (
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(async () => {
+                          unwrap(
+                            await start({
+                              input: {
+                                request: run.request,
+                                clientKey: clientKey(),
+                              },
+                            }),
+                          );
+                          setCompared([]);
+                        })
+                      }
+                    >
+                      Refresh comparison
                     </button>
                   )}
                   {run?.allowedActions.includes("cancel") && (
@@ -1454,9 +1480,10 @@ function Offer({
   onSave: () => void;
   onSelect: () => void;
 }) {
-  const laptop = /laptop|macbook|thinkpad|demothink|demobook|framework|zenbook/i.test(
-    card.products[0].title,
-  );
+  const laptop =
+    /laptop|macbook|thinkpad|demothink|demobook|framework|zenbook/i.test(
+      card.products[0].title,
+    );
   return (
     <article className={`offer-card ${compared ? "is-compared" : ""}`}>
       <div className="product-visual">
@@ -1636,8 +1663,10 @@ function QuotePanel({
   busy: boolean;
   onApprove: () => void;
 }) {
-  const panel=useRef<HTMLElement>(null);
-  useEffect(()=>{panel.current?.scrollIntoView({block:"start"});},[]);
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    panel.current?.scrollIntoView({ block: "start" });
+  }, []);
   const [now, setNow] = useState(Date.now);
   const [consent, setConsent] = useState(false);
   useEffect(() => {

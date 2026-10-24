@@ -219,6 +219,11 @@ export async function enforceUnlocked(ctx: ReadCtx, requestId: string) {
     .query("buyerExecutions")
     .withIndex("by_request", (q) => q.eq("requestId", requestId))
     .take(30);
+  if (attempts.some((a) => a.state === "succeeded"))
+    fail(
+      "INVALID_INPUT",
+      "This request already has a completed order. Start a new request.",
+    );
   if (attempts.some((a) => ["pending", "unknown"].includes(a.state)))
     fail(
       "EXECUTION_UNKNOWN",

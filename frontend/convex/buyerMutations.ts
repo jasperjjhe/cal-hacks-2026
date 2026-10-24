@@ -223,6 +223,7 @@ export const startRun = internalMutation({
       ).length >= 3
     )
       fail("LIMIT_REACHED", "At most three requests can run at once.");
+    await releaseRequestHolds(ctx, args.request.id);
     const config = {
       agents: await setting(
         ctx,

@@ -5,7 +5,7 @@ import { contracts } from "../src/contracts/index.ts";
 import { currentRun, digest, emit } from "./buyer/core.ts";
 import { startEvidence, pollEvidence } from "./integrations/buyerTools.ts";
 import { z } from "zod";
-import { assessLine } from "./lib/sellerValidation";
+import { assessLine, weightedCoverage } from "./lib/sellerValidation";
 import { versionFor } from "./buyer/core";
 import { loadSnapshots } from "./sellerInternal.ts";
 import type { WriteCtx } from "./buyer/core.ts";
@@ -407,8 +407,6 @@ async function attach(
         assessments.push(assessLine(line, copy));
       }
       const results = assessments.flatMap((a) => a.requirements);
-      const soft = results.filter((r) => r.strength === "soft");
-      const total = soft.reduce((s, r) => s + r.weight, 0);
       const hardPass =
         assessments.length === request.brief.lines.length &&
         assessments.every((a) => a.hardRequirementsPassed) &&
@@ -416,14 +414,7 @@ async function attach(
       const fit = {
         ...row.card.fit,
         hardRequirementsPass: hardPass,
-        coveragePercent: total
-          ? (100 *
-              soft.reduce(
-                (s, r) => s + (r.status === "satisfied" ? r.weight : 0),
-                0,
-              )) /
-            total
-          : null,
+        coveragePercent: weightedCoverage(results),
         checks: row.card.fit.checks.map(
           (
             check: import("../src/contracts/index.ts").Contract<"FitAssessment">["checks"][number],

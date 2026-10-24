@@ -318,3 +318,34 @@ test('HTTP provider adapter requires explicit HTTPS allowlists and sends only sc
   assert.equal('privateMaximumCents' in requestBody.input, false)
   assert.equal(requestBody.input.runId, 'run_demo_1')
 })
+
+test("unit diagnostics override generic variant health, including explicit unknowns", () => {
+  const snapshot = structuredClone(
+    fixtures.snapshotsByMerchant.merchant_c.find((s) => s.variant.id === "P1"),
+  );
+  const line = {
+    ...fixtures.briefs.laptop.lines[0],
+    allowedConditions: ["refurbished"],
+    requirements: [
+      {
+        id: "health",
+        fieldId: "healthPercent",
+        operator: "min",
+        value: 90,
+        unit: "%",
+        strength: "hard",
+        weight: 1,
+      },
+    ],
+  };
+  assert.equal(assessLine(line, snapshot).hardRequirementsPassed, false);
+  snapshot.listing.diagnosticAttributes.healthPercent = {
+    value: 95,
+    unit: "%",
+    provenance: "synthetic_demo",
+    sourceId: null,
+  };
+  assert.equal(assessLine(line, snapshot).hardRequirementsPassed, true);
+  snapshot.listing.diagnosticAttributes.healthPercent.value = null;
+  assert.equal(assessLine(line, snapshot).requirements[0].status, "unknown");
+});

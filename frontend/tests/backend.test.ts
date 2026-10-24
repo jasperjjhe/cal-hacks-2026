@@ -62,7 +62,7 @@ async function confirmed(context?: Awaited<ReturnType<typeof setup>>) {
 }
 async function resultRun(context?: Awaited<ReturnType<typeof setup>>) {
   const state = await confirmed(context);
-  const result = await state.buyer.mutation(internal.buyerMutations.startRun, {
+  await state.buyer.mutation(internal.buyerMutations.startRun, {
     input: { request: state.ref, clientKey: "start" },
   });
   for (let i = 0; i < 150; i++) {
@@ -70,7 +70,6 @@ async function resultRun(context?: Awaited<ReturnType<typeof setup>>) {
     await vi.advanceTimersByTimeAsync(100);
     const view = await state.buyer.query(api.buyer.getBuyerRun, {
       requestId: state.ref.id,
-      runId: result.runId,
     });
     if (["results", "no_match", "failed"].includes(view.stage))
       return { ...state, view };
@@ -206,6 +205,7 @@ test("unknown execution retains stock beyond quote expiry and reconciles the sam
     status: "unknown",
     providerReference: "simulation:unknown",
   });
+  vi.setSystemTime(Date.now() + 180001);
   await state.t.mutation(internal.buyerExecution.expireQuote, {
     quoteId: quote.quoteId,
   });
@@ -341,7 +341,6 @@ test("cancellation makes late worker completions inert", async () => {
     (
       await state.buyer.query(api.buyer.getBuyerRun, {
         requestId: state.ref.id,
-        runId,
       })
     ).stage,
   ).toBe("cancelled");
@@ -472,6 +471,16 @@ test("final price submissions stay sealed until the round closes", async () => {
     phase: "negotiating",
     roundId: roundId!,
   });
+  for (const jobId of finals) {
+    const job = await state.t.query(internal.buyerJobs.getJob, { jobId });
+    for (const field of [
+      "privateMaximumCents",
+      "affordable",
+      "rawMessages",
+      "origins",
+    ])
+      expect(JSON.stringify(job!.input)).not.toContain(field);
+  }
   await state.t.action(internal.buyerJobs.dispatch, { jobId: finals[0] });
   const staged = await state.t.run((ctx) =>
     ctx.db
@@ -483,9 +492,9 @@ test("final price submissions stay sealed until the round closes", async () => {
   expect(staged.every((o) => !o.effective)).toBe(true);
   const events = await state.buyer.query(api.buyer.getRunEvents, {
     requestId: state.ref.id,
-    runId,
+    cursor: null,
   });
-  expect(events.filter((e) => e.kind === "final_bid")).toHaveLength(0);
+  expect(events.events.filter((e) => e.kind === "final_bid")).toHaveLength(0);
 });
 test("one retry is bounded and cannot repair stale work", async () => {
   const state = await confirmed();
@@ -674,7 +683,7 @@ test("all non-tech categories and a related-item basket complete through the act
         sort: "best_fit",
       },
     });
-    const { runId } = await buyer.mutation(internal.buyerMutations.startRun, {
+    await buyer.mutation(internal.buyerMutations.startRun, {
       input: { request: ref, clientKey: "start" },
     });
     let stage = "";
@@ -683,7 +692,6 @@ test("all non-tech categories and a related-item basket complete through the act
       await vi.advanceTimersByTimeAsync(100);
       const view = await buyer.query(api.buyer.getBuyerRun, {
         requestId: ref.id,
-        runId,
       });
       stage = view.stage;
       if (["results", "failed", "no_match"].includes(stage)) {
@@ -771,7 +779,6 @@ test("authoritative exact-product contradictions invoke shared assessment and pr
   });
   const view = await state.buyer.query(api.buyer.getBuyerRun, {
     requestId: state.ref.id,
-    runId: state.view.runId,
   });
   expect(
     view.offers.some((o) => o.products[0].variantId === row.variantId),
@@ -786,4 +793,131 @@ test("authoritative exact-product contradictions invoke shared assessment and pr
       },
     }),
   ).rejects.toThrow();
+});
+
+test("canonical run reads and cursor pagination are owned and bounded", async () => {
+  const state = await confirmed();
+  expect(
+    await state.buyer.query(api.buyer.getBuyerRun, { requestId: state.ref.id }),
+  ).toBeNull();
+  expect(
+    await state.buyer.query(api.buyer.getRunEvents, {
+      requestId: state.ref.id,
+      cursor: null,
+    }),
+  ).toEqual({ events: [], nextCursor: null });
+  const { runId } = await state.buyer.mutation(
+    internal.buyerMutations.startRun,
+    { input: { request: state.ref, clientKey: "start" } },
+  );
+  await state.t.run(async (ctx) => {
+    for (let sequence = 2; sequence <= 105; sequence++) {
+      const id = await ctx.db.insert("buyerEvents", {
+        runId,
+        sequence,
+        data: null,
+      });
+      await ctx.db.patch(id, {
+        data: {
+          id: String(id),
+          request: state.ref,
+          runId,
+          sequence,
+          createdAt: Date.now(),
+          kind: "response",
+          merchantId: null,
+          offer: null,
+          summary: "Safe event",
+        },
+      });
+    }
+  });
+  const first = await state.buyer.query(api.buyer.getRunEvents, {
+    requestId: state.ref.id,
+    cursor: null,
+  });
+  expect(first.events).toHaveLength(100);
+  expect(first.nextCursor).not.toBeNull();
+  const second = await state.buyer.query(api.buyer.getRunEvents, {
+    requestId: state.ref.id,
+    cursor: first.nextCursor,
+  });
+  expect(second.events).toHaveLength(5);
+  expect(second.nextCursor).toBeNull();
+  expect(second.events[0].sequence).toBe(101);
+  await expect(
+    state.buyer.query(api.buyer.getRunEvents, {
+      requestId: state.ref.id,
+      cursor: "other-run.10",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    state.t
+      .withIdentity({ subject: "other|session" })
+      .query(api.buyer.getRunEvents, {
+        requestId: state.ref.id,
+        cursor: first.nextCursor,
+      }),
+  ).rejects.toThrow();
+});
+test("refreshing a comparison releases its old quote without losing the confirmed version", async () => {
+  const state = await resultRun();
+  const quote = await reserve(state);
+  const fresh = await state.buyer.mutation(internal.buyerMutations.startRun, {
+    input: { request: state.ref, clientKey: "refresh" },
+  });
+  expect(fresh.runId).not.toBe(state.view.runId);
+  expect(
+    (
+      await state.buyer.query(api.buyer.getPurchase, {
+        requestId: state.ref.id,
+      })
+    ).quoteState,
+  ).toBe("released");
+  await expect(approveQuote(state, quote)).rejects.toThrow();
+  expect(
+    (
+      await state.buyer.query(api.buyer.getConfirmedRequest, {
+        requestId: state.ref.id,
+      })
+    )?.request,
+  ).toEqual(state.ref);
+});
+
+test("diagnostic migration preserves a locked purchase snapshot and never resets stock", async () => {
+  const state = await resultRun();
+  await state.t.run(async (ctx) => {
+    for (const row of await ctx.db.query("listingVersions").collect())
+      if (/^P[1-6]$/.test(row.variantId))
+        await ctx.db.patch(row._id, { diagnosticAttributes: {} });
+  });
+  const quote = await reserve(state);
+  const execution = await approveQuote(state, quote);
+  const first = await state.t.mutation(
+    internal.buyerAdmin.upgradeDemoDiagnostics,
+    {},
+  );
+  expect(first.updated).toBeGreaterThan(0);
+  expect(
+    (await state.t.mutation(internal.buyerAdmin.upgradeDemoDiagnostics, {}))
+      .updated,
+  ).toBe(0);
+  expect(
+    (await state.t.run((ctx) => ctx.db.query("allocations").collect())).every(
+      (a) => a.state === "execution_locked",
+    ),
+  ).toBe(true);
+  await state.t.mutation(internal.buyerExecution.settleAttempt, {
+    executionId: execution.executionId,
+    status: "succeeded",
+    providerReference: "simulation:approved-snapshot",
+  });
+  const orders = await state.buyer.query(api.buyer.listOrders, {});
+  expect(orders).toHaveLength(1);
+  expect(orders[0].quote).toEqual(quote);
+  expect(
+    (await state.t.run((ctx) => ctx.db.query("allocations").collect())).every(
+      (a) => a.state === "sold",
+    ),
+  ).toBe(true);
 });

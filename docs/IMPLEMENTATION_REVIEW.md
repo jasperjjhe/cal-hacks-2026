@@ -1,3 +1,7 @@
+> Historical review of the offline mock. The backend was subsequently implemented
+> and all work moved to `geoff/buyer`; `dev` was restored to its original commit.
+> See [BUYER_BACKEND_HANDOFF.md](BUYER_BACKEND_HANDOFF.md) for the current system.
+
 # Buyer implementation review — October 24, 2026
 
 The implemented buyer mock had actionable lifecycle, privacy-projection, consent,

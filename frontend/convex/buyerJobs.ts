@@ -453,7 +453,15 @@ export const completeJob = internalMutation({
   handler: async (ctx, args): Promise<{ pending: boolean }> => {
     const id = ctx.db.normalizeId("buyerJobs", args.jobId);
     const job = id ? await ctx.db.get(id) : null;
-    if(job?.state==="completed"&&job.outputDigest&&args.result?.status==="completed"){if(await digest(args.result.output)!==job.outputDigest)fail("INVALID_INPUT","Mismatched provider replay.");return {pending:false};}
+    if (
+      job?.state === "completed" &&
+      job.outputDigest &&
+      args.result?.status === "completed"
+    ) {
+      if ((await digest(args.result.output)) !== job.outputDigest)
+        fail("INVALID_INPUT", "Mismatched provider replay.");
+      return { pending: false };
+    }
     if (!job || !["starting", "polling", "pending"].includes(job.state))
       return { pending: false };
     if (
@@ -983,10 +991,11 @@ export const createRepair = internalMutation({
   handler: async (ctx, { jobId }): Promise<string | null> => {
     const id = ctx.db.normalizeId("buyerJobs", jobId);
     const job = id ? await ctx.db.get(id) : null;
-    if(job?.state==="repairing"&&job.output?.repairJobId)return String(job.output.repairJobId);
+    if (job?.state === "repairing" && job.output?.repairJobId)
+      return String(job.output.repairJobId);
     if (
       !job ||
-      ["completed","failed","stale","cancelled"].includes(job.state)||
+      ["completed", "failed", "stale", "cancelled"].includes(job.state) ||
       job.input.repairAttempt ||
       Date.now() + 1000 >= job.deadlineAt ||
       (job.runId && !(await currentRun(ctx, job.runId, job.phase)))

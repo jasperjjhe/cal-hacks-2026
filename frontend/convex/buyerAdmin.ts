@@ -96,3 +96,62 @@ export const configureDemo = internalMutation({
     return null;
   },
 });
+
+// Add the documented synthetic unit diagnostics to an already-seeded local
+// demo without resetting quantities, payments or the approved order snapshots.
+export const upgradeDemoDiagnostics = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const seeded = await ctx.db.query("seedRuns").first();
+    if (!seeded) throw new Error("Seed the fictional catalog first.");
+    const known: Record<string, number> = {
+      "merchant_a:P1": 92,
+      "merchant_a:P5": 90,
+      "merchant_b:P2": 88,
+      "merchant_c:P5": 85,
+    };
+    let updated = 0;
+    for (const merchantId of ["merchant_a", "merchant_b", "merchant_c"]) {
+      const rows = await ctx.db
+        .query("listingVersions")
+        .withIndex("by_merchantId_and_enabled", (q) =>
+          q.eq("merchantId", merchantId).eq("enabled", true),
+        )
+        .collect();
+      for (const row of rows) {
+        if (
+          !/^P[1-6]$/.test(row.variantId) ||
+          row.diagnosticAttributes.includedCharger
+        )
+          continue;
+        const { _id, _creationTime, ...listing } = row;
+        void _creationTime;
+        await ctx.db.patch(_id, { enabled: false });
+        await ctx.db.insert("listingVersions", {
+          ...listing,
+          version: row.version + 1,
+          diagnosticAttributes: {
+            ...row.diagnosticAttributes,
+            healthPercent: {
+              value:
+                row.condition === "refurbished"
+                  ? (known[row.listingId] ?? null)
+                  : null,
+              unit: "%",
+              provenance: "synthetic_demo",
+              sourceId: null,
+            },
+            includedCharger: {
+              value: true,
+              unit: null,
+              provenance: "synthetic_demo",
+              sourceId: null,
+            },
+          },
+        });
+        updated++;
+      }
+    }
+    return { updated };
+  },
+});

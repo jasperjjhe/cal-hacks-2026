@@ -42,18 +42,9 @@ export function projectOffer(input: {
             : "This requirement is not met.",
     };
   });
-  const soft = raw.fit.requirements.filter((r) => r.strength === "soft");
-  const weights = soft.reduce((s, r) => s + r.weight, 0);
   const fit = contracts.FitAssessment.parse({
     checks,
-    coveragePercent: weights
-      ? (100 *
-          soft.reduce(
-            (s, r) => s + (r.status === "satisfied" ? r.weight : 0),
-            0,
-          )) /
-        weights
-      : null,
+    coveragePercent: raw.fit.coverage,
     hardRequirementsPass: raw.fit.hardRequirementsPassed,
     scoringVersion: 1,
   });

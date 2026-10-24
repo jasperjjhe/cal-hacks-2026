@@ -28,3 +28,41 @@ buyer checks and nine Convex function integration tests. The real local browser
 flow reached checked offers and explicit simulation approval. Final acceptance,
 retention, retry/revalidation coverage and integration instructions continue in
 the next checkpoint. External provider adapters intentionally remain unconfigured.
+
+## Final buyer implementation and audit
+
+All work is on `geoff/buyer`. Both local and remote `dev` were restored to the
+original `609e53e`; the original implementation commits and unfinished work were
+preserved on this branch before continuing.
+
+Implemented the buyer lifecycle, private/consented seller projections, profile
+validation and shared unit conversion, role-scoped durable jobs, bounded retries,
+sealed final-price staging/promotion, source applicability/cache/reassessment,
+comparison and bookmarks, exact firm quote approval, atomic allocations,
+idempotent simulated execution/reconciliation, frozen receipts, internal operator
+provisioning and seven-day retention. The default UI uses these backend APIs;
+`/mock` is only the explicitly offline historical prototype.
+
+Final audit fixes include canonical request-only run reads and cursor pagination,
+clearing old unapproved holds on refresh, blocking changes to completed purchases,
+shared scoring across initial offers and evidence reassessment, no private buyer
+flags in final seller inputs, unit diagnostics taking precedence over generic
+product facts, and an idempotent diagnostic upgrade that preserves stock and
+approved snapshots. Mobile navigation, quote consent reset, exact configuration
+inspection, modal comparison and Vite refresh behavior were also checked/fixed.
+
+Verification: 20 backend integration tests, 13 seller tests, 24 buyer regression
+checks and 4 dependency-policy tests (61 total); contract export, backend
+typecheck, lint and production build. Full CI dependency installation/signatures,
+zero-vulnerability audit, seven-day dependency age and workflow rules passed;
+relevant tests/typecheck/lint/build were rerun after the final changes. Real local
+Convex deployment/typecheck passed, and the browser completed a persisted
+simulated order with reload recovery. Desktop/mobile checks include loaded local
+laptop illustrations, visible navigation and no horizontal page overflow.
+
+Remaining configuration is explicit: fill the verified CREAO/Apify/payment
+adapters in `frontend/convex/integrations/buyerTools.ts`, add genuine exact product
+identities/sources before claiming live evidence, and configure deployment when
+the team is ready. External providers and a public deployment are not claimed as
+verified. See `BUYER_BACKEND_HANDOFF.md` and `frontend/README.md` for setup and the
+seller-branch integration changes.

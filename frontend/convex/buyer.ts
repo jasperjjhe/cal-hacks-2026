@@ -75,29 +75,55 @@ export const getConfirmedRequest = query({
   },
 });
 export const getBuyerRun = query({
-  args: { requestId: v.string(), runId: v.string() },
+  args: { requestId: v.string() },
   handler: async (ctx, args) => {
     const req = await requestFor(ctx, args.requestId);
-    const run = await runFor(ctx, args.runId);
+    const runId = req.activeRunId;
+    if (!runId) return null;
+    const run = await runFor(ctx, runId);
     if (!run || run.ownerId !== req.ownerId || run.requestId !== args.requestId)
       fail("FORBIDDEN", "Run unavailable.");
     const rows = await ctx.db
       .query("buyerOffers")
       .withIndex("by_run_effective", (q) =>
-        q.eq("runId", args.runId).eq("effective", true),
+        q.eq("runId", runId).eq("effective", true),
       )
       .take(6);
     const events = await ctx.db
       .query("buyerEvents")
-      .withIndex("by_run_sequence", (q) => q.eq("runId", args.runId))
+      .withIndex("by_run_sequence", (q) => q.eq("runId", runId))
       .order("desc")
       .take(100);
     const jobs = await ctx.db
       .query("buyerJobs")
-      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .withIndex("by_run", (q) => q.eq("runId", runId))
       .take(40);
     const confirmed = await versionFor(ctx, args.requestId, run.version);
-    const cards = rows.map((r) => contracts.OfferCard.parse(r.card));
+    const cards = await Promise.all(
+      rows.map(async (row) => {
+        const card = contracts.OfferCard.parse(row.card);
+        const merchant = await ctx.db
+          .query("merchants")
+          .withIndex("by_merchantId", (q) => q.eq("merchantId", row.merchantId))
+          .unique();
+        const current =
+          run.stage === "results" &&
+          req.activeRunId === runId &&
+          !!merchant &&
+          merchant.enabled &&
+          !merchant.paused &&
+          merchant.currentPolicyId === row.data.policy.id &&
+          merchant.currentPolicyVersion === row.data.policy.version;
+        return current
+          ? card
+          : {
+              ...card,
+              selectable: false,
+              unavailableReason:
+                "The run or merchant policy changed; renew the comparison.",
+            };
+      }),
+    );
     const offers = shortlist(
       cards,
       run.config.sort ?? confirmed.sort,
@@ -105,7 +131,7 @@ export const getBuyerRun = query({
     );
     return contracts.BuyerRunView.parse({
       request: confirmed.request,
-      runId: args.runId,
+      runId: runId,
       stage: run.stage,
       purchaseStage: run.purchaseStage,
       startedAt: run.startedAt,
@@ -172,24 +198,35 @@ export const getBuyerRun = query({
   },
 });
 export const getRunEvents = query({
-  args: {
-    requestId: v.string(),
-    runId: v.string(),
-    afterSequence: v.optional(v.number()),
-  },
+  args: { requestId: v.string(), cursor: v.union(v.string(), v.null()) },
   handler: async (ctx, args) => {
     const req = await requestFor(ctx, args.requestId);
-    const run = await runFor(ctx, args.runId);
-    if (!run || run.ownerId !== req.ownerId || run.requestId !== args.requestId)
-      fail("FORBIDDEN", "Run unavailable.");
-    return (
-      await ctx.db
-        .query("buyerEvents")
-        .withIndex("by_run_sequence", (q) =>
-          q.eq("runId", args.runId).gt("sequence", args.afterSequence ?? 0),
-        )
-        .take(100)
-    ).map((e) => contracts.RunEvent.parse(e.data));
+    const runId = req.activeRunId;
+    if (!runId) {
+      if (args.cursor !== null)
+        fail("STALE_VERSION", "The run changed; restart event pagination.");
+      return { events: [], nextCursor: null };
+    }
+    let after = 0;
+    if (args.cursor !== null) {
+      const parsed = /^([A-Za-z0-9_-]{1,128})\.(\d{1,12})$/.exec(args.cursor);
+      if (!parsed) fail("INVALID_INPUT", "Invalid event cursor.");
+      if (parsed[1] !== runId)
+        fail("STALE_VERSION", "The run changed; restart event pagination.");
+      after = Number(parsed[2]);
+    }
+    const rows = await ctx.db
+      .query("buyerEvents")
+      .withIndex("by_run_sequence", (q) =>
+        q.eq("runId", runId).gt("sequence", after),
+      )
+      .take(101);
+    const page = rows.slice(0, 100);
+    return {
+      events: page.map((e) => contracts.RunEvent.parse(e.data)),
+      nextCursor:
+        rows.length > 100 ? `${runId}.${page[page.length - 1].sequence}` : null,
+    };
   },
 });
 export const getEvidence = query({

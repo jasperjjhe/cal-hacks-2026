@@ -1,6 +1,6 @@
 # Dev B buyer backend handoff
 
-The user froze the contracts and authorized a complete backend on `dev`, followed
+The user froze the contracts and authorized a complete backend on `geoff/buyer`, followed
 by user-filled external integrations. Convex account/cloud deployment being
 postponed did not block implementation. The default interface now uses a real
 local Convex deployment; `/mock` is explicitly the old offline preview.
@@ -38,7 +38,9 @@ local Convex deployment; `/mock` is explicitly the old offline preview.
 
 Convex actions accept `{input: payload}`; `payload` is the frozen command object.
 They return `{ok:true,value}` or `{ok:false,error:ApiError}`. Queries take their
-named fields directly. This envelope keeps transaction errors structured without
+named fields directly. `getBuyerRun({requestId})` resolves the current run and
+returns null before one exists; `getRunEvents({requestId,cursor:null|string})`
+returns `{events,nextCursor}` and rejects a cursor from a superseded run. This envelope keeps transaction errors structured without
 catching them inside a write transaction.
 
 Actions: `saveDraft`, `interpretDraft`, `confirmRequest`, `startRun`, `cancelRun`,
@@ -84,9 +86,11 @@ Integration changes to reconcile when the seller branch merges:
 S still owns future catalog/policy improvements and the seller dashboard. Existing
 fixture identities are synthetic, including laptop aliases. Add a genuinely
 identified product via S's catalog before claiming live exact-product evidence.
-Included-charger facts must be seeded explicitly before asserting inclusion;
-missing facts are not inferred from product reviews. These are catalog/configuration
-requirements for an externally evidenced demo, not a buyer persistence blocker.
+Included-charger status and per-unit refurbished health are explicit synthetic
+listing diagnostics. Unknown unit health overrides a generic product fact and
+fails a mandatory threshold. Existing local seeds can be upgraded without a stock
+reset via `buyerAdmin:upgradeDemoDiagnostics`; new seeds include these facts.
+A genuine catalog identity is still required for an externally evidenced demo.
 
 ## Final adapter fill-in work
 
