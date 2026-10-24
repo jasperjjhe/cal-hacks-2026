@@ -5,7 +5,7 @@
 The checked-in policy is [.github/main-branch-protection.json](../.github/main-branch-protection.json). It requires:
 
 - the `security` and `dependency-review` checks;
-- one approving review, with stale approvals dismissed after new pushes;
+- a pull request before merging, without requiring another person to approve it;
 - linear history and conversation resolution;
 - administrator enforcement; and
 - no force-pushes or branch deletion.
