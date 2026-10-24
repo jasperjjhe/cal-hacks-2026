@@ -350,7 +350,15 @@ async function attach(
     if (row.card.products[0].variantId === variantId) {
       // Authoritative exact-identity contradictions block selection pending S's
       // reassessment. Family/owner commentary can never certify or negate fit.
-      const conflictingFields = new Set(facts.filter((fact) => facts.some((other) => other.fieldId === fact.fieldId && JSON.stringify([other.value, other.unit]) !== JSON.stringify([fact.value, fact.unit]))).map((fact) => fact.fieldId));
+      const factValue = (fact: (typeof facts)[number]) => JSON.stringify([
+        Array.isArray(fact.value) ? [...fact.value].sort() : fact.value,
+        fact.unit,
+      ]);
+      const conflictingFields = new Set(
+        facts.filter(fact => facts.some(other =>
+          other.fieldId === fact.fieldId && factValue(other) !== factValue(fact),
+        )).map(fact => fact.fieldId),
+      );
       const contradicted = conflictingFields.size > 0 || evidence.some(
         (e) =>
           e.applicability === "exact_variant" &&

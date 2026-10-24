@@ -1,3 +1,8 @@
+> Historical mock review. For the current persisted backend and the resolution
+> of the final branch review, read [BUYER_REVIEW_RESOLUTION.md](BUYER_REVIEW_RESOLUTION.md)
+> and [BUYER_BACKEND_HANDOFF.md](BUYER_BACKEND_HANDOFF.md). Statements below about
+> the backend being absent describe the earlier mock implementation.
+
 > Historical review of the offline mock. The backend was subsequently implemented
 > and all work moved to `geoff/buyer`; `dev` was restored to its original commit.
 > See [BUYER_BACKEND_HANDOFF.md](BUYER_BACKEND_HANDOFF.md) for the current system.

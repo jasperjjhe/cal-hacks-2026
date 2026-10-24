@@ -7,4 +7,10 @@ crons.interval(
   internal.buyerMaintenance.retain,
   {},
 );
+crons.interval(
+  "recover interrupted buyer executions",
+  { minutes: 1 },
+  internal.buyerExecution.recoverStalledAttempts,
+  {},
+);
 export default crons;

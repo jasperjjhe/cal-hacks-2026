@@ -277,17 +277,25 @@ export const listSaved = query({
   args: {},
   handler: async (ctx) => {
     const user = await owner(ctx);
-    return (
-      await ctx.db
-        .query("buyerBookmarks")
-        .withIndex("by_owner", (q) => q.eq("ownerId", user))
-        .take(100)
-    ).map((r) => ({
-      id: String(r._id),
-      requestId: r.requestId ?? null,
-      runId: r.runId ?? null,
-      card: contracts.OfferCard.parse(r.card),
-      createdAt: r.createdAt,
+    const rows = await ctx.db.query("buyerBookmarks")
+      .withIndex("by_owner", q => q.eq("ownerId", user))
+      .take(100);
+    return Promise.all(rows.map(async row => {
+      const requestId = row.requestId ? ctx.db.normalizeId("buyerRequests", row.requestId) : null;
+      const runId = row.runId ? ctx.db.normalizeId("buyerRuns", row.runId) : null;
+      const [request, run] = await Promise.all([
+        requestId ? ctx.db.get(requestId) : null,
+        runId ? ctx.db.get(runId) : null,
+      ]);
+      const retained = request?.ownerId === user && run?.ownerId === user &&
+        run?.requestId === row.requestId;
+      return {
+        id: String(row._id),
+        requestId: retained ? row.requestId! : null,
+        runId: retained ? row.runId! : null,
+        card: contracts.OfferCard.parse(row.card),
+        createdAt: row.createdAt,
+      };
     }));
   },
 });

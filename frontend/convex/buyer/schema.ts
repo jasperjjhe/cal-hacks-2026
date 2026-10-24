@@ -142,7 +142,9 @@ export const buyerTables = {
     attemptCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_request", ["requestId"]),
+  })
+    .index("by_request", ["requestId"])
+    .index("by_state_updated", ["state", "updatedAt"]),
   buyerOrders: defineTable({
     requestId: v.string(),
     ownerId: v.string(),

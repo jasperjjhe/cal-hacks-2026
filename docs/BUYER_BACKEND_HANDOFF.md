@@ -5,6 +5,13 @@ by user-filled external integrations. Convex account/cloud deployment being
 postponed did not block implementation. The default interface now uses a real
 local Convex deployment; `/mock` is explicitly the old offline preview.
 
+## Review fixes and Dev S integration
+
+See [BUYER_REVIEW_RESOLUTION.md](BUYER_REVIEW_RESOLUTION.md) for the final review
+findings, regression coverage, exact-token authentication and migration steps.
+The original Dev S commit was copied into this branch; the future branch merge
+still needs explicit conflict resolution rather than replacing either schema.
+
 ## Authoritative implementation
 
 - `frontend/src/contracts/index.ts`: strict runtime wire schemas, inferred types
@@ -134,3 +141,24 @@ A deployed demo still needs the team's Convex hosting choice, authentication key
 public frontend URL and external provider configuration. There is no public
 production deployment or real payment claim. Guest recovery across browsers and
 optional sponsor add-ons remain outside the core scope.
+
+
+## Recovery and adapter requirements added by the final review
+
+Approval and each execution claim schedule a durable 60-second watchdog. If an
+action stops before settlement, the watchdog changes the same attempt to unknown
+and schedules status reconciliation. It never invokes payment again. The payment
+adapter must look up by execution ID even when no provider reference was received.
+Unknown outcomes retain inventory; only definite decline or success releases or
+sells locked stock. Retention checks unresolved attempts before any history cap.
+
+A thrown CREAO start is ambiguous and becomes pending on the same job identity,
+without creating a repair start. `pollCreao` must support reconciliation using
+`ToolJob.id` when `providerRunId` is null. Return explicit `failed` only when the
+provider definitively rejected or terminated the work. The bounded repair path
+remains available for definite failures and invalid output.
+
+`getEvidence` accepts optional `runId` for archived bookmarks, while enforcing
+request/run ownership. New bookmarks retain both identifiers; older snapshots
+without them explicitly report unavailable archived evidence. Excerpts are not
+presented as independent source counts.

@@ -958,7 +958,7 @@ function Workspace() {
           ) : <p>Archived evidence is unavailable for this older saved snapshot.</p>}
         </Modal>
       )}
-      {showCompare && (
+      {showCompare && selectedCards.length >= 2 && (
         <Modal title="Compare offers" onClose={() => setShowCompare(false)}>
           <div className="backend-table-scroll">
             <table>
@@ -1628,6 +1628,8 @@ function Evidence({ requestId, runId, ids }: { requestId: string; runId?: string
         </p>
       ) : !evidence ? (
         <p>Loading source excerpts…</p>
+      ) : evidence.length === 0 ? (
+        <p>These source excerpts are no longer available.</p>
       ) : (
         evidence.map((e) => (
           <article className="panel" key={e.id}>

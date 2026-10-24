@@ -79,8 +79,19 @@ live mode. The Connections screen states the actual current modes.
 
 Operator accounts are provisioned only through the internal
 `buyerAdmin:provisionOperator` action. Public password signup is disabled;
-membership is assigned server-side to one merchant. Use separate buyer/operator
-browser contexts. The buyer UI does not expose seller administration.
+membership is assigned server-side to one merchant. After password sign-in,
+call `seller.bindOperatorSession({})` before querying the seller workspace.
+It derives the merchant from an internal account grant and binds the exact
+`identity.tokenIdentifier`, following Dev S's authentication contract. Repeat
+this call after each new login; it is idempotent. Clients cannot choose a
+merchant or role. Use separate buyer/operator browser contexts. The buyer UI
+does not expose seller administration.
+
+For an existing deployment with the old `authSubject` membership field, deploy
+the transitional schema and run `npx convex run buyerAdmin:migrateOperatorMemberships '{}'`
+once. It is safe to repeat. Legacy subjects never authorize seller operations;
+existing token-identifier memberships remain valid. See the review-resolution
+handoff for details before merging Dev S's schema.
 
 ## Checks
 

@@ -212,16 +212,45 @@ export const recoverAttempt = internalMutation({
   handler: async (ctx, args) => {
     const id = ctx.db.normalizeId("buyerExecutions", args.executionId);
     const attempt = id ? await ctx.db.get(id) : null;
-    if (!attempt || !["pending", "unknown"].includes(attempt.state) || attempt.updatedAt > args.claimedAt) return;
+    if (
+      !attempt || !["pending", "unknown"].includes(attempt.state) ||
+      attempt.updatedAt > args.claimedAt
+    ) return;
     if (Date.now() < args.claimedAt + 60000) return;
-    await ctx.db.patch(attempt._id, { state: "unknown", updatedAt: Date.now(), data: {
-      ...attempt.data, status: "unknown", nextAction: "wait",
-      resultMessage: "The interrupted purchase is being reconciled. Do not start another attempt.",
-    }});
+    await ctx.db.patch(attempt._id, {
+      state: "unknown",
+      updatedAt: Date.now(),
+      data: {
+        ...attempt.data,
+        status: "unknown",
+        nextAction: "wait",
+        resultMessage: "The interrupted purchase is being reconciled. Do not start another attempt.",
+      },
+    });
     const quoteId = ctx.db.normalizeId("buyerQuotes", attempt.quoteId);
     const quote = quoteId ? await ctx.db.get(quoteId) : null;
     const run = quote ? await runFor(ctx, quote.runId) : null;
     if (run) await ctx.db.patch(run._id, { purchaseStage: "unknown", updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.buyerExecution.reconcileAttempt, { executionId: args.executionId });
+  },
+});
+
+// Backstop for attempts created before watchdogs existed, or missing a timer.
+export const recoverStalledAttempts = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const attempts = await ctx.db.query("buyerExecutions")
+      .withIndex("by_state_updated", q => q
+        .eq("state", "pending")
+        .lte("updatedAt", Date.now() - 60000),
+      )
+      .take(20);
+    for (const attempt of attempts) {
+      await ctx.runMutation(internal.buyerExecution.recoverAttempt, {
+        executionId: String(attempt._id),
+        claimedAt: attempt.updatedAt,
+      });
+    }
+    return attempts.length;
   },
 });
