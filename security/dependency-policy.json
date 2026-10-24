@@ -1,0 +1,12 @@
+{
+  "policyVersion": 1,
+  "maxReleaseAgeDays": 7,
+  "registry": "https://registry.npmjs.org/",
+  "requireRegistryOnly": true,
+  "requireSha512Integrity": true,
+  "requireLockfileVersion": 3,
+  "denyUnreviewedInstallScripts": true,
+  "offlineAgeCheckAllowedOnlyForLocalDiagnostics": true,
+  "knownCompromiseBlocklist": "security/known-compromised-npm.json",
+  "installScriptAllowlist": "security/allowed-install-scripts.json"
+}

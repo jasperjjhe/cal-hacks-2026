@@ -3,11 +3,21 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "npm": ">=11.16.0 <12"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "security:dependencies": "node scripts/check-dependencies.mjs",
+    "security:workflows": "node scripts/check-workflows.mjs",
+    "test:security": "node --test scripts/*.test.mjs",
+    "security": "npm run security:dependencies && npm run security:workflows",
+    "ci": "npm run test:security && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run lint && npm run build"
   },
   "dependencies": {
     "react": "^19.3.1",
