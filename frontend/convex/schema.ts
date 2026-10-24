@@ -288,4 +288,10 @@ export default defineSchema({
   })
     .index('by_merchantId_and_createdAt', ['merchantId', 'createdAt'])
     .index('by_jobId_and_createdAt', ['jobId', 'createdAt']),
+
+  seedRuns: defineTable({
+    seedRevision: v.string(),
+    mode: v.literal('fixture'),
+    createdAt: v.number(),
+  }).index('by_seedRevision', ['seedRevision']),
 })

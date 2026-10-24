@@ -32,7 +32,7 @@ const requirement = (
   weight: 1 | 2 = 1,
 ): Requirement => ({ id, fieldId, operator, value, unit, strength, weight })
 
-const profiles = {
+export const profiles = {
   laptop: ref('profile_laptop'),
   accessory: ref('profile_tech_accessory'),
   clothing: ref('profile_clothing'),
