@@ -1,6 +1,6 @@
 # BuyerUnion: PRD and two-developer backend handoff
 
-Version 5.1 | October 24, 2026 | Working implementation specification
+Version 5.2 | October 24, 2026 | Working implementation specification
 
 **Outcome:** a buyer confirms one shopping request; isolated seller agents prepare policy-valid offers; the platform checks requirements and evidence; the buyer chooses and explicitly approves exact terms; the prototype records a truthful simulated order.
 
@@ -977,8 +977,6 @@ Technical reference checks:
 
 **Implementation gates remaining:** freeze executable schemas and merchant analytics view with UI/S/B; prepare validated CSV/scraped catalog seeds; pick Fetch/CREAO role wiring and supported non-Gemini reasoning; test live provider/source access; run the acceptance suite; connect the UI team's frontend; map deployment to Mana. No repository push, external ticket, publication, account setup, wallet operation or deployment is performed by this plan.
 
-**TLDR:** S owns seller data, validation, inventory and seller agents; B owns buyer data, orchestration, evidence and approved execution. Shared schemas, fixtures and transaction helpers join the halves. UI/Figma owns the frontend. Fetch/CREAO assignment and Mana specifics stay with the team; core backend implementation can proceed from F0.
-
 ## 19. Security and supply-chain review amendment (2026-10-24)
 
 The handoff's application-level controls in §12 are necessary but were not sufficient for a build that installs JavaScript dependencies. The repository now adds a separate release gate in `SECURITY.md`, `security/`, `frontend/.npmrc`, `frontend/scripts/` and `.github/workflows/`.
@@ -994,7 +992,7 @@ The rule is enforced twice:
 
 Boundary tests cover exactly seven days, one millisecond younger, one millisecond older, future timestamps and invalid timestamps. CI runs the check before `npm ci --ignore-scripts`. A local `--offline` mode exists only for structural diagnostics and is rejected in CI.
 
-The initial lockfile was re-resolved under the seven-day cooldown. The current tree passes the registry age check, npm signature/provenance verification, high-severity audit, lint and build. The only lifecycle-script exception is the exact optional Darwin-only `fsevents@2.3.3` entry, which is version-allowlisted and does not run on the Linux CI runner or Windows demo host.
+The initial lockfile was re-resolved under the seven-day cooldown. At the time of this security amendment, the tree passed the registry age check, npm signature/provenance verification, high-severity audit, lint and build; rerun these gates for each release. The only lifecycle-script exception is the exact optional Darwin-only `fsevents@2.3.3` entry, which is version-allowlisted and does not run on the Linux CI runner or Windows demo host.
 
 ### 19.2 Shai-Hulud-style hardening
 
@@ -1010,23 +1008,27 @@ The current repository is still a frontend scaffold; these controls do not claim
 
 The stack should maximize credible track coverage along one buyer journey, not add disconnected logos. A sponsor is entered only when its technology does real work in the running demo and the README records the exact feature, configuration, evidence and limitation.
 
-### 20.1 Recommended core path
+### 20.1 Core path and gated sponsor candidates
+
+This table records possible sponsor proof, not a mandate to run every integration. The core remains the prompt-to-bid-to-approved-simulation path in §§2–16. Use at least one real Fetch.ai or CREAO agent role; use both only if each performs distinct, necessary work. Coinbase remains optional after G2, as §17 and the ownership plan specify. The agent bidding path takes priority over sponsor additions.
 
 | Technology / track | Concrete role in BuyerUnion | Required proof and security boundary |
 |---|---|---|
 | Convex | Authoritative reactive database, typed functions, Auth, durable Workflows and live run progress. | A reloadable run survives retries/restarts; reservations are atomic; every query/mutation checks authenticated ownership; no second authoritative database. |
 | Fetch.ai | A real merchant/supplier agent (or agent network) produces a scoped proposal using the SellerBrief and returns provider provenance. | A reachable agent, actual request/response, job identity, bounded tools and a failure/retry demo. The official Fetch prize page currently lists a different prize breakdown than the supplied table; confirm with organizers before submission. |
 | CREAO | A real coordinator, negotiation or buyer-intake role behind the same `AgentProvider` contract. | A real run with the configured agent ID/project, async status/poll or callback deduplication, schema validation and visible safe events. Do not count agent creation or a peripheral summary as product use. |
-| Coinbase x402 | A bounded agent payment for one machine-to-machine product-evidence lookup, separate from buyer checkout. | Real supported test payment, typed evidence-payment receipt, fixed destination/network/token, per-request and aggregate caps, one attempt and reconciliation. Never call this a Visa purchase. |
+| Coinbase x402 (optional after G2) | A bounded agent payment for one machine-to-machine product-evidence lookup, separate from buyer checkout. | Real supported test payment, typed evidence-payment receipt, fixed destination/network/token, per-request and aggregate caps, one attempt and reconciliation. Never call this a Visa purchase. |
 | Visa | The primary reimagined-shopping journey: compare validated offers, reserve, approve and complete simulation or a truthful Visa sandbox operation. | Quote hash, test-merchant mapping, duplicate protection, safe status lookup and visible distinction between simulation, tokenization and payment. |
 | Mana | Host the public demo and at least one real app/agent surface; use Mana pages/chats as part of the build record. | A working public link, exact runtime mapping, startup/health evidence and public Mana links requested by the sponsor. Do not assume Mana supplies Convex persistence or agent secrets. |
 
-### 20.2 Highest-value additions that fit the same path
+### 20.2 Optional additions after the core path
+
+These are candidate ideas, not prototype requirements. Current exclusions in §2 remain authoritative: no credit scoring, voice input or extra merchant approval workflow in the demo. Adding any of those needs a separate product decision and work estimate. Figma design evidence may proceed in parallel; optional runtime integrations wait until G2.
 
 1. **Apify / Best Actor.** Promote the existing evidence service to a first-party `BuyerUnion Evidence Actor`: accept only server-issued product identity and approved source IDs, enforce URL/redirect/SSRF controls, normalize source evidence and return an input digest. This is already aligned with §10 and can support both the general Apify track and the Best Actor prize without inventing a second crawler architecture.
-2. **CRS Credit API.** Add an opt-in, sandbox-only “trust and fraud check” for a high-value purchase or merchant operator action. Use only supplied test identities, store a minimal derived risk outcome, never make a credit-eligibility or protected-class decision, and require explicit consent. This creates a meaningful CRS Financial AI Agent / Identity-Fraud story and strengthens Visa trust/responsibility.
-3. **Cartesia plus Moss.** If the team can make voice the default flow, use Cartesia for low-latency speech input/output and Moss for a personal voice agent that remembers the current shopping task and acts through the same scoped tools. Voice must drive intake, clarification and status—not just narrate a screen. Do this only after the text path is reliable and after current APIs/eligibility are confirmed.
-4. **Factory Droid SDK.** Add a scheduled or operator-triggered “merchant operations droid” that audits a listing against evidence, pricing policy and inventory, then shows a plan/diff and waits for approval before changing a listing. This is a strong Factory fit because Droid performs visible work with bounded access; it must be a real runtime integration, not a coding assistant.
+2. **CRS Credit API (separate scope decision).** A sandbox-only trust/fraud check would require explicit consent, test identities, a defined decision role and privacy review. The current demo excludes credit scoring and does not depend on this feature.
+3. **Cartesia plus Moss (separate scope decision).** A real voice flow would need to drive intake, clarification and status through the same guarded contracts. The current demo stays prompt-first text; voice input remains excluded.
+4. **Factory Droid SDK (separate scope decision).** A merchant operations assistant could audit listings and propose changes for review. The current merchant demo stays simple and has no agent-driven listing-edit or exception approval workflow.
 5. **Figma and Notability.** These are process/evidence tracks rather than backend dependencies. Keep the actual Figma design evolution and connected implementation; keep Notability notes with sketches, diagrams, audio, PDFs and dated decisions. Link the artifacts in the submission and show how they changed the build.
 
 ### 20.3 Deliberately defer or avoid
@@ -1039,3 +1041,5 @@ The stack should maximize credible track coverage along one buyer journey, not a
 ### 20.4 Demo and submission evidence ledger
 
 For every entered track, store one short record: `technology`, `feature`, `live URL/run ID`, `exact code path`, `security mode`, `what is simulated`, and `known limitation`. The two-minute demo should show one complete shopping flow, one visible agent plan/tool result, one security or failure recovery moment, and the exact distinction between real vendor operations, sandbox operations and deterministic fixtures. This prevents a prize claim from relying on a logo, key, generated code or a slide-only integration.
+
+**TLDR:** S owns seller data, policy, stock and seller agents; B owns buyer chat, orchestration, evidence and approved execution. Shared contracts join both halves to the UI team's frontend. Prove useful, policy-valid bidding and one complete simulated purchase before merchant dashboard polish or optional sponsor integrations. Security gates and sponsor claims require fresh, observed proof.
