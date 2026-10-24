@@ -1,15 +1,8 @@
-import type {
-  DataModelFromSchemaDefinition,
-  GenericMutationCtx,
-  GenericQueryCtx,
-} from 'convex/server'
-
-import schema from './schema.ts'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 import { SellerContractError, safeReason } from './lib/sellerContracts.ts'
 
-export type SellerDataModel = DataModelFromSchemaDefinition<typeof schema>
-export type SellerQueryCtx = GenericQueryCtx<SellerDataModel>
-export type SellerMutationCtx = GenericMutationCtx<SellerDataModel>
+export type SellerQueryCtx = QueryCtx
+export type SellerMutationCtx = MutationCtx
 
 export interface SellerMembership {
   merchantId: string
@@ -30,10 +23,11 @@ export async function requireSellerMembership(
   ctx: SellerQueryCtx | SellerMutationCtx,
 ): Promise<SellerMembership> {
   const identity = await ctx.auth.getUserIdentity()
-  if (!identity?.subject) throwSellerError('UNAUTHENTICATED', 'seller authentication is required')
+  const tokenIdentifier = identity?.tokenIdentifier
+  if (!tokenIdentifier) throwSellerError('UNAUTHENTICATED', 'seller authentication is required')
   const memberships = await ctx.db
     .query('memberships')
-    .withIndex('by_authSubject', (query) => query.eq('authSubject', identity.subject))
+    .withIndex('by_authTokenIdentifier', (query) => query.eq('authTokenIdentifier', tokenIdentifier))
     .collect()
   const active = memberships.filter((membership) => membership.enabled)
   if (active.length !== 1) {

@@ -1,4 +1,4 @@
-import { internalMutationGeneric } from 'convex/server'
+import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 
 import { makeSellerFixtures, profiles } from './lib/sellerFixtures.ts'
@@ -101,7 +101,7 @@ const profileRows = [
   },
 ]
 
-export const seedSellerDemo = internalMutationGeneric({
+export const seedSellerDemo = internalMutation({
   args: { seedRevision: v.string() },
   handler: async (ctx: SellerMutationCtx, args: { seedRevision: string }) => {
     if (!/^[A-Za-z0-9._:-]{1,64}$/.test(args.seedRevision)) throwSellerError('INVALID_INPUT', 'seed revision is invalid', 'seedRevision')
@@ -169,7 +169,7 @@ export const seedSellerDemo = internalMutationGeneric({
         updatedAt: createdAt,
       })
       await ctx.db.insert('memberships', {
-        authSubject: `demo:${merchantId}`,
+        authTokenIdentifier: `demo:${merchantId}`,
         merchantId,
         role: 'owner',
         enabled: true,

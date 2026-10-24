@@ -22,7 +22,9 @@ The dependency policy requires the committed lockfile, npmjs-only HTTPS tarballs
 
 ## Convex handoff
 
-The backend source is under `convex/`. The repository currently uses generic Convex function builders so the seller code can be typechecked without guessing a deployment. Once the team has the Convex deployment and Auth environment, run `npx convex dev` from this directory using private environment credentials. Review and commit the generated `convex/_generated/` bindings if required by the deployment workflow. Do not treat local typechecking or fixture tests as deployed Convex sponsor proof.
+The backend source is under `convex/`. This branch is now linked to the team's Convex development deployment. Run `npx convex dev` or `npx convex dev --once` from this directory to push changes and regenerate the checked-in `convex/_generated/` bindings. The deployment URL is written to ignored `.env.local`; never commit that file, deploy keys or provider credentials.
+
+The production deployment and Auth provider still require team configuration. After Auth and production settings are ready, use `npx convex deploy` from a protected environment. The development deployment and fixture seed are smoke-test evidence, not by themselves judge-facing production sponsor proof.
 
 ## Provider handoff
 

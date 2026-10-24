@@ -1,4 +1,4 @@
-import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 
 import {
@@ -173,7 +173,7 @@ async function recordInternalEvent(
   })
 }
 
-export const getMerchantSnapshot = internalQueryGeneric({
+export const getMerchantSnapshot = internalQuery({
   args: { merchantId: v.string() },
   handler: async (ctx: SellerQueryCtx, args: { merchantId: string }) => {
     const merchant = await requireMerchant(ctx, args.merchantId)
@@ -195,7 +195,7 @@ export const getMerchantSnapshot = internalQueryGeneric({
   },
 })
 
-export const prepareSellerJob = internalMutationGeneric({
+export const prepareSellerJob = internalMutation({
   args: {
     jobId: v.string(),
     requestId: v.string(),
@@ -290,7 +290,7 @@ export const prepareSellerJob = internalMutationGeneric({
   },
 })
 
-export const validateAndStoreProposal = internalMutationGeneric({
+export const validateAndStoreProposal = internalMutation({
   args: { jobId: v.string(), brief: v.any(), decision: v.any(), mode: v.optional(v.union(v.literal('fixture'), v.literal('live'), v.literal('cached'), v.literal('simulation'), v.literal('visa_sandbox'))) },
   handler: async (ctx: SellerMutationCtx, args: ValidateProposalArgs) => {
     const jobs = await ctx.db

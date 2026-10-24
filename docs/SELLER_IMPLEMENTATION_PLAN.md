@@ -57,10 +57,10 @@ The first seller-only checkpoint is now implemented on `feature/seller-side`:
 - `convex/lib/sellerContracts.ts` is the canonical seller contract/runtime boundary. It allowlists `SellerBrief`, rejects unknown fields, and rejects raw prompts, origins, private maximums, buyer ceilings, competitor costs and seller-private price fields from provider input.
 - `convex/lib/sellerValidation.ts` recomputes category/condition/profile eligibility, hard and soft fit, safe integer pricing and the documented minimum-price formula. It never consumes model-supplied totals or affordability.
 - `convex/lib/sellerInventory.ts` contains plain transactional helpers for atomic reservations, execution locks, sale/release transitions, expiration and idempotent replay. The future buyer mutation must call these helpers inside its own transaction; they are not public Convex mutations.
-- `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership; IDs supplied by a browser are not authorization.
+- `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership and the canonical auth token identifier; IDs supplied by a browser are not authorization.
 - `convex/sellerSeed.ts` provides an internal, revisioned fixture seed for all four profile families, P1–P6, accessories, C1/C2, H1/H2, A1/A2 and three synthetic merchants. It is empty-database-only and idempotent by seed revision; it does not make synthetic inventory or evidence look real.
 - `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
-- `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. These prove local behavior only; live Convex/provider sponsor evidence remains pending until deployment/provider configuration is supplied.
+- `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. The seller schema and generated bindings are now pushed to the linked Convex development deployment and the revisioned fixture catalog has been seeded there. Production/Auth configuration and live provider sponsor evidence remain pending.
 
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
 
@@ -146,7 +146,7 @@ These do not block deterministic seller implementation but do block claiming liv
 
 - Which Fetch.ai transport/agent address and supported model will be used for the seller role?
 - Which CREAO project/agent ID, run endpoint and callback/poll mechanism is enabled for the seller role?
-- Which Convex deployment/team environment will host the schema and functions?
+- Which team-owned Convex production deployment and Auth environment will host the schema and functions?
 - Does the team want the Factory Droid seller audit in this branch, or should it remain a documented stretch target?
 
-Until those are answered with credentials supplied through the appropriate secret mechanism, use fixtures and mark provider mode as `fixture`.
+Until those are answered with credentials supplied through the appropriate secret mechanism, keep provider mode as `fixture`; the linked development deployment is only a smoke-test environment.

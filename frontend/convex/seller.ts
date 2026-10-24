@@ -1,4 +1,4 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 
 import {
@@ -155,7 +155,7 @@ async function recordEvent(
   })
 }
 
-export const getMerchantView = queryGeneric({
+export const getMerchantView = query({
   args: {},
   handler: async (ctx: SellerQueryCtx) => {
     const membership = await requireSellerMembership(ctx)
@@ -226,7 +226,7 @@ export const getMerchantView = queryGeneric({
   },
 })
 
-export const updateOwnListing = mutationGeneric({
+export const updateOwnListing = mutation({
   args: { listing: refValidator, patch: listingPatchValidator },
   handler: async (ctx: SellerMutationCtx, args: { listing: Ref; patch: Record<string, unknown> }) => {
     const membership = await requireSellerMembership(ctx)
@@ -278,7 +278,7 @@ export const updateOwnListing = mutationGeneric({
   },
 })
 
-export const publishOwnPolicy = mutationGeneric({
+export const publishOwnPolicy = mutation({
   args: { expectedPolicy: v.union(refValidator, v.null()), changes: policyChangesValidator },
   handler: async (ctx: SellerMutationCtx, args: { expectedPolicy: Ref | null; changes: PolicyChanges }) => {
     const membership = await requireSellerMembership(ctx)
@@ -325,7 +325,7 @@ export const publishOwnPolicy = mutationGeneric({
   },
 })
 
-export const pauseOwnMerchant = mutationGeneric({
+export const pauseOwnMerchant = mutation({
   args: { paused: v.boolean() },
   handler: async (ctx: SellerMutationCtx, args: { paused: boolean }) => {
     const membership = await requireSellerMembership(ctx)
@@ -342,7 +342,7 @@ export const pauseOwnMerchant = mutationGeneric({
   },
 })
 
-export const getOwnOfferEvents = queryGeneric({
+export const getOwnOfferEvents = query({
   args: { cursor: v.union(v.string(), v.null()) },
   handler: async (ctx: SellerQueryCtx, args: { cursor: string | null }) => {
     const membership = await requireSellerMembership(ctx)
