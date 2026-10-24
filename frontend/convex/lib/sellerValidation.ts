@@ -154,6 +154,13 @@ export function applyPolicyChanges(current: PricingPolicy, changes: PolicyChange
   return next
 }
 
+export function convertRequirementUnit(value:number,from:string|null,to:string|null):number|null {
+  if(from===to)return value;
+  if(from===null||to===null)return null;
+  const source=NUMERIC_UNITS[from],target=NUMERIC_UNITS[to];
+  return source&&target&&source.family===target.family?value*source.multiplier/target.multiplier:null;
+}
+
 function numericValue(value: unknown, unit: string | null): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   if (unit === null) return value

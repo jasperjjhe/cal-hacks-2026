@@ -254,6 +254,7 @@ const sellerTables = {
     updatedAt: v.number(),
   })
     .index('by_reservationKey', ['reservationKey'])
+    .index('by_quoteId', ['quoteId'])
     .index('by_requestId_and_status', ['requestId', 'status'])
     .index('by_merchantId_and_status', ['merchantId', 'status']),
 
@@ -276,6 +277,7 @@ const sellerTables = {
     .index('by_allocationId', ['allocationId'])
     .index('by_listingId_and_state', ['listingId', 'state'])
     .index('by_reservationKey', ['reservationKey'])
+    .index('by_quoteId', ['quoteId'])
     .index('by_requestId', ['requestId']),
 
   sellerEvents: defineTable({

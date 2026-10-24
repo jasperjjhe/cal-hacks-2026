@@ -25,7 +25,7 @@ type Provider = 'fixture' | 'fetch' | 'creao'
 type SellerRole = 'seller_initial' | 'seller_response' | 'seller_final'
 type OfferMode = 'fixture' | 'live' | 'cached' | 'simulation' | 'visa_sandbox'
 
-interface PrepareSellerJobArgs {
+type PrepareSellerJobArgs = {
   jobId: string
   requestId: string
   requestVersion: number
@@ -43,11 +43,12 @@ interface PrepareSellerJobArgs {
   deadlineAt: number
 }
 
-interface ValidateProposalArgs {
+type ValidateProposalArgs = {
   jobId: string
   brief: unknown
   decision: unknown
   mode?: OfferMode
+  deferPromotion?: boolean
 }
 
 function requireBoundedString(value: string, field: string) {
@@ -291,7 +292,7 @@ export const prepareSellerJob = internalMutationGeneric({
 })
 
 export const validateAndStoreProposal = internalMutationGeneric({
-  args: { jobId: v.string(), brief: v.any(), decision: v.any(), mode: v.optional(v.union(v.literal('fixture'), v.literal('live'), v.literal('cached'), v.literal('simulation'), v.literal('visa_sandbox'))) },
+  args: { jobId: v.string(), brief: v.any(), decision: v.any(), mode: v.optional(v.union(v.literal('fixture'), v.literal('live'), v.literal('cached'), v.literal('simulation'), v.literal('visa_sandbox'))), deferPromotion: v.optional(v.boolean()) },
   handler: async (ctx: SellerMutationCtx, args: ValidateProposalArgs) => {
     const jobs = await ctx.db
       .query('sellerJobs')
@@ -368,7 +369,7 @@ export const validateAndStoreProposal = internalMutationGeneric({
       createdAt: validated.offer.createdAt,
     })
     const candidate = await findCandidate(ctx, job.jobId, proposal.candidateId, job.merchantId)
-    if (candidate) {
+    if (candidate && !args.deferPromotion) {
       await ctx.db.patch(candidate._id, {
         status: 'accepted',
         currentOfferId: offerId,
@@ -384,7 +385,7 @@ export const validateAndStoreProposal = internalMutationGeneric({
       createdAt: Date.now(),
     })
     await ctx.db.patch(job._id, { status: 'completed', updatedAt: Date.now() })
-    await recordInternalEvent(ctx, job.merchantId, 'offer_accepted', { offerId, version, totalCents: validated.offer.totalCents }, [], job.jobId, proposal.candidateId, offerId)
+    if (!args.deferPromotion) await recordInternalEvent(ctx, job.merchantId, 'offer_accepted', { offerId, version, totalCents: validated.offer.totalCents }, [], job.jobId, proposal.candidateId, offerId)
     return { ok: true as const, outcome: 'accepted', offer: offerRef, totalCents: validated.offer.totalCents, reasons: [] }
   },
 })

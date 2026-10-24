@@ -9,12 +9,23 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as buyer from "../buyer.js";
+import type * as buyer_checkout from "../buyer/checkout.js";
 import type * as buyer_core from "../buyer/core.js";
+import type * as buyer_intake from "../buyer/intake.js";
 import type * as buyer_inventory from "../buyer/inventory.js";
+import type * as buyer_projection from "../buyer/projection.js";
 import type * as buyer_validation from "../buyer/validation.js";
 import type * as buyerCommands from "../buyerCommands.js";
+import type * as buyerEvidence from "../buyerEvidence.js";
+import type * as buyerExecution from "../buyerExecution.js";
+import type * as buyerJobs from "../buyerJobs.js";
+import type * as buyerMutations from "../buyerMutations.js";
+import type * as buyerRoles from "../buyerRoles.js";
+import type * as buyerWorkflow from "../buyerWorkflow.js";
 import type * as http from "../http.js";
 import type * as integrations_agentProvider from "../integrations/agentProvider.js";
+import type * as integrations_buyerTools from "../integrations/buyerTools.js";
 import type * as integrations_creaoAdapter from "../integrations/creaoAdapter.js";
 import type * as integrations_fetchAdapter from "../integrations/fetchAdapter.js";
 import type * as integrations_fixtureAgentPort from "../integrations/fixtureAgentPort.js";
@@ -36,12 +47,23 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  buyer: typeof buyer;
+  "buyer/checkout": typeof buyer_checkout;
   "buyer/core": typeof buyer_core;
+  "buyer/intake": typeof buyer_intake;
   "buyer/inventory": typeof buyer_inventory;
+  "buyer/projection": typeof buyer_projection;
   "buyer/validation": typeof buyer_validation;
   buyerCommands: typeof buyerCommands;
+  buyerEvidence: typeof buyerEvidence;
+  buyerExecution: typeof buyerExecution;
+  buyerJobs: typeof buyerJobs;
+  buyerMutations: typeof buyerMutations;
+  buyerRoles: typeof buyerRoles;
+  buyerWorkflow: typeof buyerWorkflow;
   http: typeof http;
   "integrations/agentProvider": typeof integrations_agentProvider;
+  "integrations/buyerTools": typeof integrations_buyerTools;
   "integrations/creaoAdapter": typeof integrations_creaoAdapter;
   "integrations/fetchAdapter": typeof integrations_fetchAdapter;
   "integrations/fixtureAgentPort": typeof integrations_fixtureAgentPort;

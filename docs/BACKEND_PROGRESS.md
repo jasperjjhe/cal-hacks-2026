@@ -14,3 +14,17 @@ The user confirmed that the contracts are frozen and requested the complete buye
 Validation: dependency policy, signatures, audit, existing 24 buyer tests, four security tests, lint/build and 13 seller tests passed. Local Convex deployment/typecheck passed before the next handler work began.
 
 No credentials or local database files belong in Git. New esbuild metadata allowance was reviewed; installation scripts remain disabled.
+
+## Checkpoint 2 — persisted buyer journey
+
+The default application now uses authenticated Convex queries/actions, durable
+Workflow orchestration, S's deterministic proposal and inventory helpers, a
+sealed final-price round, evidence acquisition guards, firm quotes, atomic stock
+holds, exact approval, idempotent execution and persisted orders. `/mock` retains
+the explicitly offline prototype; it is no longer the main application.
+
+Verified: local Convex deployment/typecheck, production build, lint, 24 existing
+buyer checks and nine Convex function integration tests. The real local browser
+flow reached checked offers and explicit simulation approval. Final acceptance,
+retention, retry/revalidation coverage and integration instructions continue in
+the next checkpoint. External provider adapters intentionally remain unconfigured.
