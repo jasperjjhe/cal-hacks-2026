@@ -13,11 +13,16 @@ const schema = {
     return [name, definition]
   })),
 }
-const content = `${JSON.stringify(schema, null, 2)}\n`
-if (process.argv.includes('--check')) {
-  if (await readFile(target, 'utf8') !== content) throw new Error('Contract export is stale; run npm run contracts:export')
-  console.log('Contract JSON Schema matches the runtime schemas.')
-} else {
-  await writeFile(target, content)
-  console.log('Exported contract JSON Schema.')
+const sellerSchema = {
+  $schema: schema.$schema,
+  $id: 'https://buyerunion.local/contracts/seller.v1.schema.json',
+  oneOf: [{ $ref: '#/$defs/SellerBrief' }, { $ref: '#/$defs/SellerDecision' }],
+  $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal'].map(name => [name, schema.$defs[name]])),
 }
+for (const [file, value] of [[target, schema], [new URL('../convex/lib/seller.schema.json', import.meta.url), sellerSchema]]) {
+  const content = `${JSON.stringify(value, null, 2)}\n`
+  if (process.argv.includes('--check')) {
+    if (await readFile(file, 'utf8') !== content) throw new Error('Contract export is stale; run npm run contracts:export')
+  } else await writeFile(file, content)
+}
+console.log('Application and seller worker schemas match the canonical runtime contracts.')

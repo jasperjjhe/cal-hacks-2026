@@ -218,7 +218,8 @@ export async function enforceUnlocked(ctx: ReadCtx, requestId: string) {
   const attempts = await ctx.db
     .query("buyerExecutions")
     .withIndex("by_request", (q) => q.eq("requestId", requestId))
-    .take(30);
+    .filter((q) => q.or(q.eq(q.field("state"), "succeeded"), q.eq(q.field("state"), "pending"), q.eq(q.field("state"), "unknown")))
+    .take(1);
   if (attempts.some((a) => a.state === "succeeded"))
     fail(
       "INVALID_INPUT",

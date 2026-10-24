@@ -92,6 +92,12 @@ const intake = z.strictObject({
 
 // This registry is the single source for inferred types and the generated JSON
 // Schema consumed by workers. No vendor-specific payload belongs here.
+const sellerProposal = z.strictObject({
+    schemaVersion: z.literal(1), jobId: id, candidateId: id, parentOffer: ref.nullable(), policy: ref,
+    lines: z.array(offerLine).min(1).max(3), claims: z.array(claim).max(100), fitArgument: text,
+    privatePriceRationale: text,
+  })
+
 export const contracts = {
   Ref: ref,
   CategoryProfile: z.strictObject({
@@ -133,11 +139,12 @@ export const contracts = {
       evidence: z.enum(['live', 'cached', 'mixed', 'unavailable']), payment: z.enum(['simulation', 'visa_sandbox']) }),
     error: apiError.nullable(),
   }),
-  SellerProposal: z.strictObject({
-    schemaVersion: z.literal(1), jobId: id, candidateId: id, parentOffer: ref.nullable(), policy: ref,
-    lines: z.array(offerLine).min(1).max(3), claims: z.array(claim).max(100), fitArgument: text,
-    privatePriceRationale: text,
-  }),
+  SellerProposal: sellerProposal,
+  SellerDecision: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("propose"), proposal: sellerProposal }),
+    z.strictObject({ kind: z.literal("hold"), jobId: id, offer: ref }),
+    z.strictObject({ kind: z.literal("abstain"), jobId: id, reasonCode: text }),
+  ]),
   Evidence: z.strictObject({
     id, variantId: id, applicability: z.enum(['exact_variant', 'family']),
     sourceType: z.enum(['manufacturer', 'independent_test', 'owner_report']),

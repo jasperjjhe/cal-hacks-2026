@@ -54,22 +54,11 @@ export const findAccount = internalQuery({
 export const assignMembership = internalMutation({
   args: { userId: v.string(), merchantId: v.string() },
   handler: async (ctx, args) => {
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_authSubject", (q) => q.eq("authSubject", args.userId))
-      .collect();
-    if (membership.some((m) => m.merchantId !== args.merchantId && m.enabled))
-      throw new Error("Operator already belongs to another merchant.");
-    const existing = membership.find((m) => m.merchantId === args.merchantId);
+    const memberships = await ctx.db.query("operatorAccounts").withIndex("by_user", q => q.eq("userId", args.userId)).collect();
+    if (memberships.some(m => m.merchantId !== args.merchantId && m.enabled)) throw new Error("Operator already belongs to another merchant.");
+    const existing = memberships.find(m => m.merchantId === args.merchantId);
     if (existing) await ctx.db.patch(existing._id, { enabled: true });
-    else
-      await ctx.db.insert("memberships", {
-        authSubject: args.userId,
-        merchantId: args.merchantId,
-        role: "operator",
-        enabled: true,
-        createdAt: Date.now(),
-      });
+    else await ctx.db.insert("operatorAccounts", { ...args, enabled: true, createdAt: Date.now() });
   },
 });
 export const configureDemo = internalMutation({
@@ -153,5 +142,27 @@ export const upgradeDemoDiagnostics = internalMutation({
       }
     }
     return { updated };
+  },
+});
+
+// Deploy the transitional optional legacy field, run this idempotent migration,
+// then bind each authenticated operator session. Legacy rows grant no access.
+export const migrateOperatorMemberships = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const rows = await ctx.db.query("memberships").collect();
+    let migrated = 0;
+    for (const row of rows) {
+      if (!row.authSubject) continue;
+      if (row.authSubject.startsWith("demo:")) {
+        await ctx.db.patch(row._id, { authTokenIdentifier: row.authSubject, authSubject: undefined });
+      } else {
+        const existing = await ctx.db.query("operatorAccounts").withIndex("by_user", q => q.eq("userId", row.authSubject!)).collect();
+        if (!existing.some(m => m.merchantId === row.merchantId)) await ctx.db.insert("operatorAccounts", { userId: row.authSubject, merchantId: row.merchantId, enabled: row.enabled, createdAt: row.createdAt });
+        await ctx.db.delete(row._id);
+      }
+      migrated++;
+    }
+    return { migrated };
   },
 });

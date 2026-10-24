@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as buyer from "../buyer.js";
 import type * as buyer_checkout from "../buyer/checkout.js";
 import type * as buyer_core from "../buyer/core.js";
+import type * as buyer_eligibility from "../buyer/eligibility.js";
 import type * as buyer_intake from "../buyer/intake.js";
 import type * as buyer_inventory from "../buyer/inventory.js";
 import type * as buyer_projection from "../buyer/projection.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   buyer: typeof buyer;
   "buyer/checkout": typeof buyer_checkout;
   "buyer/core": typeof buyer_core;
+  "buyer/eligibility": typeof buyer_eligibility;
   "buyer/intake": typeof buyer_intake;
   "buyer/inventory": typeof buyer_inventory;
   "buyer/projection": typeof buyer_projection;

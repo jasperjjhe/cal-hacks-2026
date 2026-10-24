@@ -30,12 +30,12 @@ export async function requireSellerMembership(
   ctx: SellerQueryCtx | SellerMutationCtx,
 ): Promise<SellerMembership> {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity?.subject)
+  if (!identity?.tokenIdentifier)
     throwSellerError("UNAUTHENTICATED", "seller authentication is required");
   const memberships = await ctx.db
     .query("memberships")
-    .withIndex("by_authSubject", (query) =>
-      query.eq("authSubject", identity.subject.split("|")[0]),
+    .withIndex("by_authTokenIdentifier", (query) =>
+      query.eq("authTokenIdentifier", identity.tokenIdentifier),
     )
     .collect();
   const active = memberships.filter((membership) => membership.enabled);

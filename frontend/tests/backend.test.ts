@@ -3,10 +3,13 @@ import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { convexTest } from "convex-test";
 import workflow from "@convex-dev/workflow/test";
 import schema from "../convex/schema";
+import * as buyerTools from "../convex/integrations/buyerTools";
+import { contracts } from "../src/contracts";
+import { makeValidProposal } from "../convex/lib/sellerFixtures";
 import { api, internal } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 async function setup() {
   const t = convexTest(schema, modules);
   workflow.register(t);
@@ -16,7 +19,7 @@ async function setup() {
   const buyer = t.withIdentity({ subject: "buyer-a|session-a" });
   return { t, buyer };
 }
-async function confirmed(context?: Awaited<ReturnType<typeof setup>>) {
+async function confirmed(context?: Awaited<ReturnType<typeof setup>>, noRequirements = false) {
   const { t, buyer } = context ?? (await setup());
   const draft = await buyer.mutation(internal.buyerMutations.saveDraft, {
     input: {
@@ -37,7 +40,7 @@ async function confirmed(context?: Awaited<ReturnType<typeof setup>>) {
           profile: { id: "profile_laptop", version: 1 },
           quantity: 1,
           allowedConditions: ["new", "refurbished"],
-          requirements: [
+          requirements: noRequirements ? [] : [
             {
               id: "os",
               fieldId: "osFamily",
@@ -920,4 +923,256 @@ test("diagnostic migration preserves a locked purchase snapshot and never resets
       (a) => a.state === "sold",
     ),
   ).toBe(true);
+});
+
+
+// Review regressions exercise public transactions and durable job boundaries.
+async function biddingReady(noRequirements = false) {
+  const state = await confirmed(undefined, noRequirements);
+  const { runId } = await state.buyer.mutation(internal.buyerMutations.startRun, { input: { request: state.ref, clientKey: "start" } });
+  const jobs = await state.t.mutation(internal.buyerJobs.preparePhase, { runId, phase: "bidding" });
+  for (const jobId of jobs) await state.t.action(internal.buyerJobs.dispatch, { jobId });
+  return { ...state, runId, jobs };
+}
+
+test("interrupted approved payments recover the same attempt without executing again", async () => {
+  const state = await resultRun();
+  const quote = await reserve(state);
+  const execution = await approveQuote(state, quote);
+  const claim = await state.t.mutation(internal.buyerExecution.claimAttempt, { executionId: execution.executionId, reconcile: false });
+  expect(claim).not.toBeNull();
+  const attempt = await state.t.query(internal.buyerExecution.getAttempt, { executionId: execution.executionId });
+  vi.setSystemTime(Date.now() + 60001);
+  await state.t.mutation(internal.buyerExecution.recoverAttempt, { executionId: execution.executionId, claimedAt: attempt!.updatedAt });
+  expect((await state.t.query(internal.buyerExecution.getAttempt, { executionId: execution.executionId }))!.state).toBe("unknown");
+  expect(await state.t.mutation(internal.buyerExecution.claimAttempt, { executionId: execution.executionId, reconcile: false })).toBeNull();
+  await state.t.action(internal.buyerExecution.reconcileAttempt, { executionId: execution.executionId });
+  expect((await state.t.query(internal.buyerExecution.getAttempt, { executionId: execution.executionId }))!.state).toBe("succeeded");
+  expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+});
+
+test("approval recovery also covers actions that never reach their first claim", async () => {
+  const state = await resultRun();
+  const execution = await approveQuote(state, await reserve(state));
+  const attempt = await state.t.query(internal.buyerExecution.getAttempt, { executionId: execution.executionId });
+  vi.setSystemTime(Date.now() + 60001);
+  await state.t.mutation(internal.buyerExecution.recoverAttempt, { executionId: execution.executionId, claimedAt: attempt!.createdAt });
+  expect((await state.t.query(internal.buyerExecution.getAttempt, { executionId: execution.executionId }))!.state).toBe("unknown");
+});
+
+test("an unresolved attempt after thirty declines prevents another reservation", async () => {
+  const state = await resultRun();
+  const quote = await reserve(state);
+  const execution = await approveQuote(state, quote);
+  await state.t.run(async ctx => {
+    const id = ctx.db.normalizeId("buyerExecutions", execution.executionId)!;
+    const attempt = (await ctx.db.get(id))!;
+    const { _id, _creationTime, ...fields } = attempt;
+    void _creationTime;
+    await ctx.db.delete(_id);
+    for (let i = 0; i < 30; i++) await ctx.db.insert("buyerExecutions", { ...fields, state: "declined" });
+    await ctx.db.insert("buyerExecutions", { ...fields, state: "unknown" });
+  });
+  await expect(reserve(state, "second-purchase")).rejects.toThrow();
+});
+
+test("exact token memberships survive new sessions through internal account grants", async () => {
+  const { t, buyer } = await setup();
+  await expect(buyer.mutation(api.seller.bindOperatorSession, {})).rejects.toThrow();
+  await t.mutation(internal.buyerAdmin.assignMembership, { userId: "operator-a", merchantId: "merchant_a" });
+  const first = t.withIdentity({ subject: "operator-a|one", tokenIdentifier: "issuer|operator-a|one" });
+  const second = t.withIdentity({ subject: "operator-a|two", tokenIdentifier: "issuer|operator-a|two" });
+  await first.mutation(api.seller.bindOperatorSession, {});
+  await expect(second.query(api.seller.getMerchantView, {})).rejects.toThrow();
+  await second.mutation(api.seller.bindOperatorSession, {});
+  await first.query(api.seller.getMerchantView, {});
+  await second.query(api.seller.getMerchantView, {});
+  await expect(t.withIdentity({ subject: "other|one", tokenIdentifier: "issuer|other|one" }).mutation(api.seller.bindOperatorSession, {})).rejects.toThrow();
+  const memberships = await t.run(ctx => ctx.db.query("memberships").withIndex("by_authTokenIdentifier", q => q.eq("authTokenIdentifier", "issuer|operator-a|two")).collect());
+  expect(memberships).toHaveLength(1);
+  expect(memberships[0].merchantId).toBe("merchant_a");
+});
+
+test("legacy memberships migrate idempotently without granting access by a subject prefix", async () => {
+  const { t } = await setup();
+  await t.run(ctx => ctx.db.insert("memberships", { authSubject: "legacy-operator", merchantId: "merchant_a", role: "operator", enabled: true, createdAt: Date.now() }));
+  const operator = t.withIdentity({ subject: "legacy-operator|session", tokenIdentifier: "issuer|legacy-operator|session" });
+  await expect(operator.query(api.seller.getMerchantView, {})).rejects.toThrow();
+  expect((await t.mutation(internal.buyerAdmin.migrateOperatorMemberships, {})).migrated).toBe(1);
+  expect((await t.mutation(internal.buyerAdmin.migrateOperatorMemberships, {})).migrated).toBe(0);
+  await operator.mutation(api.seller.bindOperatorSession, {});
+  await operator.query(api.seller.getMerchantView, {});
+});
+
+test("seller listing publication creates a clean current version and rejects stale updates", async () => {
+  const { t } = await setup();
+  const operator = t.withIdentity({ subject: "operator|session", tokenIdentifier: "issuer|operator|session" });
+  await t.mutation(internal.buyerAdmin.assignMembership, { userId: "operator", merchantId: "merchant_a" });
+  await operator.mutation(api.seller.bindOperatorSession, {});
+  const listing = { id: "merchant_a:P3", version: 1 };
+  const updated = await operator.mutation(api.seller.updateOwnListing, { listing, patch: { referenceUnitCents: 98000 } });
+  expect(updated.listing.version).toBe(2);
+  await expect(operator.mutation(api.seller.updateOwnListing, { listing, patch: { referenceUnitCents: 99000 } })).rejects.toThrow();
+  const versions = await t.run(ctx => ctx.db.query("listingVersions").withIndex("by_listingId_and_version", q => q.eq("listingId", listing.id)).collect());
+  expect(versions.filter(v => v.enabled)).toHaveLength(1);
+  expect(versions.find(v => v.version === 2)!.referenceUnitCents).toBe(98000);
+});
+
+test("moderator repair output remains usable by the council", async () => {
+  const state = await biddingReady();
+  await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "council" }));
+  const jobId = (await state.t.mutation(internal.buyerRoles.prepareModerator, { runId: state.runId }))!;
+  const child = (await state.t.mutation(internal.buyerJobs.createRepair, { jobId }))!;
+  await state.t.action(internal.buyerJobs.dispatch, { jobId: child });
+  await state.t.mutation(internal.buyerJobs.finishRepair, { jobId });
+  const parent = await state.t.query(internal.buyerJobs.getJob, { jobId });
+  expect(contracts.ChallengePlan.safeParse(parent!.output).success).toBe(true);
+  await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "council" });
+});
+
+test("a council challenge targeting the second candidate is dispatched", async () => {
+  const state = await biddingReady(true);
+  await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "council" }));
+  const jobId = (await state.t.mutation(internal.buyerRoles.prepareModerator, { runId: state.runId }))!;
+  const target = await state.t.run(async ctx => {
+    const offers = await ctx.db.query("buyerOffers").withIndex("by_run_effective", q => q.eq("runId", state.runId).eq("effective", true)).collect();
+    const byMerchant = offers.filter(o => o.merchantId === offers[0].merchantId);
+    expect(byMerchant.length).toBeGreaterThan(1);
+    const row = byMerchant[1];
+    // A validated moderator plan may refer to either candidate for a merchant.
+    await ctx.db.patch(ctx.db.normalizeId("buyerJobs", jobId)!, { state: "completed", output: { challenges: [{ offer: row.data.offer, claimId: "claim", question: "Check fit", sourceIds: [] }], summary: "Check selected candidate" } });
+    return row.candidateId;
+  });
+  const responses = await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "council" });
+  expect(responses).toHaveLength(1);
+  expect((await state.t.query(internal.buyerJobs.getJob, { jobId: responses[0] }))!.candidateId).toBe(target);
+});
+
+test("final jobs share the round deadline and late responses never replace earlier offers", async () => {
+  const state = await biddingReady();
+  await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "negotiating" }));
+  const roundId = (await state.t.mutation(internal.buyerWorkflow.openPriceRound, { runId: state.runId }))!;
+  expect(roundId).not.toBeNull();
+  const round = await state.t.run(ctx => ctx.db.get(ctx.db.normalizeId("buyerRounds", roundId)!));
+  vi.setSystemTime(Date.now() + 20000);
+  const finals = await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "negotiating", roundId });
+  expect(finals.length).toBeGreaterThan(0);
+  const first = (await state.t.query(internal.buyerJobs.getJob, { jobId: finals[0] }))!;
+  expect(first.deadlineAt).toBe(round!.data.deadlineAt);
+  vi.setSystemTime(round!.data.deadlineAt + 1);
+  await state.t.action(internal.buyerJobs.dispatch, { jobId: finals[0] });
+  const submissions = await state.t.run(ctx => ctx.db.query("buyerSubmissions").withIndex("by_round_candidate", q => q.eq("roundId", roundId)).collect());
+  expect(submissions).toHaveLength(0);
+  await state.t.mutation(internal.buyerWorkflow.closePriceRound, { runId: state.runId, roundId });
+});
+
+test("paused merchants cannot create artificial competition or receive new final jobs", async () => {
+  const state = await biddingReady();
+  await state.t.run(async ctx => {
+    await ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "negotiating" });
+    const merchants = await ctx.db.query("merchants").collect();
+    for (const merchant of merchants.slice(1)) await ctx.db.patch(merchant._id, { paused: true });
+  });
+  // Without a shared target a single active merchant cannot open competition.
+  expect(await state.t.mutation(internal.buyerWorkflow.openPriceRound, { runId: state.runId })).toBeNull();
+});
+
+test("ambiguous provider starts poll the same job and never create a repair start", async () => {
+  const state = await confirmed();
+  const { runId } = await state.buyer.mutation(internal.buyerMutations.startRun, { input: { request: state.ref, clientKey: "start" } });
+  const [jobId] = await state.t.mutation(internal.buyerJobs.preparePhase, { runId, phase: "bidding" });
+  await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerJobs", jobId)!, { provider: "creao" }));
+  const start = vi.spyOn(buyerTools, "invokeCreao").mockRejectedValue(new Error("Timeout after provider accepted"));
+  const poll = vi.spyOn(buyerTools, "pollCreao").mockResolvedValue({ status: "pending", providerRunId: "recovered-remote-id" });
+  expect(await state.t.action(internal.buyerJobs.dispatch, { jobId })).toEqual({ pending: true });
+  await state.t.action(internal.buyerJobs.dispatch, { jobId, poll: true });
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(poll).toHaveBeenCalledWith(expect.objectContaining({ id: jobId, providerRunId: null }));
+  const job = await state.t.query(internal.buyerJobs.getJob, { jobId });
+  expect(job!.state).toBe("pending");
+  expect(job!.output?.repairJobId).toBeUndefined();
+});
+
+test("invalid repaired bids become provider failures rather than a no-supply result", async () => {
+  const state = await confirmed();
+  const { runId } = await state.buyer.mutation(internal.buyerMutations.startRun, { input: { request: state.ref, clientKey: "start" } });
+  const jobs = await state.t.mutation(internal.buyerJobs.preparePhase, { runId, phase: "bidding" });
+  for (const jobId of jobs) {
+    const child = (await state.t.mutation(internal.buyerJobs.createRepair, { jobId }))!;
+    const job = (await state.t.mutation(internal.buyerJobs.claimJob, { jobId: child, poll: false }))!;
+    const proposal = { ...makeValidProposal(job.merchantId!), jobId: job.sellerJobId!, candidateId: job.candidateId!, policy: job.input.policy.policy };
+    proposal.lines = proposal.lines.map(l => ({ ...l, unitCents: 1 }));
+    await state.t.mutation(internal.buyerJobs.completeJob, { jobId: child, result: { status: "completed", providerRunId: "remote", model: null, output: { kind: "propose", proposal } } });
+    await state.t.mutation(internal.buyerJobs.finishRepair, { jobId });
+  }
+  await state.t.mutation(internal.buyerWorkflow.closeBidding, { runId });
+  const view = await state.buyer.query(api.buyer.getBuyerRun, { requestId: state.ref.id });
+  expect(view.stage).toBe("failed");
+  expect(view.error!.retryable).toBe(true);
+});
+
+test("confirmation rejects scalar membership predicates before freezing a request", async () => {
+  const state = await confirmed();
+  const request = (await state.buyer.query(api.buyer.getConfirmedRequest, { requestId: state.ref.id }))!;
+  const line = { ...request.brief.lines[0], requirements: request.brief.lines[0].requirements.map(r => ({ ...r, operator: "in", value: "Windows" })) };
+  const draft = await state.buyer.mutation(internal.buyerMutations.saveDraft, { input: { requestId: null, expectedDraftVersion: null, message: "Another laptop" } });
+  await expect(state.buyer.mutation(internal.buyerMutations.confirmRequest, { input: { requestId: draft.requestId, expectedDraftVersion: 1, lines: [line], deliveryDeadline: Date.now() + 20 * 86400000, privateMaximumCents: 120000, sharedTargetCents: null, shareTarget: false, sort: "best_fit" } })).rejects.toThrow();
+});
+
+test("saved evidence retains its original run and cannot be read across owners", async () => {
+  const state = await resultRun();
+  const card = state.view.offers[0];
+  await state.buyer.mutation(internal.buyerMutations.toggleSaved, { input: { requestId: state.ref.id, offer: card.offer } });
+  const [saved] = await state.buyer.query(api.buyer.listSaved, {});
+  expect(saved.requestId).toBe(state.ref.id);
+  expect(saved.runId).toBe(state.view.runId);
+  await state.buyer.mutation(internal.buyerMutations.startRun, { input: { request: state.ref, clientKey: "refresh-saved" } });
+  expect(await state.buyer.query(api.buyer.getEvidence, { requestId: state.ref.id, runId: saved.runId!, evidenceIds: [] })).toEqual([]);
+  await expect(state.t.withIdentity({ subject: "other|session" }).query(api.buyer.getEvidence, { requestId: state.ref.id, runId: saved.runId!, evidenceIds: [] })).rejects.toThrow();
+});
+
+
+test("accessory-first baskets normalize the primary identity and reserve repeated stock lines", async () => {
+  const base = await confirmed();
+  const original = (await base.buyer.query(api.buyer.getConfirmedRequest, { requestId: base.ref.id }))!;
+  const draft = await base.buyer.mutation(internal.buyerMutations.saveDraft, { input: { requestId: null, expectedDraftVersion: null, message: "Laptop and two mice" } });
+  const accessory = { lineId: "mouse-a", role: "related", category: "tech_accessory", profile: { id: "profile_tech_accessory", version: 1 }, quantity: 1, allowedConditions: ["new"], requirements: [], useCaseSummary: "Mouse" };
+  const ref = await base.buyer.mutation(internal.buyerMutations.confirmRequest, { input: { requestId: draft.requestId, expectedDraftVersion: 1, lines: [accessory, original.brief.lines[0], { ...accessory, lineId: "mouse-b" }], deliveryDeadline: Date.now() + 20 * 86400000, privateMaximumCents: 120000, sharedTargetCents: null, shareTarget: false, sort: "best_fit" } });
+  const request = (await base.buyer.query(api.buyer.getConfirmedRequest, { requestId: ref.id }))!;
+  expect(request.brief.lines[0].role).toBe("primary");
+  const { runId } = await base.buyer.mutation(internal.buyerMutations.startRun, { input: { request: ref, clientKey: "start-basket" } });
+  for (let i = 0; i < 150; i++) {
+    await base.t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(100);
+    const view = await base.buyer.query(api.buyer.getBuyerRun, { requestId: ref.id });
+    if (view.stage !== "results") continue;
+    expect(view.offers[0].products).toHaveLength(3);
+    expect(view.offers[0].products[0].requestLineId).toBe("main");
+    const quote = await base.buyer.mutation(internal.buyerMutations.selectAndReserve, { input: { request: ref, runId, offer: view.offers[0].offer, clientKey: "basket-reserve" } });
+    expect(quote.lines).toHaveLength(3);
+    const allocations = await base.t.run(ctx => ctx.db.query("allocations").collect());
+    expect(allocations.filter(a => a.listingId.endsWith(":MOUSE")).reduce((sum, a) => sum + a.quantity, 0)).toBe(2);
+    const research = await base.t.run(ctx => ctx.db.query("buyerResearch").withIndex("by_run", q => q.eq("runId", runId)).collect());
+    expect(research.every(j => j.variantId !== "MOUSE")).toBe(true);
+    return;
+  }
+  throw new Error("Basket did not reach results");
+});
+
+test.each([false, true])("conflicting authoritative facts block selection in either result order (%s)", async reverse => {
+  const state = await resultRun();
+  const target = await state.t.run(async ctx => {
+    await ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.view.runId)!, { stage: "researching" });
+    const row = (await ctx.db.query("buyerOffers").withIndex("by_run_effective", q => q.eq("runId", state.view.runId).eq("effective", true)).first())!;
+    const variant = (await ctx.db.query("variants").withIndex("by_variantId", q => q.eq("variantId", row.card.products[0].variantId)).unique())!;
+    await ctx.db.patch(variant._id, { syntheticProduct: false });
+    const id = await ctx.db.insert("buyerResearch", { runId: state.view.runId, variantId: variant.variantId, digest: "conflict-input", state: "acquiring", providerRunId: "remote", providerBuild: "pinned", input: { urls: ["https://example.com/a", "https://example.com/b"], syntheticProduct: false }, deadlineAt: Date.now() + 60000, createdAt: Date.now() });
+    return { id, variantId: variant.variantId, offerId: row._id };
+  });
+  const facts = ["Linux", "Windows"].map((value, i) => ({ evidenceId: `fact-${i}`, fieldId: "osFamily", value, unit: null }));
+  const evidence = facts.map((fact, i) => ({ id: fact.evidenceId, variantId: target.variantId, applicability: "exact_variant", sourceType: "manufacturer", url: `https://example.com/${i ? "b" : "a"}`, sourceDate: null, retrievedAt: Date.now(), claim: fact.value, excerpt: `OS is ${fact.value}`, sourceVerifiedPurchaseLabel: null, verification: "supported", providerRunId: "remote", providerBuild: "pinned", duplicateGroup: `group-${i}` }));
+  await state.t.mutation(internal.buyerEvidence.complete, { researchJobId: String(target.id), result: { status: "completed", providerRunId: "remote", build: "pinned", evidence, facts: reverse ? facts.reverse() : facts } });
+  const offer = await state.t.run(ctx => ctx.db.get(target.offerId));
+  expect(offer!.data.selectable).toBe(false);
+  expect(offer!.data.requirementsValidExceptBudget).toBe(false);
 });

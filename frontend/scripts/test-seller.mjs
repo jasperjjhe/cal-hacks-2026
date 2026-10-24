@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { contracts } from '../src/contracts/index.ts'
 import assert from 'node:assert/strict'
 
 import {
@@ -349,3 +350,34 @@ test("unit diagnostics override generic variant health, including explicit unkno
   snapshot.listing.diagnosticAttributes.healthPercent.value = null;
   assert.equal(assessLine(line, snapshot).requirements[0].status, "unknown");
 });
+
+
+test('seller boundaries share canonical limits for requirements, claims and text', () => {
+  const brief = structuredClone(fixtures.briefs.laptop)
+  const requirement = brief.lines[0].requirements[0]
+  brief.lines[0].requirements = Array.from({ length: 100 }, (_, i) => ({ ...requirement, id: `requirement-${i}` }))
+  brief.lines[0].useCaseSummary = 'x'.repeat(4000)
+  assert.doesNotThrow(() => contracts.SellerBrief.parse(brief))
+  assert.doesNotThrow(() => assertSellerBriefSafe(brief))
+  brief.lines[0].requirements.push({ ...requirement, id: 'over-limit' })
+  assert.throws(() => contracts.SellerBrief.parse(brief))
+  assert.throws(() => assertSellerBriefSafe(brief))
+  const proposal = makeValidProposal('merchant_a')
+  proposal.claims = Array.from({ length: 100 }, (_, i) => ({ id: `claim-${i}`, requestLineId: proposal.lines[0].requestLineId, text: 'x'.repeat(4000), sourceIds: Array.from({ length: 40 }, (_, j) => `source-${j}`) }))
+  const decision = { kind: 'propose', proposal }
+  assert.deepEqual(parseSellerDecision(decision), contracts.SellerDecision.parse(decision))
+})
+
+test('repeated listings share aggregate capacity while duplicate request lines remain invalid', () => {
+  const input = { reservationKey: 'basket-key', requestId: 'request', quoteId: 'quote', merchantId: 'merchant_a', allocationIdPrefix: 'allocation', now: 1000, expiresAt: 2000, lines: [
+    { requestLineId: 'first', listing: { id: 'mouse', version: 1 }, quantity: 2, unitCents: 100 },
+    { requestLineId: 'second', listing: { id: 'mouse', version: 1 }, quantity: 2, unitCents: 100 },
+  ] }
+  const state = { initialQuantityByListing: { mouse: 4 }, allocations: [] }
+  const reserved = reserveInTransaction(state, input)
+  assert.equal(reserved.allocations.length, 2)
+  assert.equal(availableQuantity(reserved.state, 'mouse', 1000), 0)
+  assert.equal(reserveInTransaction(reserved.state, input).replayed, true)
+  assert.throws(() => reserveInTransaction({ ...state, initialQuantityByListing: { mouse: 3 } }, input))
+  assert.throws(() => reserveInTransaction(state, { ...input, lines: [input.lines[0], input.lines[0]] }))
+})

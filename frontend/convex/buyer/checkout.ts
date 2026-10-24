@@ -355,6 +355,7 @@ export const approveAndExecute = internalMutation({
         purchaseStage: "executing",
         updatedAt: Date.now(),
       });
+    await ctx.scheduler.runAfter(60000, internal.buyerExecution.recoverAttempt, { executionId, claimedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.buyerExecution.executeAttempt, {
       executionId: String(executionId),
     });

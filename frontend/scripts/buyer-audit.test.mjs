@@ -1,3 +1,4 @@
+import { comparisonIds, updateComparison } from "../src/backend/buyer/comparisonSelection.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as mock from "../src/buyer/mock.ts";
@@ -172,3 +173,13 @@ test('bounded demo history remains recoverable after the 101st order', () => {
   assert.equal(restored.page, 'receipt');
   assert.equal(restored.orders.at(-1).id, completed.orders.at(-1).id);
 });
+
+
+test('a server run replacement clears stale comparison capacity before the next pick', () => {
+  const previous = { runId: 'old-run', ids: ['a', 'b', 'c'] }
+  assert.deepEqual(comparisonIds(previous, 'new-run'), [])
+  const next = updateComparison(previous, 'new-run', ids => ids.length < 3 ? [...ids, 'new-offer'] : ids)
+  assert.deepEqual(next, { runId: 'new-run', ids: ['new-offer'] })
+  assert.deepEqual(comparisonIds(next, 'new-run'), ['new-offer'])
+  assert.deepEqual(comparisonIds(next, null), [])
+})

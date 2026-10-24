@@ -230,15 +230,18 @@ export const getRunEvents = query({
   },
 });
 export const getEvidence = query({
-  args: { requestId: v.string(), evidenceIds: v.array(v.string()) },
+  args: { requestId: v.string(), runId: v.optional(v.string()), evidenceIds: v.array(v.string()) },
   handler: async (ctx, args) => {
     const req = await requestFor(ctx, args.requestId);
     if (args.evidenceIds.length > 40)
       fail("LIMIT_REACHED", "Read at most forty excerpts.");
-    if (!req.activeRunId) return [];
+    const runId = args.runId ?? req.activeRunId;
+    if (!runId) return [];
+    const run = await runFor(ctx, runId);
+    if (!run || run.requestId !== args.requestId || run.ownerId !== req.ownerId) fail("FORBIDDEN", "Evidence belongs to another request.");
     const rows = await ctx.db
       .query("buyerEvidence")
-      .withIndex("by_run", (q) => q.eq("runId", req.activeRunId!))
+      .withIndex("by_run", (q) => q.eq("runId", runId))
       .take(200);
     return rows
       .filter((e) => args.evidenceIds.includes(e.data.id))
@@ -281,6 +284,8 @@ export const listSaved = query({
         .take(100)
     ).map((r) => ({
       id: String(r._id),
+      requestId: r.requestId ?? null,
+      runId: r.runId ?? null,
       card: contracts.OfferCard.parse(r.card),
       createdAt: r.createdAt,
     }));

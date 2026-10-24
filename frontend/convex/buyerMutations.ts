@@ -120,6 +120,7 @@ export const confirmRequest = internalMutation({
       );
     }
     await validateLines(ctx, args.lines);
+    args.lines.sort((a, b) => Number(b.role === "primary") - Number(a.role === "primary"));
     await invalidateRun(ctx, req.activeRunId);
     await releaseRequestHolds(ctx, args.requestId);
     const now = Date.now();
@@ -401,6 +402,8 @@ export const toggleSaved = internalMutation({
       await ctx.db.insert("buyerBookmarks", {
         ownerId: req.ownerId,
         offerId: args.offer.id,
+        requestId: args.requestId,
+        runId: req.activeRunId,
         card: selected.card,
         createdAt: Date.now(),
       });

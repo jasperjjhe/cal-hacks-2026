@@ -162,6 +162,8 @@ export const buyerTables = {
     createdAt: v.number(),
   }).index("by_key", ["ownerId", "operation", "clientKey"]),
   buyerBookmarks: defineTable({
+    requestId: v.optional(v.string()),
+    runId: v.optional(v.string()),
     ownerId: v.string(),
     offerId: v.string(),
     card: payload,

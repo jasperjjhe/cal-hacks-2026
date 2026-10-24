@@ -169,7 +169,7 @@ export const seedSellerDemo = internalMutationGeneric({
         updatedAt: createdAt,
       })
       await ctx.db.insert('memberships', {
-        authSubject: `demo:${merchantId}`,
+        authTokenIdentifier: `demo:${merchantId}`,
         merchantId,
         role: 'owner',
         enabled: true,

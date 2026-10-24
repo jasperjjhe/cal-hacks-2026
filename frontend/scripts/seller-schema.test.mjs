@@ -10,7 +10,7 @@ const schema = JSON.parse(await readFile(resolve(root, 'convex', 'lib', 'seller.
 test('seller worker schema is strict and excludes private buyer/seller fields from provider input', () => {
   assert.equal(schema.$id, 'https://buyerunion.local/contracts/seller.v1.schema.json')
   assert.deepEqual(schema.$defs.SellerBrief.required, [
-    'schemaVersion', 'request', 'runId', 'currency', 'deliveryRegion', 'deliveryDeadline', 'lines', 'sharedTarget',
+    'schemaVersion', 'request', 'currency', 'deliveryRegion', 'deliveryDeadline', 'lines', 'sharedTarget', 'runId',
   ])
   assert.equal(schema.$defs.SellerBrief.additionalProperties, false)
   assert.equal(schema.$defs.SellerDecision.oneOf.length, 3)

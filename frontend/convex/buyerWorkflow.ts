@@ -1,3 +1,4 @@
+import { merchantEligible } from "./buyer/eligibility";
 import {
   cancel,
   type WorkflowId,
@@ -222,7 +223,7 @@ export const openPriceRound = internalMutation({
       .first();
     if (prior) return String(prior._id);
     const request = await versionFor(ctx, run.requestId, run.version);
-    const offers = (
+    const candidates = (
       await ctx.db
         .query("buyerOffers")
         .withIndex("by_run_effective", (q) =>
@@ -230,6 +231,8 @@ export const openPriceRound = internalMutation({
         )
         .take(6)
     ).filter((o) => o.data.policyValid && o.data.requirementsValidExceptBudget);
+    const eligibility = await Promise.all(candidates.map((o) => merchantEligible(ctx, o.merchantId, o.data.policy)));
+    const offers = candidates.filter((_, i) => eligibility[i]);
     const merchantCount = new Set(offers.map((o) => o.merchantId)).size;
     let useful = false;
     for (const row of offers) {
@@ -360,7 +363,7 @@ export const closePriceRound = internalMutation({
       if (!submission.offerId) continue;
       const offerId = ctx.db.normalizeId("buyerOffers", submission.offerId);
       const offer = offerId ? await ctx.db.get(offerId) : null;
-      if (!offer || offer.stagedRoundId !== args.roundId) continue;
+      if (!offer || offer.stagedRoundId !== args.roundId || offer.data.acceptedAt >= row.data.deadlineAt || !row.data.participants.some((p: { candidateId: string; merchantId: string }) => p.candidateId === offer.candidateId && p.merchantId === offer.merchantId) || !(await merchantEligible(ctx, offer.merchantId, offer.data.policy))) continue;
       const before = await ctx.db
         .query("buyerOffers")
         .withIndex("by_run_candidate", (q) =>

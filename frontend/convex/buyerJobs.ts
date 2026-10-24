@@ -1,3 +1,4 @@
+import { merchantEligible } from "./buyer/eligibility";
 import {
   internalAction,
   internalMutation,
@@ -216,20 +217,17 @@ export const preparePhase = internalMutation({
       const plan = moderator?.output as
         | import("../src/contracts/index.ts").Contract<"ChallengePlan">
         | null;
-      const selected =
-        args.phase === "council"
-          ? rows.filter(
-              (row, index, all) =>
-                all.findIndex((r) => r.merchantId === row.merchantId) ===
-                  index &&
-                plan?.challenges.some(
-                  (c) =>
-                    c.offer.id === row.data.offer.id &&
-                    c.offer.version === row.data.offer.version,
-                ),
-            )
-          : rows;
+      const challenged = rows.filter(row => plan?.challenges?.some(c =>
+        c.offer.id === row.data.offer.id && c.offer.version === row.data.offer.version,
+      ));
+      const selected = args.phase === "council"
+        ? challenged.filter((row, index, all) => all.findIndex(r => r.merchantId === row.merchantId) === index)
+        : rows;
       for (const row of selected) {
+        if (!(await merchantEligible(ctx, row.merchantId, row.data.policy))) continue;
+        const roundId = args.roundId ? ctx.db.normalizeId("buyerRounds", args.roundId) : null;
+        const round = roundId ? await ctx.db.get(roundId) : null;
+        if (args.phase === "negotiating" && (!round || round.runId !== args.runId || round.data.status !== "open" || round.data.deadlineAt <= now || !round.data.participants.some((p: { candidateId: string }) => p.candidateId === row.candidateId))) continue;
         const snapshots = await loadSnapshots(ctx, row.merchantId);
         const policy = toPolicy(await getPolicy(ctx, row.data.policy));
         const sellerJobId = row.snapshot.sellerJobId as string;
@@ -240,7 +238,7 @@ export const preparePhase = internalMutation({
         if (!jobs) continue;
         const deadlineAt = Math.min(
           run.deadlineAt,
-          args.phase === "negotiating" ? now + 30000 : run.startedAt + 75000,
+          args.phase === "negotiating" ? round!.data.deadlineAt : run.startedAt + 75000,
         );
         await ctx.db.patch(jobs._id, {
           role: args.phase === "council" ? "seller_response" : "seller_final",
@@ -325,6 +323,10 @@ export const claimJob = internalMutation({
     if (!job) return null;
     if (job.runId && !(await currentRun(ctx, job.runId, job.phase)))
       return null;
+    if (!args.poll && job.merchantId && !(await merchantEligible(ctx, job.merchantId, job.input.policy.policy))) {
+      await ctx.db.patch(job._id, { state: "cancelled", completedAt: Date.now() });
+      return null;
+    }
     if (Date.now() >= job.deadlineAt) {
       await ctx.db.patch(job._id, { state: "failed" });
       return null;
@@ -422,7 +424,8 @@ export const dispatch = internalAction({
           deadlineAt: job.deadlineAt,
         });
     } catch {
-      result = { status: "failed" as const, providerRunId: job.providerRunId };
+      await ctx.runMutation(internal.buyerJobs.markAmbiguous, { jobId: args.jobId });
+      return { pending: true };
     }
     try {
       return await ctx.runMutation(internal.buyerJobs.completeJob, {
@@ -470,6 +473,14 @@ export const completeJob = internalMutation({
     ) {
       await ctx.db.patch(job._id, { state: "stale" });
       return { pending: false };
+    }
+    if (job.phase === "negotiating") {
+      const roundId = ctx.db.normalizeId("buyerRounds", job.input.roundId);
+      const round = roundId ? await ctx.db.get(roundId) : null;
+      if (!round || round.runId !== job.runId || round.data.status !== "open" || Date.now() >= round.data.deadlineAt || !round.data.participants.some((p: { candidateId: string; merchantId: string }) => p.candidateId === job.candidateId && p.merchantId === job.merchantId)) {
+        await ctx.db.patch(job._id, { state: "stale", completedAt: Date.now() });
+        return { pending: false };
+      }
     }
     const result = z
       .discriminatedUnion("status", [
@@ -618,8 +629,11 @@ export const completeJob = internalMutation({
           deferPromotion: job.phase === "negotiating",
         },
       );
-      if (!accepted.ok && !job.input.repairAttempt)
-        throw new Error("Proposal requires one bounded repair.");
+      if (!accepted.ok) {
+        if (!job.input.repairAttempt) throw new Error("Proposal requires one bounded repair.");
+        await ctx.db.patch(job._id, { state: "failed", completedAt: Date.now() });
+        return { pending: false };
+      }
       if (
         accepted.ok &&
         "offer" in accepted &&
@@ -1054,7 +1068,21 @@ export const finishRepair = internalMutation({
     if (parent?.state === "repairing" && child)
       await ctx.db.patch(parent._id, {
         state: child.state === "completed" ? "completed" : "failed",
+        output: child.state === "completed" ? child.output : null,
+        outputDigest: child.state === "completed" ? child.outputDigest : null,
         completedAt: Date.now(),
       });
+  },
+});
+
+// Polling must support lookup by the stable job id when no remote run id was
+// received. A transport failure is never permission to start a different job.
+export const markAmbiguous = internalMutation({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }) => {
+    const id = ctx.db.normalizeId("buyerJobs", jobId);
+    const job = id ? await ctx.db.get(id) : null;
+    if (job && ["starting", "polling"].includes(job.state))
+      await ctx.db.patch(job._id, { state: "pending" });
   },
 });

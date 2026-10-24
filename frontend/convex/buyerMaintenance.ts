@@ -18,8 +18,11 @@ export const retain = internalMutation({
         .query("buyerExecutions")
         .withIndex("by_request", (q) => q.eq("requestId", requestId))
         .take(100);
-      if (executions.some((e) => ["pending", "unknown"].includes(e.state)))
-        continue;
+      const unresolved = await ctx.db.query("buyerExecutions")
+        .withIndex("by_request", q => q.eq("requestId", requestId))
+        .filter(q => q.or(q.eq(q.field("state"), "pending"), q.eq(q.field("state"), "unknown")))
+        .first();
+      if (unresolved) continue;
       const runs = await ctx.db
         .query("buyerRuns")
         .withIndex("by_request", (q) => q.eq("requestId", requestId))

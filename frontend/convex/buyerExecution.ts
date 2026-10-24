@@ -30,6 +30,10 @@ export const claimAttempt = internalMutation({
       attemptCount: attempt.attemptCount + 1,
       updatedAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(60000, internal.buyerExecution.recoverAttempt, {
+      executionId: args.executionId,
+      claimedAt: Date.now(),
+    });
     return {
       executionId: args.executionId,
       quote: contracts.FirmQuote.parse(quote.data),
@@ -198,5 +202,26 @@ export const getAttempt = internalQuery({
   handler: async (ctx, args) => {
     const id = ctx.db.normalizeId("buyerExecutions", args.executionId);
     return id ? ctx.db.get(id) : null;
+  },
+});
+
+// The action may stop after its claim commits. Recovery only looks up the same
+// execution; it never repeats the payment operation.
+export const recoverAttempt = internalMutation({
+  args: { ...executionArgs, claimedAt: v.number() },
+  handler: async (ctx, args) => {
+    const id = ctx.db.normalizeId("buyerExecutions", args.executionId);
+    const attempt = id ? await ctx.db.get(id) : null;
+    if (!attempt || !["pending", "unknown"].includes(attempt.state) || attempt.updatedAt > args.claimedAt) return;
+    if (Date.now() < args.claimedAt + 60000) return;
+    await ctx.db.patch(attempt._id, { state: "unknown", updatedAt: Date.now(), data: {
+      ...attempt.data, status: "unknown", nextAction: "wait",
+      resultMessage: "The interrupted purchase is being reconciled. Do not start another attempt.",
+    }});
+    const quoteId = ctx.db.normalizeId("buyerQuotes", attempt.quoteId);
+    const quote = quoteId ? await ctx.db.get(quoteId) : null;
+    const run = quote ? await runFor(ctx, quote.runId) : null;
+    if (run) await ctx.db.patch(run._id, { purchaseStage: "unknown", updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.buyerExecution.reconcileAttempt, { executionId: args.executionId });
   },
 });

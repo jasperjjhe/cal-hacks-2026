@@ -53,15 +53,20 @@ const sellerTables = {
     .index('by_enabled_paused', ['enabled', 'paused']),
 
   memberships: defineTable({
-    authSubject: v.string(),
+    authTokenIdentifier: v.optional(v.string()),
+    authSubject: v.optional(v.string()), // migration-only; never authorizes a request
     merchantId: v.string(),
     role: v.union(v.literal('owner'), v.literal('operator')),
     enabled: v.boolean(),
     createdAt: v.number(),
   })
-    .index('by_authSubject', ['authSubject'])
+    .index('by_authTokenIdentifier', ['authTokenIdentifier'])
     .index('by_merchantId', ['merchantId'])
-    .index('by_authSubject_and_merchantId', ['authSubject', 'merchantId']),
+    .index('by_authTokenIdentifier_and_merchantId', ['authTokenIdentifier', 'merchantId']),
+
+  operatorAccounts: defineTable({
+    userId: v.string(), merchantId: v.string(), enabled: v.boolean(), createdAt: v.number(),
+  }).index('by_user', ['userId']),
 
   categoryProfiles: defineTable({
     profileId: v.string(),

@@ -39,7 +39,7 @@ export async function reconcilePayment(
         ? "succeeded"
         : claim.scenario === "declined"
           ? "declined"
-          : "unknown",
+          : "succeeded",
     providerReference:
       claim.providerReference ?? `simulation:${claim.executionId}`,
   };

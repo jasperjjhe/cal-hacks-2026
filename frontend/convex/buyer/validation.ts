@@ -24,14 +24,15 @@ export async function validateLines(
       if (!field || !field.allowedOperators.includes(req.operator))
         fail("INVALID_INPUT", "Unsupported requirement field or operator.");
       const rightType =
-        field.kind === "number"
+        req.operator === "in" || req.operator === "containsAll"
+          ? Array.isArray(req.value) && req.value.length > 0 && req.value.every((v) => typeof v === "string")
+          : field.kind === "number"
           ? typeof req.value === "number"
           : field.kind === "boolean"
             ? typeof req.value === "boolean"
             : field.kind === "string_array"
               ? Array.isArray(req.value)
-              : typeof req.value === "string" ||
-                (req.operator === "in" && Array.isArray(req.value));
+              : typeof req.value === "string";
       if (typeof req.value === "number" && req.unit !== field.unit) {
         const converted = convertRequirementUnit(
           req.value,

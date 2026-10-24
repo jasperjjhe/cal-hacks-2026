@@ -1,3 +1,4 @@
+import { comparisonIds, updateComparison, type ComparisonSelection } from "./backend/buyer/comparisonSelection";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
@@ -106,7 +107,8 @@ function Workspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [details, setDetails] = useState<OfferCard | null>(null);
-  const [compared, setCompared] = useState<string[]>([]);
+  const [comparison, setComparison] = useState<ComparisonSelection>({ runId: null, ids: [] });
+  const [detailsOrigin, setDetailsOrigin] = useState<{ requestId: string; runId: string } | null>(null);
   const [showCompare, setShowCompare] = useState(false);
   const draft = useQuery(
     api.buyer.getDraft,
@@ -121,6 +123,14 @@ function Workspace() {
     api.buyer.getBuyerRun,
     requestId && active ? { requestId } : "skip",
   );
+  const compared = comparisonIds(comparison, run?.runId ?? null);
+  function setCompared(update: string[] | ((ids: string[]) => string[])) {
+    setComparison(previous => updateComparison(previous, run?.runId ?? null, update));
+  }
+  function openDetails(card: OfferCard, origin: { requestId: string; runId: string } | null) {
+    setDetails(card);
+    setDetailsOrigin(origin);
+  }
   const purchase = useQuery(
     api.buyer.getPurchase,
     requestId ? { requestId } : "skip",
@@ -728,7 +738,7 @@ function Workspace() {
                                       : prev,
                                 )
                               }
-                              onDetails={() => setDetails(card)}
+                              onDetails={() => openDetails(card, { requestId: requestId!, runId: run.runId })}
                               onSave={() =>
                                 void perform(async () => {
                                   unwrap(
@@ -830,7 +840,7 @@ function Workspace() {
                   <div className="backend-actions">
                     <button
                       className="secondary"
-                      onClick={() => setDetails(s.card)}
+                      onClick={() => openDetails(s.card, s.requestId && s.runId ? { requestId: s.requestId, runId: s.runId } : null)}
                     >
                       Details
                     </button>
@@ -943,9 +953,9 @@ function Workspace() {
           onClose={() => setDetails(null)}
         >
           <OfferFacts card={details} />
-          {requestId && (
-            <Evidence requestId={requestId} ids={details.evidenceIds} />
-          )}
+          {detailsOrigin ? (
+            <Evidence requestId={detailsOrigin.requestId} runId={detailsOrigin.runId} ids={details.evidenceIds} />
+          ) : <p>Archived evidence is unavailable for this older saved snapshot.</p>}
         </Modal>
       )}
       {showCompare && (
@@ -1539,7 +1549,7 @@ function Offer({
           <p>{card.mainConcern}</p>
         </div>
         <button className="evidence-link" onClick={onDetails}>
-          ↗ {card.evidenceIds.length} applicable sources ·{" "}
+          ↗ {card.evidenceIds.length} evidence excerpts ·{" "}
           {card.evidenceStatus}
         </button>
         <div className="card-actions">
@@ -1602,10 +1612,11 @@ function OfferFacts({ card }: { card: OfferCard }) {
     </>
   );
 }
-function Evidence({ requestId, ids }: { requestId: string; ids: string[] }) {
+function Evidence({ requestId, runId, ids }: { requestId: string; runId?: string; ids: string[] }) {
   const evidence = useQuery(api.buyer.getEvidence, {
     requestId,
     evidenceIds: ids,
+    ...(runId ? { runId } : {}),
   });
   return (
     <section>

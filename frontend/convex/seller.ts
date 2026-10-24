@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -233,8 +234,12 @@ export const updateOwnListing = mutationGeneric({
     const current = await getListing(ctx, args.listing)
     if (current.merchantId !== membership.merchantId) throwSellerError('WRONG_MERCHANT_SCOPE', 'listing is not owned by the authenticated merchant')
     const patch = args.patch
+    const { _id, _creationTime, ...fields } = current
+    void _creationTime
+    const latest = await ctx.db.query("listingVersions").withIndex("by_listingId_and_version", (q) => q.eq("listingId", current.listingId)).order("desc").first()
+    if (latest?.version !== current.version) throwSellerError("LISTING_VERSION_STALE", "listing version is stale")
     const next = {
-      ...current,
+      ...fields,
       version: current.version + 1,
       variantId: typeof patch.variantId === 'string' ? patch.variantId : current.variantId,
       condition: patch.condition === 'new' || patch.condition === 'refurbished' ? patch.condition : current.condition,
@@ -268,6 +273,7 @@ export const updateOwnListing = mutationGeneric({
     if (next.initialQuantity < committedQuantity) {
       throwSellerError('QUANTITY_INVALID', 'quantity cannot erase already committed stock', 'patch.initialQuantity')
     }
+    await ctx.db.patch(_id, { enabled: false })
     const insertedId = await ctx.db.insert('listingVersions', next)
     await recordEvent(ctx, {
       merchantId: membership.merchantId,
@@ -401,3 +407,23 @@ export function normalizeExpectedPolicy(value: unknown): Ref | null {
   if (typeof record.id !== 'string' || typeof record.version !== 'number') throw new SellerContractError('INVALID_INPUT', 'expected policy is invalid')
   return { id: record.id, version: record.version }
 }
+
+// Call once after password sign-in, before querying the seller workspace.
+// The merchant comes only from an internally provisioned account grant.
+export const bindOperatorSession = mutationGeneric({
+  args: {},
+  handler: async (ctx: SellerMutationCtx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = await getAuthUserId(ctx);
+    if (!identity || !userId) throwSellerError("UNAUTHENTICATED", "Operator login required");
+    const grants = await ctx.db.query("operatorAccounts").withIndex("by_user", q => q.eq("userId", String(userId))).collect();
+    const active = grants.filter(g => g.enabled);
+    if (active.length !== 1) throwSellerError("UNAUTHORIZED", "Operator account is missing or ambiguous");
+    const memberships = await ctx.db.query("memberships").withIndex("by_authTokenIdentifier", q => q.eq("authTokenIdentifier", identity.tokenIdentifier)).collect();
+    for (const membership of memberships) {
+      if (membership.merchantId !== active[0].merchantId) throwSellerError("UNAUTHORIZED", "Session membership conflicts with account grant");
+    }
+    if (memberships.length === 0) await ctx.db.insert("memberships", { authTokenIdentifier: identity.tokenIdentifier, merchantId: active[0].merchantId, role: "operator", enabled: true, createdAt: Date.now() });
+    return { merchantId: active[0].merchantId };
+  },
+});

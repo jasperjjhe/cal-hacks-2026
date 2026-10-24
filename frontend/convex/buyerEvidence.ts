@@ -350,7 +350,8 @@ async function attach(
     if (row.card.products[0].variantId === variantId) {
       // Authoritative exact-identity contradictions block selection pending S's
       // reassessment. Family/owner commentary can never certify or negate fit.
-      const contradicted = evidence.some(
+      const conflictingFields = new Set(facts.filter((fact) => facts.some((other) => other.fieldId === fact.fieldId && JSON.stringify([other.value, other.unit]) !== JSON.stringify([fact.value, fact.unit]))).map((fact) => fact.fieldId));
+      const contradicted = conflictingFields.size > 0 || evidence.some(
         (e) =>
           e.applicability === "exact_variant" &&
           e.sourceType !== "owner_report" &&
@@ -386,6 +387,7 @@ async function attach(
             )
             .unique();
           for (const fact of facts) {
+            if (conflictingFields.has(fact.fieldId)) continue;
             const field = profile?.fields.find((f) => f.id === fact.fieldId);
             if (!field) throw new Error("Unsupported source fact field");
             const value = fact.value;

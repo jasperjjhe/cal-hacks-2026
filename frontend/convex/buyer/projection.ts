@@ -77,7 +77,10 @@ export function projectOffer(input: {
     affordable,
     selectable: eligible && affordable,
   });
-  const products = raw.lines.map((line) => {
+  const products = [...raw.lines].sort((a, b) => {
+    const primary = request.brief.lines.find(l => l.role === "primary")!.lineId;
+    return Number(b.requestLineId === primary) - Number(a.requestLineId === primary);
+  }).map((line) => {
     const snapshot = input.products.find(
       (s) => s.listing.listing.id === line.listing.id,
     )!;
