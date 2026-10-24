@@ -1,0 +1,5060 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:buyerunion:contracts:1",
+  "$comment": "Generated from index.ts. DRAFT pending Dev S review. Server semantic checks are additional.",
+  "$defs": {
+    "Ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "CategoryProfile": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "laptop",
+            "tech_accessory",
+            "clothing",
+            "household_accessory",
+            "small_appliance"
+          ]
+        },
+        "allowedConditions": {
+          "minItems": 1,
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "new",
+              "refurbished"
+            ]
+          }
+        },
+        "fields": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "string_array"
+                ]
+              },
+              "unit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "allowedOperators": {
+                "minItems": 1,
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "equals",
+                    "in",
+                    "min",
+                    "max",
+                    "containsAll"
+                  ]
+                }
+              },
+              "allowedValues": {
+                "anyOf": [
+                  {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "minimum": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maximum": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "kind",
+              "unit",
+              "allowedOperators",
+              "allowedValues",
+              "minimum",
+              "maximum"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "variantKeyFields": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "compatibilityRuleId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidenceRuleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "profile",
+        "category",
+        "allowedConditions",
+        "fields",
+        "variantKeyFields",
+        "compatibilityRuleId",
+        "evidenceRuleId"
+      ],
+      "additionalProperties": false
+    },
+    "Requirement": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "fieldId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "operator": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "in",
+            "min",
+            "max",
+            "containsAll"
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strength": {
+          "type": "string",
+          "enum": [
+            "hard",
+            "soft"
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 1
+            },
+            {
+              "type": "number",
+              "const": 2
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "fieldId",
+        "operator",
+        "value",
+        "unit",
+        "strength",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "RequestLine": {
+      "type": "object",
+      "properties": {
+        "lineId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "related"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "laptop",
+            "tech_accessory",
+            "clothing",
+            "household_accessory",
+            "small_appliance"
+          ]
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "allowedConditions": {
+          "minItems": 1,
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "new",
+              "refurbished"
+            ]
+          }
+        },
+        "requirements": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "fieldId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "operator": {
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "in",
+                  "min",
+                  "max",
+                  "containsAll"
+                ]
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    }
+                  }
+                ]
+              },
+              "unit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "strength": {
+                "type": "string",
+                "enum": [
+                  "hard",
+                  "soft"
+                ]
+              },
+              "weight": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 1
+                  },
+                  {
+                    "type": "number",
+                    "const": 2
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "fieldId",
+              "operator",
+              "value",
+              "unit",
+              "strength",
+              "weight"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "useCaseSummary": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "lineId",
+        "role",
+        "category",
+        "profile",
+        "quantity",
+        "allowedConditions",
+        "requirements",
+        "useCaseSummary"
+      ],
+      "additionalProperties": false
+    },
+    "ConfirmedBrief": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "currency": {
+          "type": "string",
+          "const": "USD"
+        },
+        "deliveryRegion": {
+          "type": "string",
+          "const": "US-CA-SAN_FRANCISCO"
+        },
+        "deliveryDeadline": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "related"
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "laptop",
+                  "tech_accessory",
+                  "clothing",
+                  "household_accessory",
+                  "small_appliance"
+                ]
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "allowedConditions": {
+                "minItems": 1,
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "refurbished"
+                  ]
+                }
+              },
+              "requirements": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "fieldId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "in",
+                        "min",
+                        "max",
+                        "containsAll"
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "strength": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
+                    "weight": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "const": 1
+                        },
+                        {
+                          "type": "number",
+                          "const": 2
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "fieldId",
+                    "operator",
+                    "value",
+                    "unit",
+                    "strength",
+                    "weight"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "useCaseSummary": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "lineId",
+              "role",
+              "category",
+              "profile",
+              "quantity",
+              "allowedConditions",
+              "requirements",
+              "useCaseSummary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sharedTarget": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "amountCents": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "consentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "consentedAt": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "amountCents",
+                "consentId",
+                "consentedAt"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "request",
+        "currency",
+        "deliveryRegion",
+        "deliveryDeadline",
+        "lines",
+        "sharedTarget"
+      ],
+      "additionalProperties": false
+    },
+    "SellerBrief": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "currency": {
+          "type": "string",
+          "const": "USD"
+        },
+        "deliveryRegion": {
+          "type": "string",
+          "const": "US-CA-SAN_FRANCISCO"
+        },
+        "deliveryDeadline": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "related"
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "laptop",
+                  "tech_accessory",
+                  "clothing",
+                  "household_accessory",
+                  "small_appliance"
+                ]
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "allowedConditions": {
+                "minItems": 1,
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "refurbished"
+                  ]
+                }
+              },
+              "requirements": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "fieldId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "in",
+                        "min",
+                        "max",
+                        "containsAll"
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "strength": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
+                    "weight": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "const": 1
+                        },
+                        {
+                          "type": "number",
+                          "const": 2
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "fieldId",
+                    "operator",
+                    "value",
+                    "unit",
+                    "strength",
+                    "weight"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "useCaseSummary": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "lineId",
+              "role",
+              "category",
+              "profile",
+              "quantity",
+              "allowedConditions",
+              "requirements",
+              "useCaseSummary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sharedTarget": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "amountCents": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "consentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "consentedAt": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "amountCents",
+                "consentId",
+                "consentedAt"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "request",
+        "currency",
+        "deliveryRegion",
+        "deliveryDeadline",
+        "lines",
+        "sharedTarget",
+        "runId"
+      ],
+      "additionalProperties": false
+    },
+    "RequestVersion": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rawMessages": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "origins": {
+          "maxItems": 300,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirementId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "explicit": {
+                "type": "boolean"
+              },
+              "buyerConfirmed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "requirementId",
+              "messageId",
+              "start",
+              "end",
+              "explicit",
+              "buyerConfirmed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "privateMaximumCents": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "confirmedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "best_fit",
+            "cheapest",
+            "soonest",
+            "warranty"
+          ]
+        },
+        "brief": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "request": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            "currency": {
+              "type": "string",
+              "const": "USD"
+            },
+            "deliveryRegion": {
+              "type": "string",
+              "const": "US-CA-SAN_FRANCISCO"
+            },
+            "deliveryDeadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "lines": {
+              "minItems": 1,
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "lineId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "primary",
+                      "related"
+                    ]
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "laptop",
+                      "tech_accessory",
+                      "clothing",
+                      "household_accessory",
+                      "small_appliance"
+                    ]
+                  },
+                  "profile": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "allowedConditions": {
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "refurbished"
+                      ]
+                    }
+                  },
+                  "requirements": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "fieldId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "in",
+                            "min",
+                            "max",
+                            "containsAll"
+                          ]
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              }
+                            }
+                          ]
+                        },
+                        "unit": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "strength": {
+                          "type": "string",
+                          "enum": [
+                            "hard",
+                            "soft"
+                          ]
+                        },
+                        "weight": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "const": 1
+                            },
+                            {
+                              "type": "number",
+                              "const": 2
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "fieldId",
+                        "operator",
+                        "value",
+                        "unit",
+                        "strength",
+                        "weight"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "useCaseSummary": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "lineId",
+                  "role",
+                  "category",
+                  "profile",
+                  "quantity",
+                  "allowedConditions",
+                  "requirements",
+                  "useCaseSummary"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "sharedTarget": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "amountCents": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "consentId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "consentedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "amountCents",
+                    "consentId",
+                    "consentedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "request",
+            "currency",
+            "deliveryRegion",
+            "deliveryDeadline",
+            "lines",
+            "sharedTarget"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "request",
+        "ownerId",
+        "createdAt",
+        "rawMessages",
+        "origins",
+        "privateMaximumCents",
+        "confirmedAt",
+        "sort",
+        "brief"
+      ],
+      "additionalProperties": false
+    },
+    "FitAssessment": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "maxItems": 300,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirementId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "matched",
+                  "unmet",
+                  "unknown"
+                ]
+              },
+              "actual": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "requirementId",
+              "status",
+              "actual",
+              "sourceIds",
+              "explanation"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "coveragePercent": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hardRequirementsPass": {
+          "type": "boolean"
+        },
+        "scoringVersion": {
+          "type": "number",
+          "const": 1
+        }
+      },
+      "required": [
+        "checks",
+        "coveragePercent",
+        "hardRequirementsPass",
+        "scoringVersion"
+      ],
+      "additionalProperties": false
+    },
+    "OfferVersion": {
+      "type": "object",
+      "properties": {
+        "offer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "candidateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "merchantId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "listing": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "unitCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "requestLineId",
+              "listing",
+              "quantity",
+              "unitCents"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "claims": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "sourceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            "required": [
+              "id",
+              "requestLineId",
+              "text",
+              "sourceIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "fitArgument": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "fit": {
+          "type": "object",
+          "properties": {
+            "checks": {
+              "maxItems": 300,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "requirementId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "matched",
+                      "unmet",
+                      "unknown"
+                    ]
+                  },
+                  "actual": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 4000
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceIds": {
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "explanation": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "requirementId",
+                  "status",
+                  "actual",
+                  "sourceIds",
+                  "explanation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "coveragePercent": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hardRequirementsPass": {
+              "type": "boolean"
+            },
+            "scoringVersion": {
+              "type": "number",
+              "const": 1
+            }
+          },
+          "required": [
+            "checks",
+            "coveragePercent",
+            "hardRequirementsPass",
+            "scoringVersion"
+          ],
+          "additionalProperties": false
+        },
+        "itemsCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "shippingCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "taxCents": {
+          "type": "number",
+          "const": 0
+        },
+        "totalCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "arrivalAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "warrantyMonths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1200
+        },
+        "returnDays": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650
+        },
+        "acceptedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "policyValid": {
+          "type": "boolean"
+        },
+        "requirementsValidExceptBudget": {
+          "type": "boolean"
+        },
+        "affordable": {
+          "type": "boolean"
+        },
+        "selectable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "offer",
+        "candidateId",
+        "request",
+        "runId",
+        "merchantId",
+        "policy",
+        "lines",
+        "claims",
+        "fitArgument",
+        "fit",
+        "itemsCents",
+        "shippingCents",
+        "taxCents",
+        "totalCents",
+        "arrivalAt",
+        "warrantyMonths",
+        "returnDays",
+        "acceptedAt",
+        "expiresAt",
+        "policyValid",
+        "requirementsValidExceptBudget",
+        "affordable",
+        "selectable"
+      ],
+      "additionalProperties": false
+    },
+    "OfferCard": {
+      "type": "object",
+      "properties": {
+        "offer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "merchant": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "displayName": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "demo": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "id",
+            "displayName",
+            "demo"
+          ],
+          "additionalProperties": false
+        },
+        "products": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "condition": {
+                "type": "string",
+                "enum": [
+                  "new",
+                  "refurbished"
+                ]
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              }
+            },
+            "required": [
+              "requestLineId",
+              "variantId",
+              "title",
+              "condition",
+              "quantity"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "totalCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "initialTotalCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "currency": {
+          "type": "string",
+          "const": "USD"
+        },
+        "arrivalAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "warrantyMonths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1200
+        },
+        "returnDays": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650
+        },
+        "fit": {
+          "type": "object",
+          "properties": {
+            "checks": {
+              "maxItems": 300,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "requirementId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "matched",
+                      "unmet",
+                      "unknown"
+                    ]
+                  },
+                  "actual": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 4000
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceIds": {
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "explanation": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "requirementId",
+                  "status",
+                  "actual",
+                  "sourceIds",
+                  "explanation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "coveragePercent": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hardRequirementsPass": {
+              "type": "boolean"
+            },
+            "scoringVersion": {
+              "type": "number",
+              "const": 1
+            }
+          },
+          "required": [
+            "checks",
+            "coveragePercent",
+            "hardRequirementsPass",
+            "scoringVersion"
+          ],
+          "additionalProperties": false
+        },
+        "fitArgument": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "mainConcern": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidenceStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "complete",
+            "partial",
+            "unavailable",
+            "cached"
+          ]
+        },
+        "evidenceIds": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "expiresAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "selectable": {
+          "type": "boolean"
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "offer",
+        "merchant",
+        "products",
+        "totalCents",
+        "initialTotalCents",
+        "currency",
+        "arrivalAt",
+        "warrantyMonths",
+        "returnDays",
+        "fit",
+        "fitArgument",
+        "mainConcern",
+        "evidenceStatus",
+        "evidenceIds",
+        "expiresAt",
+        "selectable",
+        "unavailableReason"
+      ],
+      "additionalProperties": false
+    },
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_INPUT",
+            "FORBIDDEN",
+            "STALE_VERSION",
+            "NO_MATCH",
+            "POLICY_REJECTED",
+            "EXPIRED",
+            "STOCK_UNAVAILABLE",
+            "PROVIDER_UNAVAILABLE",
+            "LIMIT_REACHED",
+            "EXECUTION_UNKNOWN"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "correlationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "correlationId"
+      ],
+      "additionalProperties": false
+    },
+    "IntakeResult": {
+      "type": "object",
+      "properties": {
+        "expectedDraftVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "proposedLines": {
+          "anyOf": [
+            {
+              "minItems": 1,
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "lineId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "primary",
+                      "related"
+                    ]
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "laptop",
+                      "tech_accessory",
+                      "clothing",
+                      "household_accessory",
+                      "small_appliance"
+                    ]
+                  },
+                  "profile": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "allowedConditions": {
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "refurbished"
+                      ]
+                    }
+                  },
+                  "requirements": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "fieldId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "in",
+                            "min",
+                            "max",
+                            "containsAll"
+                          ]
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              }
+                            }
+                          ]
+                        },
+                        "unit": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "strength": {
+                          "type": "string",
+                          "enum": [
+                            "hard",
+                            "soft"
+                          ]
+                        },
+                        "weight": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "const": 1
+                            },
+                            {
+                              "type": "number",
+                              "const": 2
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "fieldId",
+                        "operator",
+                        "value",
+                        "unit",
+                        "strength",
+                        "weight"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "useCaseSummary": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "lineId",
+                  "role",
+                  "category",
+                  "profile",
+                  "quantity",
+                  "allowedConditions",
+                  "requirements",
+                  "useCaseSummary"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proposedDeadline": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proposedPrivateMaximumCents": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proposedSharedTargetCents": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origins": {
+          "maxItems": 300,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirementId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "explicit": {
+                "type": "boolean"
+              },
+              "buyerConfirmed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "requirementId",
+              "messageId",
+              "start",
+              "end",
+              "explicit",
+              "buyerConfirmed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "clarificationQuestions": {
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "suggestedReplies": {
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unresolvedFields": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required": [
+        "expectedDraftVersion",
+        "proposedLines",
+        "proposedDeadline",
+        "proposedPrivateMaximumCents",
+        "proposedSharedTargetCents",
+        "origins",
+        "clarificationQuestions",
+        "suggestedReplies",
+        "unresolvedFields"
+      ],
+      "additionalProperties": false
+    },
+    "DraftView": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "messages": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "buyer",
+                  "assistant"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "createdAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "role",
+              "text",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "interpretation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "expectedDraftVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "proposedLines": {
+                  "anyOf": [
+                    {
+                      "minItems": 1,
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lineId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "primary",
+                              "related"
+                            ]
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "laptop",
+                              "tech_accessory",
+                              "clothing",
+                              "household_accessory",
+                              "small_appliance"
+                            ]
+                          },
+                          "profile": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "version": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "allowedConditions": {
+                            "minItems": 1,
+                            "maxItems": 2,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "new",
+                                "refurbished"
+                              ]
+                            }
+                          },
+                          "requirements": {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "fieldId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "operator": {
+                                  "type": "string",
+                                  "enum": [
+                                    "equals",
+                                    "in",
+                                    "min",
+                                    "max",
+                                    "containsAll"
+                                  ]
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "maxLength": 4000
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "maxItems": 100,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 4000
+                                      }
+                                    }
+                                  ]
+                                },
+                                "unit": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "strength": {
+                                  "type": "string",
+                                  "enum": [
+                                    "hard",
+                                    "soft"
+                                  ]
+                                },
+                                "weight": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number",
+                                      "const": 1
+                                    },
+                                    {
+                                      "type": "number",
+                                      "const": 2
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "fieldId",
+                                "operator",
+                                "value",
+                                "unit",
+                                "strength",
+                                "weight"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "useCaseSummary": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "lineId",
+                          "role",
+                          "category",
+                          "profile",
+                          "quantity",
+                          "allowedConditions",
+                          "requirements",
+                          "useCaseSummary"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proposedDeadline": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proposedPrivateMaximumCents": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proposedSharedTargetCents": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origins": {
+                  "maxItems": 300,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "requirementId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "messageId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "explicit": {
+                        "type": "boolean"
+                      },
+                      "buyerConfirmed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "requirementId",
+                      "messageId",
+                      "start",
+                      "end",
+                      "explicit",
+                      "buyerConfirmed"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "clarificationQuestions": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "suggestedReplies": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "unresolvedFields": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              },
+              "required": [
+                "expectedDraftVersion",
+                "proposedLines",
+                "proposedDeadline",
+                "proposedPrivateMaximumCents",
+                "proposedSharedTargetCents",
+                "origins",
+                "clarificationQuestions",
+                "suggestedReplies",
+                "unresolvedFields"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confirmedRequest": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "requestId",
+        "draftVersion",
+        "messages",
+        "interpretation",
+        "confirmedRequest",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "RunEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "started",
+            "proposal",
+            "rejected",
+            "challenge",
+            "response",
+            "revision",
+            "price_round_opened",
+            "final_bid",
+            "abstained",
+            "price_round_skipped",
+            "research_updated",
+            "closed"
+          ]
+        },
+        "merchantId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "id",
+        "request",
+        "runId",
+        "sequence",
+        "createdAt",
+        "kind",
+        "merchantId",
+        "offer",
+        "summary"
+      ],
+      "additionalProperties": false
+    },
+    "BuyerRunView": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "bidding",
+            "council",
+            "negotiating",
+            "researching",
+            "results",
+            "no_match",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "purchaseStage": {
+          "type": "string",
+          "enum": [
+            "none",
+            "reserved",
+            "executing",
+            "unknown",
+            "complete",
+            "declined"
+          ]
+        },
+        "startedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "serverNow": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "participatingMerchantCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "completedMerchantCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "evidenceStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "complete",
+            "partial",
+            "unavailable",
+            "cached"
+          ]
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "offers": {
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "offer": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "merchant": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "demo": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "displayName",
+                  "demo"
+                ],
+                "additionalProperties": false
+              },
+              "products": {
+                "minItems": 1,
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "requestLineId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "variantId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "condition": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "refurbished"
+                      ]
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10
+                    }
+                  },
+                  "required": [
+                    "requestLineId",
+                    "variantId",
+                    "title",
+                    "condition",
+                    "quantity"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "totalCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "initialTotalCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "currency": {
+                "type": "string",
+                "const": "USD"
+              },
+              "arrivalAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "warrantyMonths": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1200
+              },
+              "returnDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3650
+              },
+              "fit": {
+                "type": "object",
+                "properties": {
+                  "checks": {
+                    "maxItems": 300,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "requirementId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "matched",
+                            "unmet",
+                            "unknown"
+                          ]
+                        },
+                        "actual": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 4000
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 4000
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sourceIds": {
+                          "maxItems": 40,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        },
+                        "explanation": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
+                      },
+                      "required": [
+                        "requirementId",
+                        "status",
+                        "actual",
+                        "sourceIds",
+                        "explanation"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "coveragePercent": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "hardRequirementsPass": {
+                    "type": "boolean"
+                  },
+                  "scoringVersion": {
+                    "type": "number",
+                    "const": 1
+                  }
+                },
+                "required": [
+                  "checks",
+                  "coveragePercent",
+                  "hardRequirementsPass",
+                  "scoringVersion"
+                ],
+                "additionalProperties": false
+              },
+              "fitArgument": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "mainConcern": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "evidenceStatus": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "complete",
+                  "partial",
+                  "unavailable",
+                  "cached"
+                ]
+              },
+              "evidenceIds": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "expiresAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "selectable": {
+                "type": "boolean"
+              },
+              "unavailableReason": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "offer",
+              "merchant",
+              "products",
+              "totalCents",
+              "initialTotalCents",
+              "currency",
+              "arrivalAt",
+              "warrantyMonths",
+              "returnDays",
+              "fit",
+              "fitArgument",
+              "mainConcern",
+              "evidenceStatus",
+              "evidenceIds",
+              "expiresAt",
+              "selectable",
+              "unavailableReason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "events": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "request": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "runId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "createdAt": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "started",
+                  "proposal",
+                  "rejected",
+                  "challenge",
+                  "response",
+                  "revision",
+                  "price_round_opened",
+                  "final_bid",
+                  "abstained",
+                  "price_round_skipped",
+                  "research_updated",
+                  "closed"
+                ]
+              },
+              "merchantId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offer": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "id",
+              "request",
+              "runId",
+              "sequence",
+              "createdAt",
+              "kind",
+              "merchantId",
+              "offer",
+              "summary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "suggestedActions": {
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "compare_offers",
+                  "revise_request"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "allowedActions": {
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "cancel",
+              "revise",
+              "select",
+              "approve",
+              "retry"
+            ]
+          }
+        },
+        "modes": {
+          "type": "object",
+          "properties": {
+            "inventory": {
+              "type": "string",
+              "const": "mock"
+            },
+            "agents": {
+              "type": "string",
+              "enum": [
+                "live",
+                "fixture",
+                "mixed"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "enum": [
+                "live",
+                "cached",
+                "mixed",
+                "unavailable"
+              ]
+            },
+            "payment": {
+              "type": "string",
+              "enum": [
+                "simulation",
+                "visa_sandbox"
+              ]
+            }
+          },
+          "required": [
+            "inventory",
+            "agents",
+            "evidence",
+            "payment"
+          ],
+          "additionalProperties": false
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "INVALID_INPUT",
+                    "FORBIDDEN",
+                    "STALE_VERSION",
+                    "NO_MATCH",
+                    "POLICY_REJECTED",
+                    "EXPIRED",
+                    "STOCK_UNAVAILABLE",
+                    "PROVIDER_UNAVAILABLE",
+                    "LIMIT_REACHED",
+                    "EXECUTION_UNKNOWN"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "correlationId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "retryable",
+                "correlationId"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "request",
+        "runId",
+        "stage",
+        "purchaseStage",
+        "startedAt",
+        "updatedAt",
+        "serverNow",
+        "participatingMerchantCount",
+        "completedMerchantCount",
+        "evidenceStatus",
+        "partial",
+        "offers",
+        "events",
+        "suggestedActions",
+        "allowedActions",
+        "modes",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "SellerProposal": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "parentOffer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "listing": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "unitCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "requestLineId",
+              "listing",
+              "quantity",
+              "unitCents"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "claims": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "sourceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            "required": [
+              "id",
+              "requestLineId",
+              "text",
+              "sourceIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "fitArgument": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "privatePriceRationale": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "jobId",
+        "candidateId",
+        "parentOffer",
+        "policy",
+        "lines",
+        "claims",
+        "fitArgument",
+        "privatePriceRationale"
+      ],
+      "additionalProperties": false
+    },
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variantId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "applicability": {
+          "type": "string",
+          "enum": [
+            "exact_variant",
+            "family"
+          ]
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "manufacturer",
+            "independent_test",
+            "owner_report"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "format": "uri"
+        },
+        "sourceDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retrievedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "claim": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "excerpt": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "sourceVerifiedPurchaseLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "contradicted",
+            "unknown"
+          ]
+        },
+        "providerRunId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "providerBuild": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "duplicateGroup": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "variantId",
+        "applicability",
+        "sourceType",
+        "url",
+        "sourceDate",
+        "retrievedAt",
+        "claim",
+        "excerpt",
+        "sourceVerifiedPurchaseLabel",
+        "verification",
+        "providerRunId",
+        "providerBuild",
+        "duplicateGroup"
+      ],
+      "additionalProperties": false
+    },
+    "FirmQuote": {
+      "type": "object",
+      "properties": {
+        "quoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "offer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "merchantId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "listing": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "unitCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "requestLineId",
+              "listing",
+              "quantity",
+              "unitCents"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "totalCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "shippingCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "taxCents": {
+          "type": "number",
+          "const": 0
+        },
+        "currency": {
+          "type": "string",
+          "const": "USD"
+        },
+        "arrivalAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "warrantyMonths": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1200
+        },
+        "returnDays": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "quoteHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reservationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "paymentMode": {
+          "type": "string",
+          "enum": [
+            "simulation",
+            "visa_sandbox"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "quoteId",
+        "request",
+        "offer",
+        "merchantId",
+        "policy",
+        "lines",
+        "totalCents",
+        "shippingCents",
+        "taxCents",
+        "currency",
+        "arrivalAt",
+        "warrantyMonths",
+        "returnDays",
+        "createdAt",
+        "expiresAt",
+        "quoteHash",
+        "reservationId",
+        "paymentMode",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionView": {
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "quoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "unknown",
+            "succeeded",
+            "declined"
+          ]
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "simulation",
+            "visa_sandbox"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "providerReference": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orderId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resultMessage": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "nextAction": {
+          "type": "string",
+          "enum": [
+            "wait",
+            "choose_offer",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "executionId",
+        "quoteId",
+        "status",
+        "mode",
+        "operation",
+        "providerReference",
+        "orderId",
+        "resultMessage",
+        "nextAction"
+      ],
+      "additionalProperties": false
+    },
+    "ChallengePlan": {
+      "type": "object",
+      "properties": {
+        "challenges": {
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "offer": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "claimId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "question": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "sourceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            "required": [
+              "offer",
+              "claimId",
+              "question",
+              "sourceIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "challenges",
+        "summary"
+      ],
+      "additionalProperties": false
+    },
+    "EvidenceSummary": {
+      "type": "object",
+      "properties": {
+        "variantId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "positives": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "evidenceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            "required": [
+              "text",
+              "evidenceIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "concerns": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "evidenceIds": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            "required": [
+              "text",
+              "evidenceIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "gaps": {
+          "maxItems": 40,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      },
+      "required": [
+        "variantId",
+        "positives",
+        "concerns",
+        "gaps"
+      ],
+      "additionalProperties": false
+    },
+    "PriceRound": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "competitive",
+            "single_seller_target"
+          ]
+        },
+        "participants": {
+          "minItems": 1,
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "merchantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "candidateId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "initialOffer": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "merchantId",
+              "candidateId",
+              "initialOffer"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "openedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "deadlineAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "closeReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "all_responded",
+                "deadline",
+                "cancelled"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "request",
+        "runId",
+        "mode",
+        "participants",
+        "openedAt",
+        "deadlineAt",
+        "status",
+        "closeReason"
+      ],
+      "additionalProperties": false
+    },
+    "FinalSubmission": {
+      "type": "object",
+      "properties": {
+        "roundId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "payloadDigest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "receivedAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "revise",
+            "hold",
+            "abstain"
+          ]
+        },
+        "validatedOffer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "roundId",
+        "candidateId",
+        "jobId",
+        "payloadDigest",
+        "receivedAt",
+        "decision",
+        "validatedOffer"
+      ],
+      "additionalProperties": false
+    },
+    "Reservation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "quoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "execution_locked",
+            "released",
+            "sold"
+          ]
+        },
+        "executionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "request",
+        "quoteId",
+        "ownerId",
+        "createdAt",
+        "expiresAt",
+        "state",
+        "executionId"
+      ],
+      "additionalProperties": false
+    },
+    "Allocation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reservationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "listingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        }
+      },
+      "required": [
+        "id",
+        "reservationId",
+        "listingId",
+        "quantity"
+      ],
+      "additionalProperties": false
+    },
+    "SaveDraftInput": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expectedDraftVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedDraftVersion",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "ConfirmRequestInput": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "expectedDraftVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "related"
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "laptop",
+                  "tech_accessory",
+                  "clothing",
+                  "household_accessory",
+                  "small_appliance"
+                ]
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "allowedConditions": {
+                "minItems": 1,
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "refurbished"
+                  ]
+                }
+              },
+              "requirements": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "fieldId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "in",
+                        "min",
+                        "max",
+                        "containsAll"
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "strength": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
+                    "weight": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "const": 1
+                        },
+                        {
+                          "type": "number",
+                          "const": 2
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "fieldId",
+                    "operator",
+                    "value",
+                    "unit",
+                    "strength",
+                    "weight"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "useCaseSummary": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "lineId",
+              "role",
+              "category",
+              "profile",
+              "quantity",
+              "allowedConditions",
+              "requirements",
+              "useCaseSummary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "deliveryDeadline": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "privateMaximumCents": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sharedTargetCents": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shareTarget": {
+          "type": "boolean"
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "best_fit",
+            "cheapest",
+            "soonest",
+            "warranty"
+          ]
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedDraftVersion",
+        "lines",
+        "deliveryDeadline",
+        "privateMaximumCents",
+        "sharedTargetCents",
+        "shareTarget",
+        "sort"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

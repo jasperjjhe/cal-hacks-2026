@@ -2,8 +2,16 @@
   "policyVersion": 1,
   "allowed": {
     "fsevents": {
-      "versions": ["2.3.3"],
+      "versions": [
+        "2.3.3"
+      ],
       "reason": "Optional macOS filesystem watcher; it is not installed on the Linux CI runner or Windows demo host. Any version change requires an explicit security review."
+    },
+    "esbuild": {
+      "versions": [
+        "0.27.0"
+      ],
+      "reason": "Reviewed Convex 1.47.0 compiler dependency. install.js selects/checks its platform binary and has registry-download fallbacks; all lifecycle scripts remain disabled by mandatory npm ci --ignore-scripts. Use the lockfile-installed optional @esbuild platform binary, never the installer/download fallback."
     }
   }
 }
