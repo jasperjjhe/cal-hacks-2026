@@ -969,7 +969,7 @@ The initial lockfile was re-resolved under the seven-day cooldown. The current t
 ### 19.2 Shai-Hulud-style hardening
 
 - `npm ci --ignore-scripts` is mandatory; provider, cloud, GitHub, npm, Convex, Mana and wallet credentials are absent from install/build jobs.
-- Every third-party GitHub Action is pinned to a full commit SHA. Workflows use read-only permissions, do not persist checkout credentials, avoid privileged fork-PR triggers, generate an SBOM and run signatures, audit and dependency-review gates.
+- Every third-party GitHub Action is pinned to a full commit SHA. Workflows use read-only permissions, do not persist checkout credentials or dependency caches, avoid privileged fork-PR triggers, generate an SBOM and run signatures, audit and dependency-review gates.
 - `security/known-compromised-npm.json` is a small emergency blocklist tied to the current government advisory. It is deliberately additive: it cannot replace the age gate, integrity checks, signatures, audit, malware review or incident response.
 - Suspected exposure means stop installing/building, revoke and rotate tokens/keys/wallet signers, audit workflows/webhooks/OAuth apps and outbound traffic, discard potentially tainted caches, and rebuild from a clean checkout and runner. Do not “repair” a compromised environment by running another install.
 - Model output, crawled pages, callbacks and payment responses remain untrusted application input. The existing job scope, schema, SSRF, egress, idempotency, quote-hash, rate-limit, source-allowlist and unknown-state rules remain mandatory.

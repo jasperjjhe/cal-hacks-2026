@@ -9,7 +9,7 @@ This project processes buyer requirements, merchant offers, web evidence, AI-age
 3. Enforce the seven-day release-age window in both `frontend/.npmrc` (`min-release-age=7`) and `frontend/scripts/check-dependencies.mjs`. The locked version must have been published at least seven full days before CI can install it. The offline diagnostic mode is never a CI or deployment mode.
 4. Treat dependency lifecycle scripts as untrusted code. `npm ci --ignore-scripts` is mandatory. The only current exception is the exact, optional `fsevents@2.3.3` entry recorded in `security/allowed-install-scripts.json`; changing that allowlist requires review.
 5. Run the emergency compromised-version blocklist, npm signature/provenance verification, `npm audit --audit-level=high`, dependency review, and SBOM generation on every protected-branch change.
-6. Pin every third-party GitHub Action to a full commit SHA. Workflows declare least-privilege `permissions`, use `persist-credentials: false`, avoid `pull_request_target`/`workflow_run` for untrusted code, and do not pipe downloaded content into a shell.
+6. Pin every third-party GitHub Action to a full commit SHA. Workflows declare least-privilege `permissions`, use `persist-credentials: false`, disable dependency caching in security jobs, avoid `pull_request_target`/`workflow_run` for untrusted code, and do not pipe downloaded content into a shell.
 7. Enable GitHub secret scanning, push protection, Dependabot security updates, and branch protection. Review workflow files as privileged code. Never place secrets in PR-triggered jobs.
 8. Prefer GitHub-hosted ephemeral runners. Never run untrusted pull-request code on a persistent self-hosted runner.
 
