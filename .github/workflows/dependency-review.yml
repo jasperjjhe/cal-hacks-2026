@@ -3,10 +3,6 @@ name: Dependency review
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
-      - '.github/**'
 
 permissions:
   contents: read

@@ -9,10 +9,6 @@ on:
       - '.github/**'
   pull_request:
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'security/**'
-      - '.github/**'
 
 permissions:
   contents: read

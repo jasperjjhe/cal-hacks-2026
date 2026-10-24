@@ -1,6 +1,6 @@
 # BuyerUnion: PRD and two-developer backend handoff
 
-Version 5 | October 24, 2026 | Working implementation specification
+Version 5.2 | October 24, 2026 | Working implementation specification
 
 **Outcome:** a buyer confirms one shopping request; isolated seller agents prepare policy-valid offers; the platform checks requirements and evidence; the buyer chooses and explicitly approves exact terms; the prototype records a truthful simulated order.
 
@@ -20,6 +20,9 @@ This document replaces v4's implementation direction. The complete original is p
 | Retained defaults | React/Vite UI contract, TypeScript/Convex backend, one authoritative database, durable Workflow orchestration, Convex Auth and Apify evidence acquisition. These are implementation defaults retained from v4, not new user mandates. |
 | Commerce | Disclosed fictional merchants, stock, prices and terms; real applicable web evidence; simulation by default. Visa sandbox only if a supported operation is tested and truthfully represented. |
 | Product breadth | Manufactured products across technology, clothing, household accessories and small appliances. Laptops are the first complete integration case, not the product boundary. |
+| Demo priority | Prove actual seller-agent bidding, policy validation and useful offer revisions before polishing merchant configuration or analytics. Merchant controls stay simple. |
+| Final bidding | Open one final-price round only when a permitted revision could materially improve the buyer's choices. Do not run a ceremonial round for every request. |
+| Buyer bidding view | Show short progress updates while agents work, then a checked summary of material corrections, concessions and remaining uncertainty. Do not stream raw agent exchanges as buyer-facing facts. |
 
 **How to use this handoff:** freeze section 5 together, build the first end-to-end path in section 15, then add the remaining behavior. Provider role allocation and Mana details do not block contract or deterministic backend work. A real supported provider call is required before claiming live AI integration.
 
@@ -30,20 +33,20 @@ BuyerUnion is like asking several stores for a suitable offer without repeating 
 ### Buyer capabilities
 
 1. Start an anonymous authenticated session and save an ordinary-language prompt, up to 4,000 characters.
-2. Receive at most three grouped clarification turns and an editable proposed brief. Budget and deadline start unset. “Around $1,000” is not a hard maximum until confirmed.
+2. Use a persistent chat for intake. Receive at most three grouped clarification turns, optional suggested replies and an editable live brief. Budget and deadline start unset. “Around $1,000” is not a hard maximum until confirmed.
 3. Confirm requirements, all-in private maximum, delivery area/deadline, conditions, quantities and optional preferences. An optional shared target needs separate explicit consent and cannot exceed the maximum.
 4. Start, observe, cancel or revise a persisted request. Reload resumes progress. Revision creates a new immutable request version.
-5. Compare qualified offers using complete delivered totals, fit checks, commercial terms and applicable evidence. Missing evidence remains visible.
+5. Compare qualified offers using complete delivered totals, fit checks, commercial terms and applicable evidence. Missing evidence remains visible. Recommended actions can change the comparison lens without changing confirmed requirements; changing requirements creates a new request version.
 6. Select an offer, receive a current firm quote and temporary stock hold, and approve the exact quote. No agent can approve for the buyer.
 7. Receive a simulated success, definite decline or unresolved result with correct recovery behavior.
 
 ### Seller capabilities
 
 1. A privately provisioned operator accesses only its merchant's inventory, policy and offer activity.
-2. Update permitted listing data, publish a versioned pricing/service policy and pause new participation.
+2. Review prepopulated catalog data, update permitted listing data, publish a versioned pricing/service policy and pause new participation. The team prepares backend seed data from CSV and applicable scraped product facts; merchant self-service import is later work. Out-of-policy agent quotes are rejected automatically, with no merchant approval queue.
 3. A seller agent searches only that merchant's inventory, checks its authority, proposes a bundle and explains suitability.
 4. Respond to one useful claim challenge and, when warranted, submit one sealed final price revision. Holding price or abstaining is valid.
-5. See safe validation reasons and own private contribution calculations, without buyer ceilings or competitor costs/floors.
+5. See own catalog/policy activity, safe offer and rejection reasons, and analytics calculated from recorded demo activity, without buyer ceilings or competitor costs/floors.
 
 ### Bounds retained from v4
 
@@ -52,6 +55,7 @@ BuyerUnion is like asking several stores for a suitable offer without repeating 
 - U.S./USD, San Francisco delivery; prices stored as integer cents. Fictional prices are tax-inclusive, with tax zero labeled “included in demo price”; shipping is charged once per seller bundle.
 - Supported condition is explicit per category. Unsupported categories stay drafts. Services, consumables, regulated goods and installation promises are excluded.
 - No live-money purchases, real fulfillment, multi-seller checkout, escrow, refunds, credit scoring, voice/photo input or arbitrary third-party agent registration.
+- Required condition facts use one platform-owned demo rule: unknown mandatory facts fail, and known synthetic diagnostics are labeled as such. No merchant-configured or age-based condition gate in the demo; show any available check date without treating a web review as unit inspection.
 - One council round is sufficient for the required demo. A second verification-only round is optional and disabled initially. No repeated price auctions.
 
 ## 3. Ownership: one owner for every write
@@ -66,7 +70,7 @@ Treat the handoff like a relay: S produces a validated seller offer; B decides w
 | Listing/policy writes and price validation | S | Immutable versions; floor/cap/contribution checks; service terms from policy. |
 | Seller agent integration and scoped tools | S | Provider-neutral job input/output, seller invocation, own-catalog tools, proposal/response/final-bid handling. |
 | Requirement eligibility and fit calculation | S | Shared deterministic functions reused at intake validation, offer acceptance, evidence revalidation and checkout. B must not fork them. |
-| Buyer authentication, drafts and confirmation | B | Own-request auth, private maximum, requirement provenance, sanitized seller projection. |
+| Buyer authentication, chat drafts and confirmation | B | Own-request auth, ordered messages, structured suggestions, private maximum, requirement provenance and sanitized seller projection. |
 | Durable run coordinator and deadlines | B | Sole writer of run stages, cancellation, stale-work checks and phase closure. |
 | Council coordination / feedback | B | Selects material challenges; S executes seller responses and validates revisions. |
 | Price round | B coordinates; S validates | B freezes participants and closes the round; S stores private submissions through one validated internal boundary. |
@@ -390,6 +394,7 @@ interface BuyerRunView {
   partial: boolean;
   offers: OfferCard[];
   events: RunEvent[];
+  suggestedActions: { id: Id; label: string; kind: "compare_offers" | "revise_request" }[];
   allowedActions: ("cancel" | "revise" | "select" | "approve" | "retry")[];
   modes: {
     inventory: "mock";
@@ -537,12 +542,13 @@ interface IntakeResult {
   proposedSharedTargetCents: Cents | null;
   origins: RequirementOrigin[];
   clarificationQuestions: string[];
+  suggestedReplies: { id: Id; label: string; text: string }[];
   unresolvedFields: string[];
 }
 interface DraftView {
   requestId: Id;
   draftVersion: Version;
-  messages: { id: Id; text: string }[];
+  messages: { id: Id; role: "buyer" | "assistant"; text: string; createdAt: Ms }[];
   interpretation: IntakeResult | null;
   confirmedRequest: Ref | null;
   updatedAt: Ms;
@@ -561,6 +567,8 @@ interface EvidenceSummary {
 
 Intake origins are proposals: `buyerConfirmed` must be false until the authenticated confirmation handler records it. Model-suggested target language is never consent. Limit clarification questions to the current grouped turn and at most three turns overall. Challenge references must belong to the current permitted offer and source set; enforce one challenge per participating merchant. Every summary evidence ID must identify an applicable source in the job input; reject invented references.
 
+Suggested replies are optional shortcuts for sending ordinary buyer messages. `saveDraft` stores selected reply text through the same validation/version check as typed input; it does not silently confirm a requirement. A “show options” control opens brief review and `confirmRequest`, not seller work from an unconfirmed interpretation. The live brief displays proposed fields separately from buyer-confirmed fields; incomplete/ambiguous values remain editable proposals. After results, `compare_offers` changes only the local comparison view; `revise_request` starts the existing versioned edit flow. Sorting uses the existing `Sort` contract and server ordering, while selecting cards for side-by-side display is local UI state tied to the current run. No recommended action bypasses confirmation, server eligibility or approval.
+
 Fetch and CREAO can implement any role if their tested integration supports it. Team-selected provider/model IDs are server configuration. Disable Gemini explicitly in the chosen account/runtime if it otherwise defaults to it; inability to inspect a hosted provider's internal model must be disclosed rather than asserted as verified. A deterministic fixture adapter is allowed for development and labeled as such; it is not proof of Fetch/CREAO use.
 
 ## 6. Internal handoff functions and public API
@@ -571,9 +579,9 @@ All names are proposed Convex function/service names. Frontend clients call gene
 
 | Function | Caller payload | Result / behavior |
 |---|---|---|
-| `saveDraft` | `{requestId: Id\|null, expectedDraftVersion: number\|null, message: string}` | Draft ID/version and stored conversation. Reject lost-update conflicts. |
+| `saveDraft` | `{requestId: Id\|null, expectedDraftVersion: number\|null, message: string}` | Draft ID/version and ordered buyer message. Suggested replies use this same operation. Reject lost-update conflicts. |
 | `getDraft` | `{requestId}` | Own reactive DraftView for reload and confirmation; no run is required. |
-| `interpretDraft` | `{requestId, expectedDraftVersion}` | IntakeResult stored against that draft version; proposed fields may be null/incomplete. Never starts seller work. |
+| `interpretDraft` | `{requestId, expectedDraftVersion}` | IntakeResult, assistant clarification message and optional suggested replies stored against that draft version; proposed fields may be null/incomplete. Never starts seller work. |
 | `confirmRequest` | `{requestId, expectedDraftVersion, lines, deliveryDeadline, privateMaximumCents, sharedTargetCents: Cents\|null, shareTarget: boolean, sort}` | Immutable request `Ref`; server records confirmation/consent. `shareTarget=false` requires null target. |
 | `startRun` | `{request: Ref, clientKey: string}` | `{runId}`; same key/payload returns prior run, changed payload fails. One active run per request. |
 | `getBuyerRun` | `{requestId}` | Reactive `BuyerRunView` or null before the first run; ownership checked before any data is returned. |
@@ -593,7 +601,7 @@ For `reviseRequest`, accept a complete replacement of editable draft fields (mes
 
 | Function | Caller payload | Result / behavior |
 |---|---|---|
-| `getMerchantView` | `{}` | Own merchant enabled status, catalog/listing summaries, own policies and safe job/offer activity. Membership determines merchant. |
+| `getMerchantView` | `{}` | Own merchant enabled status, catalog/listing summaries, own policies, safe job/offer activity and observed analytics. Membership determines merchant. |
 | `updateOwnListing` | `{listing: Ref, patch}` | New version. Restrict patch to catalog terms/quantity/diagnostics the operator may maintain; never directly set sold/held counters. |
 | `publishOwnPolicy` | `{expectedPolicy: Ref\|null, changes}` | New validated PricingPolicy; invalidates affected unapproved selections. |
 | `pauseOwnMerchant` | `{paused: boolean}` | Prevent new bids/selections. Does not cancel a locked payment attempt. |
@@ -684,7 +692,7 @@ Omit coverage from keys when no score exists. Take the best qualifying candidate
 1. **Start:** atomically create a run for a confirmed current request, persist config/deadlines, build SellerBrief and snapshot eligible merchants. Three concurrent seller jobs maximum.
 2. **Bidding:** S agents read own catalog/policy, submit up to two proposals, and receive one bounded repair opportunity after validation failure. Otherwise abstain. Stream safe progress; never fabricate a proposal when a provider fails.
 3. **Useful challenge:** with at least two policy-valid participating merchants, moderator selects at most one material claim per seller. Use approved source facts already available. Sellers answer/correct once; S revalidates. With fewer merchants skip competitive debate. No hidden reasoning transcript is needed.
-4. **Conditional price round:** require two genuine participating demo seller contexts and either a useful possible price-order improvement among comparable offers, an explicit buyer negotiation request, or potential affordability through an authorized reduction. Do not disclose ceiling/floor. With one seller, allow a single counteroffer only for an explicitly requested target and label it single-seller negotiation.
+4. **Conditional price round:** require two genuine participating demo seller contexts and either a useful possible price-order improvement among comparable offers, an explicit buyer negotiation request, or potential affordability through an authorized reduction. Skip and record the reason when no permitted revision could materially change the buyer's options. Do not disclose ceiling/floor. With one seller, allow a single counteroffer only for an explicitly requested target and label it single-seller negotiation.
 5. **Sealed submission:** B snapshots round/candidates and deadline. S receives only own offer and truthful limited feedback, e.g. that its delivered price trails a comparable alternative. One final response per candidate. No future rival bids, rival floors or invented competitor. Retain prior valid offer if a final response is absent/invalid. Reject price increases, weaker terms, late submissions or replay with changed payload.
 6. **Evidence/comparison:** source jobs may begin once identities stabilize. Complete authoritative requirement checks before enabling results. Advisory owner evidence can be partial/unavailable. Any changed identity makes old evidence inapplicable. One bounded replacement/refill pass; five primary identities total. Do not restart bargaining because a seller dislikes a review.
 7. **Close:** freeze final accepted versions, revalidate, order and publish safe results. No match means confirmed supply/requirement mismatch; provider failure with no usable offers means retryable failure. Do not confuse these.
@@ -754,15 +762,31 @@ The backend team provides the following capabilities and fixtures. The UI team d
 
 | UI capability | Backend data / action | Required states supplied by backend |
 |---|---|---|
-| Prompt and clarification | Draft, proposed interpretation, confirm action | Incomplete, clarifying, validation failure, stale draft. |
+| Prompt and clarification | Ordered chat messages, proposed interpretation, suggested replies, confirm action | Incomplete, clarifying, validation failure, stale draft; suggestion click equals typed buyer reply. |
 | Confirmation and price privacy | Confirmed requirements, private maximum, explicit shared-target consent | Missing fields, unsupported category, contradictory constraints, approved revision. |
 | Progress | BuyerRunView, safe events, actual counts | Bidding, checking, negotiating, researching, partial, cancelled, failed. |
-| Comparison and sources | OfferCard[], evidence details, sort behavior | Zero/one/multiple sellers, unknown preference, unavailable/cached/mixed evidence, stale offer. |
+| Comparison and sources | OfferCard[], evidence details, sort and comparison actions | Zero/one/multiple sellers, unknown preference, unavailable/cached/mixed evidence, stale offer; local side-by-side selection versus versioned brief revision. |
 | Selection and approval | FirmQuote, server time, allowed actions | Reserved, expired, changed terms, out of stock, policy changed. |
 | Result/recovery | ExecutionView and persisted purchase state | Pending, unknown, success, decline; correct no-payment message. |
 | Seller operations | Own merchant/listing/policy/event view | Enabled/paused, policy conflict, invalid price, stock committed, no permitted concession. |
 
-Backend must supply frontend fixtures at F0: empty draft; proposed/confirmed request; progress; two competing cards; no match; evidence unavailable; expired quote; unknown execution; simulated success; and own-merchant view. Include both laptop and non-tech data. Every fixture validates against the exact production response schema.
+### Figma reconciliation for buyer and merchant screens
+
+Use the [current BuyerUnion design file](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026) as a changing UI reference, not a source of commerce authority. The inspected frames are buyer chat/debate/compare/approval and seller add-products/policy/analytics. UI team owns layouts; B and S confirm any new action before it becomes a backend promise.
+
+| Design control or claim | Required behavior / owner |
+|---|---|
+| Chat suggestion chips, live brief, “Show me options” | B persists ordered messages and suggested replies; chips submit buyer text. Live brief marks extracted values as proposed until confirmation. “Show me options” opens review; it never skips `confirmRequest`. |
+| “More battery,” “Under $850,” “Only new,” “Compare selected” | B/UI distinguish local comparison or sort from changed requirements. Budget/condition changes require a new confirmed request version and run. Side-by-side card selection stays local to current run. |
+| Live debate and evidence progress | B exposes short safe progress updates and actual participant/source counts, followed by a checked summary of material corrections, concessions and uncertainty. UI must not stream raw agent exchanges, hidden reasoning, private ceiling, unverified delivery, or fabricated forum totals. |
+| Seller catalog setup: CSV, photos, URL, import preview | S prepopulates backend catalog from prepared CSV and applicable scraped product facts, with provenance and validation before use. Disclosed sample inventory remains available. Merchant-facing CSV/photo/URL import is later work; disable or label those controls as design concepts until implemented. Scraped public pages do not prove stock, seller terms or discount authority. |
+| Seller policy: floor, fulfillment, returns, bundle, launch | S exposes listing-specific floor and versioned policy fields already in section 5.2; fulfillment uses calendar days, and bundle eligibility uses approved variant compatibility. Launch maps to enabled/paused merchant after catalog/policy validation. Reject out-of-policy agent quotes automatically; merchants do not monitor an exception queue. Remove or disable the Figma “require approval before any policy exception” control. |
+| “Reject when condition evidence is stale” | S rejects unknown mandatory condition facts and labels synthetic diagnostics. No configurable or age-based gate in the demo; remove or disable this Figma toggle. B’s web evidence freshness cannot certify a refurbished unit. |
+| Merchant analytics and buyer preview | S/B provide own actual catalog/policy activity and observed counts: matched confirmed requests, valid offers, shortlisted offers, buyer selections and completed simulated orders. Show rejection counts by safe reason. Shortlist rate = shortlisted offers / valid offers; selection rate = selected offers / shortlisted offers; show no rate when denominator is zero. Label the reporting period and count each request/candidate once per stage so revisions do not inflate results. A safe buyer-card preview may show public terms; private contribution stays merchant-only. No projected sales/profit, fabricated saves, unsupported trends or “agent confidence.” |
+
+Figma sample text is illustrative, not accepted fixture data. Replace or clearly label unverified product/merchant names, star ratings, source counts, scores, price and delivery claims with server-backed values. The debate mock quotes a buyer’s `$1,000` cap to sellers; the implementation must keep that ceiling private. The approval mock shows `$1,149` against a `$1,000` ceiling, an 18-minute quote and “Visa sandbox · labeled simulation”; actual approval requires an affordable current offer, a three-minute hold and an accurate payment-mode label. Product reviews cannot establish seller stock or refurbishment condition. Preserve these design/contract discrepancies for UI handoff rather than encoding them as backend behavior. Merchant analytics are in demo scope after the agent bidding path works; S/B add the observed metric definitions above to the safe view contract before connecting that dashboard. Do not ship active controls backed by placeholders.
+
+Backend must supply frontend fixtures at F0: empty draft; chat with a clarification and suggested replies; proposed/confirmed request; progress; two competing cards and recommended comparison actions; no match; evidence unavailable; expired quote; unknown execution; simulated success; and own-merchant catalog/policy view. Include both laptop and non-tech data. Every fixture validates against the exact production response schema.
 
 UI must render server values rather than recompute money, fit, eligibility or purchase authority. Backend `allowedActions` and safe reason codes support design; actual server guards remain mandatory. UI owns keyboard/focus/status announcements; backend owns actionable field/error semantics. Give UI a working dev endpoint and generated binding usage example before agent features are complete.
 
@@ -852,8 +876,8 @@ These are local work packages, not published tracker tickets. **B and S own back
 
 | Package | Owner | Depends on | Concrete completion gate |
 |---|---|---|---|
-| F0 Contract freeze and auth skeleton | B + S, B integrates | None | Runtime schema package, JSON Schema export, shared error vocabulary, owner/membership checks and UI fixture bundle. Both approve one laptop and one clothing payload. |
-| S1 Catalog/policy/stock foundation | S | F0 | All profiles/seeds, own-merchant operations, deterministic matching/pricing/fit and transactional stock helpers. Invalid variants/prices and cross-merchant access fail. |
+| F0 Contract freeze and auth skeleton | B + S, B integrates | None | Runtime schema package, JSON Schema export, shared error vocabulary, owner/membership checks and UI fixture bundle including chat suggestions and basic merchant configuration. Both approve one laptop and one clothing payload. |
+| S1 Catalog/policy/stock foundation | S | F0 | All profiles/seeds, minimal own-merchant operations, deterministic matching/pricing/fit and transactional stock helpers. Invalid variants/prices and cross-merchant access fail. |
 | B1 Buyer persistence/coordinator | B | F0 | Draft/confirmation, private projection, run lifecycle, cancel/revise/reload and fixture agent dispatch. No provider dependency. |
 | S2 Seller agent seam | S | S1 | Fetch or CREAO role adapter, scoped tools, job-bound output validation, one real provider proposal. No unrestricted merchant selector. |
 | B2 Thin checkout path | B | B1 + S1 | Use fixture validated offer; reserve all lines, approve exact hash, complete simulation; duplicate clicks/expiry/contention pass. |
@@ -861,6 +885,7 @@ These are local work packages, not published tracker tickets. **B and S own back
 | S3 Competition/related lines | S | G1 | One response/revision/final bid per contract; same-merchant bundles and compatibility; holds/abstentions valid. |
 | B3 Council/evidence/comparison | B | G1 | Durable phase orchestration, sealed round, real applicable evidence, stable shortlist, source failure and one refill. Integrates S3. |
 | G2 Required backend acceptance | B + S | S3 + B3 | Section 16 passes; laptop plus non-tech fixture path works; actual real-source non-tech sample tested; recorded cold/cached timings and honest modes. |
+| M1 Merchant activity/analytics | S + B | G1; polish after G2 | Own catalog/policy activity, observed bidding funnel counts/rates and safe buyer preview. No projected metrics or fake trends. |
 | D1 UI integration support/config handoff | B + S with UI team | Begins F0; closes after G2 | Generated bindings, endpoint/env names, safe fixtures and reproducible backend run instructions. UI team owns frontend QA and designs. |
 | O1 Optional Visa / Coinbase | Named owner after G2 | G2 | Separate tested adapter and truthful proof; cannot destabilize ordinary simulation. |
 
@@ -886,13 +911,18 @@ Test public behavior and permission boundaries. Use deterministic fake provider 
 | Case | Owner | Required result |
 |---|---|---|
 | Prompt ambiguity | B | “Around $1,000” remains proposed until confirmation; late intake cannot overwrite an edited draft. |
+| Chat suggestions | B | Reload preserves ordered buyer/assistant messages and current suggestions. Clicking a suggestion has same validation/version result as typing its text; “show options” cannot start a run before confirmation. |
+| Comparison actions | B | Side-by-side selection leaves the confirmed brief untouched; new budget/condition/preferences require revision and a new confirmed version. Stale chips/actions cannot affect a later run. |
 | Budget privacy | B + S | Raw text and indirect budgets absent from seller input, own-merchant view, rival view and public events. Changing only ceiling leaves seller initial input unchanged. Nondeterministic outputs need not be identical. |
 | Role forgery | B + S | Buyer cannot fetch another buyer's request; merchant cannot choose another merchant by ID; forged role/callback cannot complete a job. |
 | Profile rules | S | Windows/16GB/512GB rejects P6; DemoWear M/100% cotton rejects C2; max width 600 mm rejects H2; US electrical requirements reject A2. |
 | Wrong/unknown facts | S | Valid JSON with wrong SKU, unknown mandatory health, incompatible accessory or unsupported claim never becomes eligible. |
 | Price policy | S | Below floor/cap/contribution, unsafe integer/overflow and silent service weakening fail; C holds price legitimately. |
+| Merchant configuration | S | Prepared CSV/scraped seed import validates facts and provenance; operator sees/changes only own listings and policy. Launch/pause applies after validation; merchant-facing import controls do not imply working import; no approval or condition-freshness toggle bypasses platform rules. |
+| Merchant metrics | S + B | Observed stage counts and rates derive from actual scoped records, deduplicate revisions and show reporting period/denominators. Zero-denominator rates show no value. Buyer preview excludes private costs and budget. |
 | Private affordability | B + S | Internal above-budget candidate can enter a permitted final round; only affordable current offers are selectable. Seller feedback does not expose exact ceiling. |
 | Real competition | B + S | No invented rival; one-seller case labeled correctly; invalid/missing final bid retains prior valid offer; late/replayed changed bid rejected. |
+| Buyer bidding view | B | Progress shows actual stages/participants; final summary names validated corrections or concessions and unresolved gaps. Raw agent exchanges and unvalidated claims never appear as buyer-facing facts. |
 | Rank correctness | S + B | Same snapshot/order produces same shortlist; unknown/unmet shown distinctly; seller score/prose cannot override hard requirements. |
 | Evidence identity | B | Wrong variant/region/size stays family-level or rejected; fictional items receive no real-brand reviews; same P3 reused across offers. |
 | Evidence failure/injection | B | Slow/blocked/injected source yields partial/cache/unavailable safely; no crawl input can approve or edit policy. |
@@ -930,7 +960,7 @@ Visa remains the primary product story. Record actual Fetch/CREAO role use, sour
 
 ## 18. Sources and verification boundaries
 
-Design inputs: original 29-page PRD, complete archived Markdown, later product brief, supplied two-developer split, and the user's October 24 changes and UI ownership correction. The broad product boundary is retained; recommendations in the earlier brief were not blanket approval to delete categories.
+Design inputs: original 29-page PRD, complete archived Markdown, later product brief, supplied two-developer split, the user's October 24 changes and UI ownership correction, and the current [BuyerUnion Figma design](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026). The broad product boundary is retained; recommendations in the earlier brief were not blanket approval to delete categories. Figma frames were inspected for buyer chat, comparison and approval plus merchant catalog setup, policy and analytics; visual copy is not verified product data or an approved backend requirement.
 
 Technical reference checks:
 
@@ -943,11 +973,9 @@ Technical reference checks:
 - [Fetch.ai CalHacks 13.0](https://www.fetch.ai/events/calhacks-13-0), [Cartesia docs](https://docs.cartesia.ai/), [Apify](https://apify.com/), and [Coinbase x402/Bazaar docs](https://docs.cdp.coinbase.com/api-reference/v2/rest-api/x402-facilitator/bazaar-mcp-server): current sponsor/technology references used for the §20 strategy. The supplied sponsor table remains the submission source of truth until organizer pages are reconciled.
 - Product identities: [Apple M2](https://support.apple.com/en-us/111867), [Apple M3](https://support.apple.com/en-us/118551), [Apple M4](https://support.apple.com/en-us/122209), [Lenovo US model](https://psref.lenovo.com/Detail/2475?M=21ML0053US). Retained source identifiers, not freshly verified availability or actual stock.
 
-**Verified in preparing this handoff:** project contained the two PDFs and Git metadata, without an existing application; all 29 original pages and 36 unique links were copied into Markdown; the supplied draft and subsequent corrections were incorporated. The original PDFs were not modified. Contract snippets and fixtures are drafted specifications, not an implemented backend or passing application tests.
+**Verified in preparing this handoff:** the original handoff began with two PDFs and Git metadata, without an application; all 29 original pages and 36 unique links were copied into Markdown. A `frontend/` scaffold now exists, but its behavior was not audited for this document update. The original PDFs were not modified. Contract snippets and fixtures are drafted specifications, not an implemented backend or passing application tests.
 
-**Implementation gates remaining:** freeze executable schemas; pick Fetch/CREAO role wiring and supported non-Gemini reasoning; test live provider/source access; run the acceptance suite; connect the UI team's frontend; map deployment to Mana. No repository push, external ticket, publication, account setup, wallet operation or deployment is performed by this plan.
-
-**TLDR:** S owns seller data, validation, inventory and seller agents; B owns buyer data, orchestration, evidence and approved execution. Shared schemas, fixtures and transaction helpers join the halves. UI/Figma owns the frontend. Fetch/CREAO assignment and Mana specifics stay with the team; core backend implementation can proceed from F0.
+**Implementation gates remaining:** freeze executable schemas and merchant analytics view with UI/S/B; prepare validated CSV/scraped catalog seeds; pick Fetch/CREAO role wiring and supported non-Gemini reasoning; test live provider/source access; run the acceptance suite; connect the UI team's frontend; map deployment to Mana. No repository push, external ticket, publication, account setup, wallet operation or deployment is performed by this plan.
 
 ## 19. Security and supply-chain review amendment (2026-10-24)
 
@@ -964,7 +992,7 @@ The rule is enforced twice:
 
 Boundary tests cover exactly seven days, one millisecond younger, one millisecond older, future timestamps and invalid timestamps. CI runs the check before `npm ci --ignore-scripts`. A local `--offline` mode exists only for structural diagnostics and is rejected in CI.
 
-The initial lockfile was re-resolved under the seven-day cooldown. The current tree passes the registry age check, npm signature/provenance verification, high-severity audit, lint and build. The only lifecycle-script exception is the exact optional Darwin-only `fsevents@2.3.3` entry, which is version-allowlisted and does not run on the Linux CI runner or Windows demo host.
+The initial lockfile was re-resolved under the seven-day cooldown. At the time of this security amendment, the tree passed the registry age check, npm signature/provenance verification, high-severity audit, lint and build; rerun these gates for each release. The only lifecycle-script exception is the exact optional Darwin-only `fsevents@2.3.3` entry, which is version-allowlisted and does not run on the Linux CI runner or Windows demo host.
 
 ### 19.2 Shai-Hulud-style hardening
 
@@ -980,23 +1008,27 @@ The current repository is still a frontend scaffold; these controls do not claim
 
 The stack should maximize credible track coverage along one buyer journey, not add disconnected logos. A sponsor is entered only when its technology does real work in the running demo and the README records the exact feature, configuration, evidence and limitation.
 
-### 20.1 Recommended core path
+### 20.1 Core path and gated sponsor candidates
+
+This table records possible sponsor proof, not a mandate to run every integration. The core remains the prompt-to-bid-to-approved-simulation path in §§2–16. Use at least one real Fetch.ai or CREAO agent role; use both only if each performs distinct, necessary work. Coinbase remains optional after G2, as §17 and the ownership plan specify. The agent bidding path takes priority over sponsor additions.
 
 | Technology / track | Concrete role in BuyerUnion | Required proof and security boundary |
 |---|---|---|
 | Convex | Authoritative reactive database, typed functions, Auth, durable Workflows and live run progress. | A reloadable run survives retries/restarts; reservations are atomic; every query/mutation checks authenticated ownership; no second authoritative database. |
 | Fetch.ai | A real merchant/supplier agent (or agent network) produces a scoped proposal using the SellerBrief and returns provider provenance. | A reachable agent, actual request/response, job identity, bounded tools and a failure/retry demo. The official Fetch prize page currently lists a different prize breakdown than the supplied table; confirm with organizers before submission. |
 | CREAO | A real coordinator, negotiation or buyer-intake role behind the same `AgentProvider` contract. | A real run with the configured agent ID/project, async status/poll or callback deduplication, schema validation and visible safe events. Do not count agent creation or a peripheral summary as product use. |
-| Coinbase x402 | A bounded agent payment for one machine-to-machine product-evidence lookup, separate from buyer checkout. | Real supported test payment, typed evidence-payment receipt, fixed destination/network/token, per-request and aggregate caps, one attempt and reconciliation. Never call this a Visa purchase. |
+| Coinbase x402 (optional after G2) | A bounded agent payment for one machine-to-machine product-evidence lookup, separate from buyer checkout. | Real supported test payment, typed evidence-payment receipt, fixed destination/network/token, per-request and aggregate caps, one attempt and reconciliation. Never call this a Visa purchase. |
 | Visa | The primary reimagined-shopping journey: compare validated offers, reserve, approve and complete simulation or a truthful Visa sandbox operation. | Quote hash, test-merchant mapping, duplicate protection, safe status lookup and visible distinction between simulation, tokenization and payment. |
 | Mana | Host the public demo and at least one real app/agent surface; use Mana pages/chats as part of the build record. | A working public link, exact runtime mapping, startup/health evidence and public Mana links requested by the sponsor. Do not assume Mana supplies Convex persistence or agent secrets. |
 
-### 20.2 Highest-value additions that fit the same path
+### 20.2 Optional additions after the core path
+
+These are candidate ideas, not prototype requirements. Current exclusions in §2 remain authoritative: no credit scoring, voice input or extra merchant approval workflow in the demo. Adding any of those needs a separate product decision and work estimate. Figma design evidence may proceed in parallel; optional runtime integrations wait until G2.
 
 1. **Apify / Best Actor.** Promote the existing evidence service to a first-party `BuyerUnion Evidence Actor`: accept only server-issued product identity and approved source IDs, enforce URL/redirect/SSRF controls, normalize source evidence and return an input digest. This is already aligned with §10 and can support both the general Apify track and the Best Actor prize without inventing a second crawler architecture.
-2. **CRS Credit API.** Add an opt-in, sandbox-only “trust and fraud check” for a high-value purchase or merchant operator action. Use only supplied test identities, store a minimal derived risk outcome, never make a credit-eligibility or protected-class decision, and require explicit consent. This creates a meaningful CRS Financial AI Agent / Identity-Fraud story and strengthens Visa trust/responsibility.
-3. **Cartesia plus Moss.** If the team can make voice the default flow, use Cartesia for low-latency speech input/output and Moss for a personal voice agent that remembers the current shopping task and acts through the same scoped tools. Voice must drive intake, clarification and status—not just narrate a screen. Do this only after the text path is reliable and after current APIs/eligibility are confirmed.
-4. **Factory Droid SDK.** Add a scheduled or operator-triggered “merchant operations droid” that audits a listing against evidence, pricing policy and inventory, then shows a plan/diff and waits for approval before changing a listing. This is a strong Factory fit because Droid performs visible work with bounded access; it must be a real runtime integration, not a coding assistant.
+2. **CRS Credit API (separate scope decision).** A sandbox-only trust/fraud check would require explicit consent, test identities, a defined decision role and privacy review. The current demo excludes credit scoring and does not depend on this feature.
+3. **Cartesia plus Moss (separate scope decision).** A real voice flow would need to drive intake, clarification and status through the same guarded contracts. The current demo stays prompt-first text; voice input remains excluded.
+4. **Factory Droid SDK (separate scope decision).** A merchant operations assistant could audit listings and propose changes for review. The current merchant demo stays simple and has no agent-driven listing-edit or exception approval workflow.
 5. **Figma and Notability.** These are process/evidence tracks rather than backend dependencies. Keep the actual Figma design evolution and connected implementation; keep Notability notes with sketches, diagrams, audio, PDFs and dated decisions. Link the artifacts in the submission and show how they changed the build.
 
 ### 20.3 Deliberately defer or avoid
@@ -1009,3 +1041,5 @@ The stack should maximize credible track coverage along one buyer journey, not a
 ### 20.4 Demo and submission evidence ledger
 
 For every entered track, store one short record: `technology`, `feature`, `live URL/run ID`, `exact code path`, `security mode`, `what is simulated`, and `known limitation`. The two-minute demo should show one complete shopping flow, one visible agent plan/tool result, one security or failure recovery moment, and the exact distinction between real vendor operations, sandbox operations and deterministic fixtures. This prevents a prize claim from relying on a logo, key, generated code or a slide-only integration.
+
+**TLDR:** S owns seller data, policy, stock and seller agents; B owns buyer chat, orchestration, evidence and approved execution. Shared contracts join both halves to the UI team's frontend. Prove useful, policy-valid bidding and one complete simulated purchase before merchant dashboard polish or optional sponsor integrations. Security gates and sponsor claims require fresh, observed proof.
