@@ -1,6 +1,10 @@
 {
   "policyVersion": 1,
   "allowed": {
+    "esbuild": {
+      "versions": ["0.27.0"],
+      "reason": "Transitive dependency of Convex 1.47.0; its postinstall selects the platform binary. The exact version is reviewed, npm-signed, integrity-pinned, and the repository-wide npm ignore-scripts policy prevents execution during CI or local installs. Any version change requires an explicit security review."
+    },
     "fsevents": {
       "versions": ["2.3.3"],
       "reason": "Optional macOS filesystem watcher; it is not installed on the Linux CI runner or Windows demo host. Any version change requires an explicit security review."
