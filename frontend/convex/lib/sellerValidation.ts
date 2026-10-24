@@ -59,7 +59,7 @@ function checkedMultiply(left: number, right: number): number {
 }
 
 function ceilDivide(numerator: number, denominator: number): number {
-  const result = Math.floor((numerator + denominator - 1) / denominator)
+  const result = Math.floor(numerator / denominator) + (numerator % denominator === 0 ? 0 : 1)
   if (!Number.isSafeInteger(result) || result > MAX_CENTS) {
     throw new SellerContractError('INVALID_INPUT', 'minimum price calculation overflowed safe integer bounds')
   }

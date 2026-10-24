@@ -50,6 +50,17 @@ docs/
   SELLER_SPONSOR_PROOF.md
 ```
 
+## Implemented checkpoint
+
+The first seller-only checkpoint is now implemented on `feature/seller-side`:
+
+- `convex/lib/sellerContracts.ts` is the canonical seller contract/runtime boundary. It allowlists `SellerBrief`, rejects unknown fields, and rejects raw prompts, origins, private maximums, buyer ceilings, competitor costs and seller-private price fields from provider input.
+- `convex/lib/sellerValidation.ts` recomputes category/condition/profile eligibility, hard and soft fit, safe integer pricing and the documented minimum-price formula. It never consumes model-supplied totals or affordability.
+- `convex/lib/sellerInventory.ts` contains plain transactional helpers for atomic reservations, execution locks, sale/release transitions, expiration and idempotent replay. The future buyer mutation must call these helpers inside its own transaction; they are not public Convex mutations.
+- `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership; IDs supplied by a browser are not authorization.
+- `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
+- `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. These prove local behavior only; live Convex/provider sponsor evidence remains pending until deployment/provider configuration is supplied.
+
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
 
 ## Contract and authority rules

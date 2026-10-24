@@ -19,6 +19,8 @@ import {
   releaseExpiredReservations,
   transitionAllocationInTransaction,
 } from '../convex/lib/sellerInventory.ts'
+import { FixtureAgentPort } from '../convex/integrations/fixtureAgentPort.ts'
+import { createFetchAgentPort } from '../convex/integrations/fetchAdapter.ts'
 
 const fixtures = makeSellerFixtures()
 
@@ -249,4 +251,70 @@ test('expired reservations release without touching execution locks', () => {
   const released = releaseExpiredReservations(state, 100)
   assert.equal(released.allocations[0].state, 'released')
   assert.equal(released.allocations[1].state, 'execution_locked')
+})
+
+test('fixture provider exposes pending then completed behavior without pretending to be live', async () => {
+  const port = new FixtureAgentPort(new Map([
+    ['job_provider', [
+      { status: 'pending', providerRunId: 'fixture-run-1' },
+      { status: 'completed', providerRunId: 'fixture-run-1', output: { kind: 'abstain', jobId: 'job_provider', reasonCode: 'NO_MATCH' } }],
+  ]]))
+  const job = {
+    jobId: 'job_provider', requestId: 'req_provider', requestVersion: 1, runId: 'run_provider', phaseId: 'phase_provider',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fixture', inputDigest: 'sha256:fixture', inputRef: 'brief_provider',
+  }
+  const started = await port.start(job)
+  assert.equal(started.status, 'pending')
+  const completed = await port.poll(job.jobId)
+  assert.equal(completed.status, 'completed')
+  if (completed.status === 'completed') assert.equal(completed.providerRunId, 'fixture-run-1')
+  await port.cancel(job.jobId)
+  const cancelled = await port.poll(job.jobId)
+  assert.equal(cancelled.status, 'failed')
+})
+
+test('HTTP provider adapter requires explicit HTTPS allowlists and sends only scoped input', async () => {
+  assert.throws(
+    () => createFetchAgentPort({
+      provider: 'fetch',
+      startUrl: 'http://agent.example/start',
+      pollUrlTemplate: 'http://agent.example/runs/{providerRunId}',
+      cancelUrlTemplate: 'http://agent.example/runs/{providerRunId}/cancel',
+      allowedHosts: ['agent.example'],
+      requestTimeoutMs: 5_000,
+      providerConfigRevision: 'fetch-demo-v1',
+    }, {
+      getToken: async () => undefined,
+      resolveInput: async () => fixtures.briefs.laptop,
+      resolveProviderRunId: async () => null,
+    }),
+    /HTTPS/,
+  )
+
+  let requestBody
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-demo-v1',
+  }, {
+    getToken: async () => 'not-logged',
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => 'provider-run-1',
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(init.body)
+      return new Response(JSON.stringify({ status: 'accepted', providerRunId: 'provider-run-1' }), { status: 202, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_fetch', requestId: 'req_fetch', requestVersion: 1, runId: 'run_fetch', phaseId: 'phase_fetch',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:brief', inputRef: 'brief_fetch',
+  })
+  assert.equal(result.status, 'pending')
+  assert.equal(requestBody.jobId, 'job_fetch')
+  assert.equal('privateMaximumCents' in requestBody.input, false)
+  assert.equal(requestBody.input.runId, 'run_demo_1')
 })
