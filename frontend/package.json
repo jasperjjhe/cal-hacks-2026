@@ -16,8 +16,9 @@
     "security:dependencies": "node scripts/check-dependencies.mjs",
     "security:workflows": "node scripts/check-workflows.mjs",
     "test:security": "node --test scripts/*.test.mjs",
+    "test:seller": "node --experimental-strip-types --test scripts/test-seller.mjs",
     "security": "npm run security:dependencies && npm run security:workflows",
-    "ci": "npm run test:security && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run lint && npm run build"
+    "ci": "npm run test:security && npm run test:seller && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run lint && npm run build"
   },
   "dependencies": {
     "convex": "1.47.0",
