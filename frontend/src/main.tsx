@@ -3,6 +3,7 @@ import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import BuyerErrorBoundary from "./BuyerErrorBoundary.tsx";
 import BackendApp from "./BackendApp.tsx";
 import "./index.css";
 const MockApp = lazy(() => import("./App.tsx"));
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
       </Suspense>
     ) : client ? (
       <ConvexAuthProvider client={client}>
-        <BackendApp />
+        <BuyerErrorBoundary>
+          <BackendApp />
+        </BuyerErrorBoundary>
       </ConvexAuthProvider>
     ) : (
       <div style={{ padding: 40 }}>

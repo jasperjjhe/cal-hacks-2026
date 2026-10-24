@@ -127,6 +127,8 @@ export const settleAttempt = internalMutation({
         );
       return;
     }
+    const requestId = ctx.db.normalizeId("buyerRequests", attempt.requestId);
+    if (requestId) await ctx.db.patch(requestId, { updatedAt: Date.now() });
     const succeeded = args.status === "succeeded";
     await transitionStock(
       ctx,

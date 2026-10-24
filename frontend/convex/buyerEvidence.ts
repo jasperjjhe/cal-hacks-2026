@@ -4,6 +4,9 @@ import { v } from "convex/values";
 import { contracts } from "../src/contracts/index.ts";
 import { currentRun, digest, emit } from "./buyer/core.ts";
 import { startEvidence, pollEvidence } from "./integrations/buyerTools.ts";
+import { z } from "zod";
+import { assessLine } from "./lib/sellerValidation";
+import { versionFor } from "./buyer/core";
 import { loadSnapshots } from "./sellerInternal.ts";
 import type { WriteCtx } from "./buyer/core.ts";
 // Configure server-owned source URLs and pinned Actor build only after the
@@ -43,6 +46,14 @@ async function prepare(
 ): Promise<string[]> {
   const run = await currentRun(ctx, runId, "researching");
   if (!run) return [];
+  const researchDeadlineAt = Math.min(
+    run.deadlineAt,
+    run.config.researchDeadlineAt ?? Date.now() + 60000,
+  );
+  if (!run.config.researchDeadlineAt)
+    await ctx.db.patch(run._id, {
+      config: { ...run.config, researchDeadlineAt },
+    });
   const prior = await ctx.db
     .query("buyerResearch")
     .withIndex("by_run", (q) => q.eq("runId", runId))
@@ -68,7 +79,7 @@ async function prepare(
     ...new Set(ordered.map((o) => o.card.products[0].variantId as string)),
   ]
     .filter((id) => !prior.some((j) => j.variantId === id))
-    .slice(0, 5 - prior.length);
+    .slice(0, (refill ? 5 : 4) - prior.length);
   const ids: string[] = [];
   const reg = registry();
   for (const variantId of identities) {
@@ -96,7 +107,7 @@ async function prepare(
       sources,
       build: reg.build,
     });
-    const cached = await ctx.db
+    const cachedRows = await ctx.db
       .query("buyerEvidence")
       .withIndex("by_digest_time", (q) =>
         q
@@ -104,6 +115,10 @@ async function prepare(
           .gte("retrievedAt", Date.now() - 86400000),
       )
       .take(40);
+    const cached = cachedRows.filter(
+      (e, i, all) =>
+        all.findIndex((other) => other.data.id === e.data.id) === i,
+    );
     const id = await ctx.db.insert("buyerResearch", {
       runId,
       variantId,
@@ -116,7 +131,7 @@ async function prepare(
       providerRunId: null,
       providerBuild: reg.build,
       input,
-      deadlineAt: Math.min(run.deadlineAt, Date.now() + 60000),
+      deadlineAt: researchDeadlineAt,
       createdAt: Date.now(),
     });
     ids.push(String(id));
@@ -127,6 +142,7 @@ async function prepare(
           digest: input.inputDigest,
           runId,
           data: source.data,
+          facts: source.facts ?? [],
           retrievedAt: source.retrievedAt,
         });
     if (cached.length || product.syntheticProduct || !sources.length)
@@ -136,6 +152,7 @@ async function prepare(
         variantId,
         cached.map((s) => s.data),
         cached.length ? "cached" : "unavailable",
+        cached.flatMap((e) => e.facts ?? []),
       );
   }
   return ids;
@@ -156,6 +173,7 @@ export const claim = internalMutation({
     if (!job || !(await currentRun(ctx, job.runId, "researching"))) return null;
     if (Date.now() >= job.deadlineAt) {
       await ctx.db.patch(job._id, { state: "unavailable" });
+      await ctx.db.patch(job._id, { state: "unavailable" });
       await attach(ctx, job.runId, job.variantId, [], "unavailable");
       return null;
     }
@@ -163,6 +181,7 @@ export const claim = internalMutation({
       return null;
     const run = await currentRun(ctx, job.runId, "researching");
     if (!run || run.toolCalls >= 40) {
+      await ctx.db.patch(job._id, { state: "unavailable" });
       await attach(ctx, job.runId, job.variantId, [], "unavailable");
       return null;
     }
@@ -233,6 +252,36 @@ export const complete = internalMutation({
       return true;
     }
     const evidence = contracts.Evidence.array().max(40).parse(result.evidence);
+    const facts = z
+      .array(
+        z.strictObject({
+          evidenceId: contracts.Ref.shape.id,
+          fieldId: contracts.Ref.shape.id,
+          value: z.union([
+            z.string().max(4000),
+            z.number().finite(),
+            z.boolean(),
+            z.array(z.string().max(4000)).max(100),
+            z.null(),
+          ]),
+          unit: z.string().max(100).nullable(),
+        }),
+      )
+      .max(100)
+      .parse(result.facts ?? []);
+    for (const fact of facts) {
+      const source = evidence.find((e) => e.id === fact.evidenceId);
+      if (
+        ["healthPercent", "includedCharger", "chargerIncluded"].includes(
+          fact.fieldId,
+        ) ||
+        !source ||
+        source.applicability !== "exact_variant" ||
+        source.sourceType === "owner_report" ||
+        job.input.syntheticProduct
+      )
+        throw new Error("Fact is not an authoritative exact-product source");
+    }
     const seen = new Set<string>();
     const allowed = job.input.urls as string[];
     for (const e of evidence) {
@@ -249,7 +298,7 @@ export const complete = internalMutation({
         throw new Error("Inapplicable evidence");
     }
     const unique = evidence.filter((e) => {
-      const key = `${e.url}:${e.duplicateGroup}`;
+      const key = `${e.duplicateGroup}:${e.claim.trim().toLowerCase()}:${e.excerpt.trim().toLowerCase()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -260,6 +309,7 @@ export const complete = internalMutation({
         digest: job.digest,
         runId: job.runId,
         data: e,
+        facts: facts.filter((f) => f.evidenceId === e.id),
         retrievedAt: e.retrievedAt,
       });
     await ctx.db.patch(job._id, {
@@ -272,6 +322,7 @@ export const complete = internalMutation({
       job.variantId,
       unique,
       unique.length ? "complete" : "unavailable",
+      facts,
     );
     return false;
   },
@@ -282,6 +333,12 @@ async function attach(
   variantId: string,
   evidence: import("../src/contracts/index.ts").Contract<"Evidence">[],
   status: string,
+  facts: {
+    evidenceId: string;
+    fieldId: string;
+    value: string | number | boolean | string[] | null;
+    unit: string | null;
+  }[] = [],
 ) {
   const rows = await ctx.db
     .query("buyerOffers")
@@ -299,15 +356,114 @@ async function attach(
           e.sourceType !== "owner_report" &&
           e.verification === "contradicted",
       );
+      const run = await currentRun(ctx, runId, "researching");
+      if (!run) return;
+      const request = await versionFor(ctx, run.requestId, run.version);
+      const snapshots = await loadSnapshots(ctx, row.merchantId);
+      const assessments = [];
+      for (const line of request.brief.lines) {
+        const offerLine = row.data.lines.find(
+          (l: { requestLineId: string }) => l.requestLineId === line.lineId,
+        );
+        const snapshot = snapshots.find(
+          (s) => s.listing.listing.id === offerLine?.listing.id,
+        );
+        if (!snapshot) continue;
+        const copy = {
+          ...snapshot,
+          variant: {
+            ...snapshot.variant,
+            attributes: { ...snapshot.variant.attributes },
+          },
+        };
+        if (copy.variant.id === variantId) {
+          const profile = await ctx.db
+            .query("categoryProfiles")
+            .withIndex("by_profileId_and_version", (q) =>
+              q
+                .eq("profileId", line.profile.id)
+                .eq("version", line.profile.version),
+            )
+            .unique();
+          for (const fact of facts) {
+            const field = profile?.fields.find((f) => f.id === fact.fieldId);
+            if (!field) throw new Error("Unsupported source fact field");
+            const value = fact.value;
+            const typed =
+              value === null ||
+              (field.kind === "number" && typeof value === "number") ||
+              (field.kind === "string" && typeof value === "string") ||
+              (field.kind === "boolean" && typeof value === "boolean") ||
+              (field.kind === "string_array" && Array.isArray(value));
+            if (!typed) throw new Error("Source fact type mismatch");
+            copy.variant.attributes[fact.fieldId] = {
+              value,
+              unit: fact.unit,
+              provenance: "real_report",
+              sourceId: fact.evidenceId,
+            };
+          }
+        }
+        assessments.push(assessLine(line, copy));
+      }
+      const results = assessments.flatMap((a) => a.requirements);
+      const soft = results.filter((r) => r.strength === "soft");
+      const total = soft.reduce((s, r) => s + r.weight, 0);
+      const hardPass =
+        assessments.length === request.brief.lines.length &&
+        assessments.every((a) => a.hardRequirementsPassed) &&
+        !contradicted;
+      const fit = {
+        ...row.card.fit,
+        hardRequirementsPass: hardPass,
+        coveragePercent: total
+          ? (100 *
+              soft.reduce(
+                (s, r) => s + (r.status === "satisfied" ? r.weight : 0),
+                0,
+              )) /
+            total
+          : null,
+        checks: row.card.fit.checks.map(
+          (
+            check: import("../src/contracts/index.ts").Contract<"FitAssessment">["checks"][number],
+          ) => {
+            const result = results.find(
+              (r) => r.requirementId === check.requirementId,
+            );
+            const req = request.brief.lines
+              .flatMap((l) => l.requirements)
+              .find((r) => r.id === check.requirementId);
+            const fact = facts.find((f) => f.fieldId === req?.fieldId);
+            return result
+              ? {
+                  ...check,
+                  status:
+                    result.status === "satisfied" ? "matched" : result.status,
+                  ...(fact
+                    ? {
+                        actual: fact.value,
+                        sourceIds: [fact.evidenceId],
+                        explanation:
+                          "Reassessed by the shared seller rules using an authoritative exact-product fact.",
+                      }
+                    : {}),
+                }
+              : check;
+          },
+        ),
+      };
       await ctx.db.patch(row._id, {
         data: {
           ...row.data,
-          ...(contradicted
+          fit,
+          ...(!hardPass
             ? { requirementsValidExceptBudget: false, selectable: false }
             : {}),
         },
         card: {
           ...row.card,
+          fit,
           evidenceStatus: status,
           evidenceIds: evidence.map((e) => e.id),
           mainConcern: contradicted

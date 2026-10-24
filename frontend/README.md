@@ -1,92 +1,110 @@
-# BuyerUnion buyer mock
+# BuyerUnion buyer workspace
 
-A responsive React/TypeScript buyer workspace based on the current Figma designs.
-Run it without provider keys or a deployed backend.
+The default React application uses an authenticated Convex backend. Requests,
+immutable confirmed versions, agent jobs, durable runs, evidence, quotes, stock
+allocations, approvals, execution attempts, bookmarks and orders are persisted.
+The historical browser-only prototype is available explicitly at `/mock`.
 
-## Run locally
+## Local setup
 
-Use Node 24 (see `.nvmrc` and `package.json`), then:
+Use Node 24 (`.nvmrc`) and the reviewed lockfile. From `frontend/`:
 
 ```sh
 npm run security:dependencies
 npm ci --ignore-scripts
+npx convex dev --typecheck enable
+```
+
+Keep that terminal running. On a fresh checkout, select local development / use
+without an account if prompted. The CLI generates `.env.local` and downloads the
+local backend. A cloud deployment or provider key is not required. Unlike a cloud
+deployment, the local backend stops when its development process stops; `--once`
+is for deployment/checking, not for keeping the application online.
+
+In a second terminal, initialize the new local deployment once:
+
+```sh
+node scripts/setup-local-auth.mjs
+npx convex run sellerSeed:seedSellerDemo '{"seedRevision":"buyer-v1"}'
 npm run dev
 ```
 
-Open the local URL printed by Vite. The “A laptop for school” example provides a
-sample prompt, a proposed $1,000 private ceiling and a delivery date five days out.
-Review and explicitly confirm the brief, watch the scripted progress, compare
-sample offers, choose one and approve its three-minute simulated quote.
+Open `http://localhost:5173`. Restart Vite if it was running before `.env.local`
+was generated. Authentication keys and the local database are ignored by Git.
+Do not rerun the auth initializer on every startup: it rotates signing keys.
+Seeding is idempotent for the same revision and refuses to reset a nonempty
+catalog with another revision. Existing purchases are never silently reset.
 
-Other examples cover a cotton tee, shelf and kettle. The catalog is intentionally
-small; low budgets or tight deadlines can produce an honest no-match state.
+A buyer session signs in anonymously. Keep the same browser profile to return to
+its requests; cross-device recovery is outside this prototype. A request URL
+contains only the request ID; ownership is checked by the server on every call.
 
-## Implemented mock behavior
+## Working journey
 
-- Navy sidebar/home, prompt entry, persistent conversation, suggested replies and
-  editable confirmation with separate optional shared-target consent.
-- Scripted merchant progress, delivered prices, condition filtering, delivery
-  checks, ordering, saved offers and side-by-side comparison.
-- Offer detail with source references and explicit missing owner evidence.
-- Three-minute quotes, expiry/recheck, explicit simulated approval, duplicate-order
-  protection, receipt and local order history (latest 100 simulations).
-- Responsive layout, keyboard-accessible controls, native modal focus handling,
-  reduced-motion support, and reload recovery via versioned browser storage.
+1. Describe a laptop, clothing item, household accessory or small appliance.
+   Fixture intake proposes explicit supported details; it is not live language
+   interpretation. ISO dates such as `2026-11-15` are recognized. All missing or
+   unrecognized requirements can be entered in the editable brief.
+2. Review the primary item, up to two related items, quantities 1–10, conditions,
+   measurable hard requirements/weighted preferences, deadline and private
+   maximum delivered total. An optional shared target requires separate consent.
+3. Confirm and start. The backend coordinates actual persisted demo merchant
+   jobs, validates them through seller rules, runs at most one sealed price round
+   when useful, and checks evidence applicability. Missing real evidence is shown
+   honestly. These fixtures use synthetic product identities and diagnostics.
+4. Sort, compare, inspect sources/facts and save checked offers. Select one for a
+   freshly validated three-minute firm quote and atomic stock hold.
+5. Review exact product configuration, quantities, total and terms. Explicitly
+   approve the simulation. Duplicate approvals share one execution/order. A
+   decline releases stock; an unknown result retains it and reconciles the same
+   attempt. Success says **“Demo order completed; no payment taken.”**
+6. Reload or visit Orders to see persisted progress and the frozen receipt.
 
-This is a **browser-only mock**. It is not authenticated, does not reserve real
-stock, perform live language extraction, acquire evidence, contact CREAO, run
-Convex Workflows, or charge money. Source links are references, not proof that
-live retrieval occurred. Product photos are illustrative, not exact variant
-verification. Fixed sample matching and qualitative preferences are disclosed
-when confirming. Do not enter private personal data.
+Revising a brief invalidates its old run, releases unapproved holds and resets
+shared-target consent. Pending/unknown purchases block edits and new execution.
+Seven-day cleanup removes reconciled request/research data, retaining unresolved
+executions and stock ledger entries so deletion cannot restock sold goods.
 
-The audit fixes preserve journey state when navigating away, reset target consent
-on revisions, recheck delivery against the selection date, and store immutable
-quote/order snapshots. Legacy local quotes without snapshots require reselection;
-legacy order totals remain visible without reconstructing missing past terms.
-The detailed review and remaining backend gates are in
-[`IMPLEMENTATION_REVIEW.md`](../docs/IMPLEMENTATION_REVIEW.md).
+## Provider configuration — last integration step
 
-The mock does not replace the planned server enforcement. Browser state is
-editable and never an authorization mechanism. Replace mock operations with the
-owner-scoped Convex API before treating them as real commerce behavior.
+`convex/integrations/buyerTools.ts` contains the fill-in functions for CREAO,
+Apify and supported external payment lookup. They intentionally do not contain
+guessed endpoints or credentials. Fixture agent mode and simulated checkout work
+without them. See [the handoff](../docs/BUYER_BACKEND_HANDOFF.md) before enabling
+live mode. The Connections screen states the actual current modes.
 
-## Design reference and update practice
-
-Figma: https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf
-
-- Current home: `53:1134` (navy sidebar, prompt and photo-based offer cards).
-- Chat: `19:225`; progress: `19:226`; comparison: `13:85`; approval: `19:228`.
-- Local photo assets in `public/images/` come from the current home design.
-- Recheck metadata and design context at the start of work, after major screen
-  milestones, and before handing off. The user clarified that Figma is a layout
-  and color reference only: responsiveness, interactions, accessibility and
-  overrides use implementation judgment. Keep the implementation plan
-  authoritative for privacy, eligibility and purchase rules.
-- October 24 implementation recheck: home layout/content unchanged between initial
-  and final high-fidelity fetches; temporary asset URLs refreshed.
-
-The mock follows the newer sidebar home and adapts older journey screens to that
-workspace. It corrects illustrative Figma copy that exposed the private ceiling,
-used unsupported review scores, offered an unaffordable quote, or implied an
-18-minute hold/real Visa payment. It uses the PRD's disclosed merchant fixtures
-instead of treating design product names/prices as verified catalog records.
+Operator accounts are provisioned only through the internal
+`buyerAdmin:provisionOperator` action. Public password signup is disabled;
+membership is assigned server-side to one merchant. Use separate buyer/operator
+browser contexts. The buyer UI does not expose seller administration.
 
 ## Checks
 
 ```sh
-npm run test:buyer
 npm run contracts:check
+npm run test:buyer
+npm run test:seller
+npm run test:backend
+npm run typecheck:backend
 npm run lint
 npm run build
-npm run ci
 ```
 
-`test:buyer` covers shared contracts plus mock confirmation/matching, safe money,
-expiry, revisions, duplicate approvals and restored state. `ci` also runs the
-release-age policy, workflow policy, npm signatures and vulnerability audit.
+`test:backend` runs real Convex function handlers and Workflow components against
+`convex-test`'s isolated database/runtime. It checks ownership, privacy, versioning,
+sealed promotion, category/basket behavior, contention, rollback, quote expiry,
+exact approval, duplicate execution, decline/unknown status, evidence provenance
+and seven-day retention. It does not prove external provider behavior.
 
-For shared contracts and integration boundaries, see
-[`docs/BUYER_BACKEND_HANDOFF.md`](../docs/BUYER_BACKEND_HANDOFF.md) and the active
-[`BUYERUNION_IMPLEMENTATION.md`](../BUYERUNION_IMPLEMENTATION.md). CREAO is selected
-for buyer roles; the live adapter and Convex deployment remain future work.
+`npm run ci` additionally installs from the lockfile with scripts disabled and
+checks dependency age, signatures, workflow policy and vulnerabilities. CI runs
+backend and seller checks as well as the original browser-mock regression tests.
+
+## Design reference
+
+[Figma](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf), home `53:1134`,
+provides layout/colors. Rechecked during backend UI work on October 24. The navy
+sidebar, centered prompt and illustrated offer cards use existing design tokens
+and downloaded local images. Photos illustrate laptops; exact facts come from
+the selected variant. Responsiveness and interactions follow implementation
+judgment. Figma placeholder identities, ratings and provider claims are not data.

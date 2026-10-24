@@ -71,6 +71,18 @@ jobs:
         working-directory: frontend
         run: npm run test:buyer
 
+      - name: Test seller boundaries
+        working-directory: frontend
+        run: npm run test:seller
+
+      - name: Test buyer backend transactions and workflows
+        working-directory: frontend
+        run: npm run test:backend
+
+      - name: Typecheck backend
+        working-directory: frontend
+        run: npm run typecheck:backend
+
       - name: Build
         working-directory: frontend
         run: npm run build

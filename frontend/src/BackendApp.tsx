@@ -130,6 +130,7 @@ function Workspace() {
     api.buyer.listOrders,
     page === "orders" ? {} : "skip",
   );
+  const removeSaved = useAction(api.buyer.removeSaved);
   const saveDraft = useAction(api.buyer.saveDraft),
     interpret = useAction(api.buyer.interpretDraft),
     confirm = useAction(api.buyer.confirmRequest),
@@ -218,6 +219,7 @@ function Workspace() {
       setCompared([]);
     });
   }
+  useEffect(()=>{if(purchase?.execution?.executionId)document.getElementById("purchase-status")?.scrollIntoView({block:"start"});},[purchase?.execution?.executionId]);
   const locked =
     run && ["executing", "unknown", "complete"].includes(run.purchaseStage);
   const selectedCards = (run?.offers ?? []).filter((o) =>
@@ -462,6 +464,20 @@ function Workspace() {
                           Send
                         </button>
                       </form>
+                      {!!draft.interpretation?.suggestedReplies.length && (
+                        <div className="example-prompts">
+                          {draft.interpretation.suggestedReplies.map(
+                            (reply) => (
+                              <button
+                                key={reply.id}
+                                onClick={() => setMessage(reply.text)}
+                              >
+                                {reply.label}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      )}
                       {!draft.interpretation && (
                         <button
                           className="secondary"
@@ -602,6 +618,31 @@ function Workspace() {
                           </div>
                         )}
                     </section>
+                    {purchase?.execution && (
+                      <section
+                        id="purchase-status"
+                        className="panel backend-receipt"
+                        aria-live="polite"
+                      >
+                        <span className="eyebrow">
+                          PURCHASE · {purchase.execution.status}
+                        </span>
+                        <h2>{purchase.execution.resultMessage}</h2>
+                        <p>Attempt {purchase.execution.executionId}</p>
+                        {purchase.execution.orderId && (
+                          <p>Order {purchase.execution.orderId}</p>
+                        )}
+                        {["unknown", "pending"].includes(
+                          purchase.execution.status,
+                        ) && (
+                          <p>
+                            Your stock stays locked while this same attempt is
+                            resolved. You can leave this page and return to the
+                            saved request.
+                          </p>
+                        )}
+                      </section>
+                    )}
                     {run.offers.length > 0 && (
                       <section className="offers-section">
                         <div className="section-header">
@@ -710,50 +751,31 @@ function Workspace() {
                         )}
                       </section>
                     )}
-                    {purchase?.execution && (
-                      <section
-                        className="panel backend-receipt"
-                        aria-live="polite"
-                      >
-                        <span className="eyebrow">
-                          PURCHASE · {purchase.execution.status}
-                        </span>
-                        <h2>{purchase.execution.resultMessage}</h2>
-                        <p>Attempt {purchase.execution.executionId}</p>
-                        {purchase.execution.orderId && (
-                          <p>Order {purchase.execution.orderId}</p>
-                        )}
-                        {["unknown", "pending"].includes(
-                          purchase.execution.status,
-                        ) && (
-                          <p>
-                            Your stock stays locked while this same attempt is
-                            resolved. You can leave this page and return to the
-                            saved request.
-                          </p>
-                        )}
-                      </section>
-                    )}
-                    {purchase?.quote && purchase.quoteState === "reserved" && (
-                      <QuotePanel
-                        quote={purchase.quote}
-                        busy={busy}
-                        onApprove={() =>
-                          void perform(async () => {
-                            unwrap(
-                              await approve({
-                                input: {
-                                  request: run.request,
-                                  quoteId: purchase.quote!.quoteId,
-                                  quoteHash: purchase.quote!.quoteHash,
-                                  clientKey: `approve:${purchase.quote!.quoteId}`,
-                                },
-                              }),
-                            );
-                          })
-                        }
-                      />
-                    )}
+                    {purchase?.quote &&
+                      ["reserved", "expired"].includes(
+                        purchase.quoteState ?? "",
+                      ) && (
+                        <QuotePanel
+                          key={purchase.quote.quoteId}
+                          products={purchase.products}
+                          quote={purchase.quote}
+                          busy={busy}
+                          onApprove={() =>
+                            void perform(async () => {
+                              unwrap(
+                                await approve({
+                                  input: {
+                                    request: run.request,
+                                    quoteId: purchase.quote!.quoteId,
+                                    quoteHash: purchase.quote!.quoteHash,
+                                    clientKey: `approve:${purchase.quote!.quoteId}`,
+                                  },
+                                }),
+                              );
+                            })
+                          }
+                        />
+                      )}
                   </>
                 )}
               </>
@@ -770,18 +792,37 @@ function Workspace() {
               </p>
             </div>
             <div className="offer-grid">
-              {saved?.map((s, i) => (
-                <Offer
-                  key={s.id}
-                  card={s.card}
-                  index={i}
-                  busy
-                  compared={false}
-                  onCompare={() => {}}
-                  onDetails={() => setDetails(s.card)}
-                  onSave={() => {}}
-                  onSelect={() => {}}
-                />
+              {saved?.map((s) => (
+                <article className="panel backend-saved" key={s.id}>
+                  <span className="eyebrow">SAVED SNAPSHOT</span>
+                  <h2>{s.card.products[0].title}</h2>
+                  <p>
+                    {s.card.merchant.displayName} · {money(s.card.totalCents)}{" "}
+                    delivered
+                  </p>
+                  <p>{s.card.mainConcern}</p>
+                  <div className="backend-actions">
+                    <button
+                      className="secondary"
+                      onClick={() => setDetails(s.card)}
+                    >
+                      Details
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(async () => {
+                          unwrap(
+                            await removeSaved({ input: { bookmarkId: s.id } }),
+                          );
+                        })
+                      }
+                    >
+                      Remove saved offer
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
             {saved?.length === 0 && <p>No saved offers yet.</p>}
@@ -1413,7 +1454,7 @@ function Offer({
   onSave: () => void;
   onSelect: () => void;
 }) {
-  const laptop = /laptop|macbook|thinkpad|framework|zenbook/i.test(
+  const laptop = /laptop|macbook|thinkpad|demothink|demobook|framework|zenbook/i.test(
     card.products[0].title,
   );
   return (
@@ -1572,13 +1613,31 @@ function Evidence({ requestId, ids }: { requestId: string; ids: string[] }) {
 }
 function QuotePanel({
   quote,
+  products,
   busy,
   onApprove,
 }: {
   quote: Contract<"FirmQuote">;
+  products: {
+    requestLineId: string;
+    title: string;
+    variantId: string;
+    condition: string;
+    quantity: number;
+    attributes: Record<
+      string,
+      { value: unknown; unit: string | null; provenance: string }
+    >;
+    diagnostics: Record<
+      string,
+      { value: unknown; unit: string | null; provenance: string }
+    >;
+  }[];
   busy: boolean;
   onApprove: () => void;
 }) {
+  const panel=useRef<HTMLElement>(null);
+  useEffect(()=>{panel.current?.scrollIntoView({block:"start"});},[]);
   const [now, setNow] = useState(Date.now);
   const [consent, setConsent] = useState(false);
   useEffect(() => {
@@ -1587,7 +1646,7 @@ function QuotePanel({
   }, []);
   const remaining = Math.max(0, Math.ceil((quote.expiresAt - now) / 1000));
   return (
-    <section className="panel backend-quote">
+    <section className="panel backend-quote" ref={panel}>
       <span className="eyebrow">EXACT TERMS · FIRM QUOTE</span>
       <h2>{money(quote.totalCents)} delivered</h2>
       <p>
@@ -1600,11 +1659,39 @@ function QuotePanel({
       <ul>
         {quote.lines.map((l) => (
           <li key={l.requestLineId}>
-            {l.quantity} × listing {l.listing.id} v{l.listing.version} ·{" "}
+            {l.quantity} ×{" "}
+            {products.find((p) => p.requestLineId === l.requestLineId)?.title ??
+              l.listing.id}{" "}
+            (
+            {
+              products.find((p) => p.requestLineId === l.requestLineId)
+                ?.condition
+            }
+            ) · listing {l.listing.id} v{l.listing.version} ·{" "}
             {money(l.unitCents)} each
           </li>
         ))}
       </ul>
+      {products.map((p) => (
+        <details key={p.requestLineId}>
+          <summary>
+            Exact facts: {p.title} · {p.variantId}
+          </summary>
+          <ul>
+            {Object.entries({ ...p.attributes, ...p.diagnostics }).map(
+              ([field, attr]) => (
+                <li key={field}>
+                  {field}:{" "}
+                  {Array.isArray(attr.value)
+                    ? attr.value.join(", ")
+                    : String(attr.value ?? "Unknown")}{" "}
+                  {attr.unit ?? ""} · {attr.provenance.replaceAll("_", " ")}
+                </li>
+              ),
+            )}
+          </ul>
+        </details>
+      ))}
       <p role="timer">
         {remaining
           ? `Stock held for ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`

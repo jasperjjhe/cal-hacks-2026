@@ -21,6 +21,7 @@ export const selectAndReserve = command("selectAndReserve");
 export const approveAndExecute = command("approveAndExecute");
 export const setSort = command("setSort");
 export const toggleSaved = command("toggleSaved");
+export const removeSaved = command("removeSaved");
 export const interpretDraft = action({
   args: { input: v.any() },
   handler: async (ctx, { input }): Promise<unknown> => {
@@ -216,9 +217,7 @@ export const getPurchase = query({
       .withIndex("by_request", (q) => q.eq("requestId", requestId))
       .order("desc")
       .take(100);
-    const quote = quotes.find((q) =>
-      ["reserved", "execution_locked", "sold"].includes(q.state),
-    );
+    const quote = quotes[0];
     const executions = await ctx.db
       .query("buyerExecutions")
       .withIndex("by_request", (q) => q.eq("requestId", requestId))

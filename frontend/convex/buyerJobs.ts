@@ -100,7 +100,7 @@ export const preparePhase = internalMutation({
           q.eq("runId", args.runId).eq("phase", args.phase),
         )
         .take(10)
-    ).filter((j) => j.role.startsWith("seller_"));
+    ).filter((j) => j.role.startsWith("seller_") && !j.input.repairAttempt);
     if (existing.length) return existing.map((j) => String(j._id));
     const request = await versionFor(ctx, run.requestId, run.version);
     const brief = buildSellerBrief(request, args.runId);
@@ -255,7 +255,19 @@ export const preparePhase = internalMutation({
           snapshots,
           candidateId: row.candidateId,
           sellerJobId,
-          parentOffer: row.data,
+          parentOffer: {
+            offer: row.data.offer,
+            candidateId: row.candidateId,
+            merchantId: row.merchantId,
+            policy: row.data.policy,
+            lines: row.data.lines,
+            claims: row.data.claims,
+            totalCents: row.data.totalCents,
+            shippingCents: row.data.shippingCents,
+            arrivalAt: row.data.arrivalAt,
+            warrantyMonths: row.data.warrantyMonths,
+            returnDays: row.data.returnDays,
+          },
           roundId: args.roundId ?? null,
           challenge:
             args.phase === "council"
@@ -323,10 +335,37 @@ export const claimJob = internalMutation({
       const run = await currentRun(ctx, job.runId, job.phase);
       if (
         !run ||
-        run.providerCalls >= run.config.maxCalls ||
+        (!args.poll && run.providerCalls >= run.config.maxCalls) ||
         run.toolCalls >= run.config.maxTools
-      )
+      ) {
+        await ctx.db.patch(job._id, {
+          state: "failed",
+          completedAt: Date.now(),
+        });
         return null;
+      }
+      if (!args.poll && job.role === "seller_initial") {
+        const peers = await ctx.db
+          .query("buyerJobs")
+          .withIndex("by_run_phase", (q) =>
+            q.eq("runId", job.runId!).eq("phase", "bidding"),
+          )
+          .take(20);
+        if (
+          peers.filter(
+            (p) =>
+              p.merchantId === job.merchantId &&
+              p.role === "seller_initial" &&
+              p.state !== "queued",
+          ).length >= 3
+        ) {
+          await ctx.db.patch(job._id, {
+            state: "failed",
+            completedAt: Date.now(),
+          });
+          return null;
+        }
+      }
       await ctx.db.patch(run._id, {
         providerCalls: run.providerCalls + (args.poll ? 0 : 1),
         toolCalls: run.toolCalls + 1,
@@ -339,6 +378,20 @@ export const claimJob = internalMutation({
 export const dispatch = internalAction({
   args: { jobId: v.string(), poll: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<{ pending: boolean }> => {
+    const existing = await ctx.runQuery(internal.buyerJobs.getJob, {
+      jobId: args.jobId,
+    });
+    if (existing?.state === "repairing" && existing.output?.repairJobId) {
+      const status = await ctx.runAction(internal.buyerJobs.dispatch, {
+        jobId: existing.output.repairJobId,
+        poll: args.poll ?? false,
+      });
+      if (!status.pending)
+        await ctx.runMutation(internal.buyerJobs.finishRepair, {
+          jobId: args.jobId,
+        });
+      return status;
+    }
     const job = await ctx.runMutation(internal.buyerJobs.claimJob, {
       jobId: args.jobId,
       poll: args.poll ?? false,
@@ -377,6 +430,19 @@ export const dispatch = internalAction({
         result,
       });
     } catch {
+      const repair = await ctx.runMutation(internal.buyerJobs.createRepair, {
+        jobId: args.jobId,
+      });
+      if (repair) {
+        const status = await ctx.runAction(internal.buyerJobs.dispatch, {
+          jobId: repair,
+        });
+        if (!status.pending)
+          await ctx.runMutation(internal.buyerJobs.finishRepair, {
+            jobId: args.jobId,
+          });
+        return status;
+      }
       await ctx.runMutation(internal.buyerJobs.failJob, { jobId: args.jobId });
       return { pending: false };
     }
@@ -387,6 +453,7 @@ export const completeJob = internalMutation({
   handler: async (ctx, args): Promise<{ pending: boolean }> => {
     const id = ctx.db.normalizeId("buyerJobs", args.jobId);
     const job = id ? await ctx.db.get(id) : null;
+    if(job?.state==="completed"&&job.outputDigest&&args.result?.status==="completed"){if(await digest(args.result.output)!==job.outputDigest)fail("INVALID_INPUT","Mismatched provider replay.");return {pending:false};}
     if (!job || !["starting", "polling", "pending"].includes(job.state))
       return { pending: false };
     if (
@@ -424,6 +491,8 @@ export const completeJob = internalMutation({
       return { pending: true };
     }
     if (result.status === "failed") {
+      if (!job.input.repairAttempt)
+        throw new Error("One bounded transient retry is permitted.");
       await ctx.db.patch(job._id, { state: "failed", completedAt: Date.now() });
       return { pending: false };
     }
@@ -541,6 +610,8 @@ export const completeJob = internalMutation({
           deferPromotion: job.phase === "negotiating",
         },
       );
+      if (!accepted.ok && !job.input.repairAttempt)
+        throw new Error("Proposal requires one bounded repair.");
       if (
         accepted.ok &&
         "offer" in accepted &&
@@ -821,7 +892,7 @@ export const phaseJobs = internalQuery({
       )
       .take(10);
     return jobs
-      .filter((j) => j.role.startsWith("seller_"))
+      .filter((j) => j.role.startsWith("seller_") && !j.input.repairAttempt)
       .map((j) => ({
         id: String(j._id),
         merchantId: j.merchantId,
@@ -904,5 +975,77 @@ export const cancelProvider = internalAction({
       } catch {
         /* Best effort; stale guards remain authoritative. */
       }
+  },
+});
+
+export const createRepair = internalMutation({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }): Promise<string | null> => {
+    const id = ctx.db.normalizeId("buyerJobs", jobId);
+    const job = id ? await ctx.db.get(id) : null;
+    if(job?.state==="repairing"&&job.output?.repairJobId)return String(job.output.repairJobId);
+    if (
+      !job ||
+      ["completed","failed","stale","cancelled"].includes(job.state)||
+      job.input.repairAttempt ||
+      Date.now() + 1000 >= job.deadlineAt ||
+      (job.runId && !(await currentRun(ctx, job.runId, job.phase)))
+    )
+      return null;
+    const input = {
+      ...job.input,
+      repairAttempt: 1,
+      repairInstruction:
+        "The previous result failed schema or deterministic policy validation. Return one corrected result within the same scoped facts, policy, requirements and deadline. Do not invent fields, claims or sources.",
+    };
+    const child = await ctx.db.insert("buyerJobs", {
+      runId: job.runId,
+      requestId: job.requestId,
+      version: job.version,
+      phase: job.phase,
+      role: job.role,
+      merchantId: job.merchantId,
+      candidateId: job.candidateId,
+      sellerJobId: job.sellerJobId,
+      state: "queued",
+      input,
+      inputDigest: await digest(input),
+      provider: job.provider,
+      providerRunId: null,
+      outputDigest: null,
+      output: null,
+      deadlineAt: job.deadlineAt,
+      createdAt: Date.now(),
+      completedAt: null,
+    });
+    await ctx.db.patch(job._id, {
+      state: "repairing",
+      output: { repairJobId: String(child) },
+    });
+    if (job.runId)
+      await emit(
+        ctx,
+        job.runId,
+        "rejected",
+        "One bounded retry/repair was requested; invalid output was not published.",
+        job.merchantId,
+      );
+    return String(child);
+  },
+});
+export const finishRepair = internalMutation({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }) => {
+    const id = ctx.db.normalizeId("buyerJobs", jobId);
+    const parent = id ? await ctx.db.get(id) : null;
+    const childId = parent?.output?.repairJobId
+      ? ctx.db.normalizeId("buyerJobs", parent.output.repairJobId)
+      : null;
+    const child = childId ? await ctx.db.get(childId) : null;
+    if (parent?.state === "repairing" && child)
+      await ctx.db.patch(parent._id, {
+        state: child.state === "completed" ? "completed" : "failed",
+        completedAt: Date.now(),
+      });
   },
 });

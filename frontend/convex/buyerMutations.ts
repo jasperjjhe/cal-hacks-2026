@@ -111,7 +111,14 @@ export const confirmRequest = internalMutation({
     await enforceUnlocked(ctx, args.requestId);
     if (req.draftVersion !== args.expectedDraftVersion)
       fail("STALE_VERSION", "Your brief changed before confirmation.");
-    validateConfirmation(input, Date.now(), { validate: () => undefined });
+    try {
+      validateConfirmation(input, Date.now(), { validate: () => undefined });
+    } catch {
+      fail(
+        "INVALID_INPUT",
+        "Check your deadline, line IDs and separate target consent.",
+      );
+    }
     await validateLines(ctx, args.lines);
     await invalidateRun(ctx, req.activeRunId);
     await releaseRequestHolds(ctx, args.requestId);
@@ -256,6 +263,9 @@ export const startRun = internalMutation({
       },
     );
     await ctx.db.patch(id, { workflowId });
+    await ctx.scheduler.runAt(now + 210000, internal.buyerWorkflow.timeout, {
+      runId: String(id),
+    });
     await emit(
       ctx,
       String(id),
@@ -428,3 +438,19 @@ async function invalidateRun(
 }
 // Checkout commands are implemented in their own transactional module.
 export { selectAndReserve, approveAndExecute } from "./buyer/checkout.ts";
+
+export const removeSaved = internalMutation({
+  args: { input: v.any() },
+  handler: async (ctx, { input }) => {
+    const args = z
+      .strictObject({ bookmarkId: contracts.Ref.shape.id })
+      .parse(input);
+    const user = await owner(ctx);
+    const id = ctx.db.normalizeId("buyerBookmarks", args.bookmarkId);
+    const row = id ? await ctx.db.get(id) : null;
+    if (!row || row.ownerId !== user)
+      fail("FORBIDDEN", "Saved offer unavailable.");
+    await ctx.db.delete(row._id);
+    return null;
+  },
+});

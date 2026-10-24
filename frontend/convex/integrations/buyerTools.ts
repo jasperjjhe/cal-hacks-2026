@@ -87,6 +87,12 @@ export type EvidenceResult =
       providerRunId: string;
       build: string;
       evidence: Contract<"Evidence">[];
+      facts?: {
+        evidenceId: string;
+        fieldId: string;
+        value: string | number | boolean | string[] | null;
+        unit: string | null;
+      }[];
     }
   | { status: "unavailable" };
 // FINAL INTEGRATION POINTS: start/poll only a pinned, allowlisted Apify Actor.

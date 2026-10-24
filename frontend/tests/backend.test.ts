@@ -365,3 +365,425 @@ test("public commands return structured errors without committing partial stock 
     await state.t.run((ctx) => ctx.db.query("buyerExecutions").collect()),
   ).toHaveLength(0);
 });
+
+test("two buyers cannot reserve the same last unit", async () => {
+  const first = await resultRun();
+  const listing = await first.t.run(async (ctx) => {
+    const row = await ctx.db
+      .query("buyerOffers")
+      .withIndex("by_run_effective", (q) =>
+        q.eq("runId", first.view.runId).eq("effective", true),
+      )
+      .filter((q) =>
+        q.eq(q.field("data.offer.id"), first.view.offers[0].offer.id),
+      )
+      .first();
+    const id = row!.data.lines[0].listing.id;
+    const stock = await ctx.db
+      .query("listingVersions")
+      .withIndex("by_listingId_and_version", (q) => q.eq("listingId", id))
+      .order("desc")
+      .first();
+    await ctx.db.patch(stock!._id, { initialQuantity: 1 });
+    return id;
+  });
+  const second = await resultRun({
+    t: first.t,
+    buyer: first.t.withIdentity({ subject: "buyer-b|session-b" }),
+  });
+  const result = await Promise.allSettled([reserve(first), reserve(second)]);
+  expect(result.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  const allocations = await first.t.run((ctx) =>
+    ctx.db
+      .query("allocations")
+      .withIndex("by_listingId_and_state", (q) =>
+        q.eq("listingId", listing).eq("state", "reserved"),
+      )
+      .collect(),
+  );
+  expect(allocations.reduce((sum, a) => sum + a.quantity, 0)).toBe(1);
+});
+test("canonical unit conversion uses the shared seller unit registry", async () => {
+  const { buyer, draft } = await confirmed();
+  const ref = await buyer.mutation(internal.buyerMutations.confirmRequest, {
+    input: {
+      requestId: draft.requestId,
+      expectedDraftVersion: 1,
+      lines: [
+        {
+          lineId: "main",
+          role: "primary",
+          category: "laptop",
+          profile: { id: "profile_laptop", version: 1 },
+          quantity: 1,
+          allowedConditions: ["new"],
+          requirements: [
+            {
+              id: "weight",
+              fieldId: "weightG",
+              operator: "max",
+              value: 1.5,
+              unit: "kg",
+              strength: "hard",
+              weight: 1,
+            },
+          ],
+          useCaseSummary: "Laptop",
+        },
+      ],
+      deliveryDeadline: Date.now() + 10 * 86400000,
+      privateMaximumCents: 200000,
+      sharedTargetCents: null,
+      shareTarget: false,
+      sort: "best_fit",
+    },
+  });
+  const request = await buyer.query(api.buyer.getConfirmedRequest, {
+    requestId: ref.id,
+  });
+  expect(request?.brief.lines[0].requirements[0]).toMatchObject({
+    value: 1500,
+    unit: "g",
+  });
+});
+test("final price submissions stay sealed until the round closes", async () => {
+  const state = await confirmed();
+  const { runId } = await state.buyer.mutation(
+    internal.buyerMutations.startRun,
+    { input: { request: state.ref, clientKey: "start" } },
+  );
+  const jobs = await state.t.mutation(internal.buyerJobs.preparePhase, {
+    runId,
+    phase: "bidding",
+  });
+  for (const jobId of jobs)
+    await state.t.action(internal.buyerJobs.dispatch, { jobId });
+  await state.t.run(async (ctx) => {
+    const id = ctx.db.normalizeId("buyerRuns", runId)!;
+    await ctx.db.patch(id, { stage: "negotiating" });
+  });
+  const roundId = await state.t.mutation(
+    internal.buyerWorkflow.openPriceRound,
+    { runId },
+  );
+  expect(roundId).not.toBeNull();
+  const finals = await state.t.mutation(internal.buyerJobs.preparePhase, {
+    runId,
+    phase: "negotiating",
+    roundId: roundId!,
+  });
+  await state.t.action(internal.buyerJobs.dispatch, { jobId: finals[0] });
+  const staged = await state.t.run((ctx) =>
+    ctx.db
+      .query("buyerOffers")
+      .filter((q) => q.eq(q.field("stagedRoundId"), roundId))
+      .collect(),
+  );
+  expect(staged.length).toBeGreaterThan(0);
+  expect(staged.every((o) => !o.effective)).toBe(true);
+  const events = await state.buyer.query(api.buyer.getRunEvents, {
+    requestId: state.ref.id,
+    runId,
+  });
+  expect(events.filter((e) => e.kind === "final_bid")).toHaveLength(0);
+});
+test("one retry is bounded and cannot repair stale work", async () => {
+  const state = await confirmed();
+  const { runId } = await state.buyer.mutation(
+    internal.buyerMutations.startRun,
+    { input: { request: state.ref, clientKey: "start" } },
+  );
+  const [jobId] = await state.t.mutation(internal.buyerJobs.preparePhase, {
+    runId,
+    phase: "bidding",
+  });
+  const repair = await state.t.mutation(internal.buyerJobs.createRepair, {
+    jobId,
+  });
+  expect(repair).not.toBeNull();
+  expect(
+    await state.t.mutation(internal.buyerJobs.createRepair, { jobId: repair! }),
+  ).toBeNull();
+  await state.buyer.mutation(internal.buyerMutations.cancelRun, {
+    input: { request: state.ref, runId },
+  });
+  expect(
+    await state.t.mutation(internal.buyerJobs.createRepair, { jobId }),
+  ).toBeNull();
+});
+test("source provenance rejects a mismatched extraction build and guessed evidence reads", async () => {
+  const state = await resultRun();
+  const id = await state.t.run(async (ctx) => {
+    await ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.view.runId)!, {
+      stage: "researching",
+    });
+    return ctx.db.insert("buyerResearch", {
+      runId: state.view.runId,
+      variantId: "P5",
+      digest: "digest",
+      state: "acquiring",
+      providerRunId: "expected",
+      providerBuild: "pinned-build",
+      input: { urls: ["https://example.com/product"], syntheticProduct: false },
+      deadlineAt: Date.now() + 60000,
+      createdAt: Date.now(),
+    });
+  });
+  await expect(
+    state.t.mutation(internal.buyerEvidence.complete, {
+      researchJobId: String(id),
+      result: {
+        status: "completed",
+        providerRunId: "expected",
+        build: "wrong-build",
+        evidence: [],
+      },
+    }),
+  ).rejects.toThrow();
+  expect(
+    await state.buyer.query(api.buyer.getEvidence, {
+      requestId: state.ref.id,
+      evidenceIds: ["guessed-id"],
+    }),
+  ).toEqual([]);
+});
+test("retention removes private completed data but preserves sold stock and unresolved attempts", async () => {
+  const state = await resultRun();
+  const quote = await reserve(state);
+  const execution = await approveQuote(state, quote);
+  await state.t.mutation(internal.buyerExecution.settleAttempt, {
+    executionId: execution.executionId,
+    status: "succeeded",
+    providerReference: "simulation:done",
+  });
+  vi.setSystemTime(Date.now() + 8 * 86400000);
+  const outcome = await state.t.mutation(internal.buyerMaintenance.retain, {});
+  expect(outcome.deleted).toBe(1);
+  expect(
+    await state.t.run((ctx) => ctx.db.query("buyerRequests").collect()),
+  ).toHaveLength(0);
+  expect(
+    (await state.t.run((ctx) => ctx.db.query("allocations").collect())).every(
+      (a) => a.state === "sold",
+    ),
+  ).toBe(true);
+  const pending = await resultRun();
+  const held = await reserve(pending);
+  const attempt = await approveQuote(pending, held);
+  await pending.t.mutation(internal.buyerExecution.settleAttempt, {
+    executionId: attempt.executionId,
+    status: "unknown",
+    providerReference: "simulation:pending",
+  });
+  vi.setSystemTime(Date.now() + 8 * 86400000);
+  expect(
+    (await pending.t.mutation(internal.buyerMaintenance.retain, {})).deleted,
+  ).toBe(0);
+  expect(
+    (
+      await pending.buyer.query(api.buyer.getPurchase, {
+        requestId: pending.ref.id,
+      })
+    ).execution?.status,
+  ).toBe("unknown");
+});
+
+test("all non-tech categories and a related-item basket complete through the actual workflow", async () => {
+  const cases = [
+    {
+      category: "clothing",
+      profile: "profile_clothing",
+      requirements: [
+        {
+          id: "color",
+          fieldId: "color",
+          operator: "equals",
+          value: "navy",
+          unit: null,
+          strength: "hard",
+          weight: 1,
+        },
+      ],
+    },
+    {
+      category: "household_accessory",
+      profile: "profile_household_accessory",
+      requirements: [],
+    },
+    {
+      category: "small_appliance",
+      profile: "profile_small_appliance",
+      requirements: [
+        {
+          id: "plug",
+          fieldId: "plugRegion",
+          operator: "equals",
+          value: "US",
+          unit: null,
+          strength: "hard",
+          weight: 1,
+        },
+      ],
+    },
+    { category: "laptop", profile: "profile_laptop", requirements: [] },
+  ];
+  for (const example of cases) {
+    const { t, buyer } = await setup();
+    const draft = await buyer.mutation(internal.buyerMutations.saveDraft, {
+      input: {
+        requestId: null,
+        expectedDraftVersion: null,
+        message: `Need a ${example.category}`,
+      },
+    });
+    const lines = [
+      {
+        lineId: "main",
+        role: "primary",
+        category: example.category,
+        profile: { id: example.profile, version: 1 },
+        quantity: 1,
+        allowedConditions: ["new"],
+        requirements: example.requirements,
+        useCaseSummary: "Confirmed product requirements.",
+      },
+      ...(example.category === "laptop"
+        ? [
+            {
+              lineId: "mouse",
+              role: "related",
+              category: "tech_accessory",
+              profile: { id: "profile_tech_accessory", version: 1 },
+              quantity: 2,
+              allowedConditions: ["new"],
+              requirements: [],
+              useCaseSummary: "Compatible data accessory.",
+            },
+          ]
+        : []),
+    ];
+    const ref = await buyer.mutation(internal.buyerMutations.confirmRequest, {
+      input: {
+        requestId: draft.requestId,
+        expectedDraftVersion: 1,
+        lines,
+        deliveryDeadline: Date.now() + 20 * 86400000,
+        privateMaximumCents: 500000,
+        sharedTargetCents: null,
+        shareTarget: false,
+        sort: "best_fit",
+      },
+    });
+    const { runId } = await buyer.mutation(internal.buyerMutations.startRun, {
+      input: { request: ref, clientKey: "start" },
+    });
+    let stage = "";
+    for (let i = 0; i < 150; i++) {
+      await t.finishInProgressScheduledFunctions();
+      await vi.advanceTimersByTimeAsync(100);
+      const view = await buyer.query(api.buyer.getBuyerRun, {
+        requestId: ref.id,
+        runId,
+      });
+      stage = view.stage;
+      if (["results", "failed", "no_match"].includes(stage)) {
+        expect(stage).toBe("results");
+        expect(view.offers.length).toBeGreaterThan(0);
+        if (example.category === "laptop")
+          expect(view.offers[0].products).toHaveLength(2);
+        break;
+      }
+    }
+    expect(stage).toBe("results");
+  }
+});
+test("authoritative exact-product contradictions invoke shared assessment and prevent selection", async () => {
+  const state = await resultRun();
+  const row = await state.t.run(async (ctx) => {
+    await ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.view.runId)!, {
+      stage: "researching",
+    });
+    const offer = await ctx.db
+      .query("buyerOffers")
+      .withIndex("by_run_effective", (q) =>
+        q.eq("runId", state.view.runId).eq("effective", true),
+      )
+      .first();
+    const variant = await ctx.db
+      .query("variants")
+      .withIndex("by_variantId", (q) =>
+        q.eq("variantId", offer!.card.products[0].variantId),
+      )
+      .unique();
+    await ctx.db.patch(variant!._id, { syntheticProduct: false });
+    const id = await ctx.db.insert("buyerResearch", {
+      runId: state.view.runId,
+      variantId: variant!.variantId,
+      digest: "known-input",
+      state: "acquiring",
+      providerRunId: "expected",
+      providerBuild: "pinned",
+      input: {
+        urls: ["https://example.com/exact-product"],
+        syntheticProduct: false,
+      },
+      deadlineAt: Date.now() + 60000,
+      createdAt: Date.now(),
+    });
+    return { id, variantId: variant!.variantId, offer: offer!.data.offer };
+  });
+  await state.t.mutation(internal.buyerEvidence.complete, {
+    researchJobId: String(row.id),
+    result: {
+      status: "completed",
+      providerRunId: "expected",
+      build: "pinned",
+      evidence: [
+        {
+          id: "source-1",
+          variantId: row.variantId,
+          applicability: "exact_variant",
+          sourceType: "manufacturer",
+          url: "https://example.com/exact-product",
+          sourceDate: null,
+          retrievedAt: Date.now(),
+          claim: "This exact product has a different OS.",
+          excerpt: "The source identifies Linux.",
+          sourceVerifiedPurchaseLabel: null,
+          verification: "contradicted",
+          providerRunId: "expected",
+          providerBuild: "pinned",
+          duplicateGroup: "manufacturer",
+        },
+      ],
+      facts: [
+        {
+          evidenceId: "source-1",
+          fieldId: "osFamily",
+          value: "Linux",
+          unit: null,
+        },
+      ],
+    },
+  });
+  await state.t.mutation(internal.buyerWorkflow.publishResults, {
+    runId: state.view.runId,
+  });
+  const view = await state.buyer.query(api.buyer.getBuyerRun, {
+    requestId: state.ref.id,
+    runId: state.view.runId,
+  });
+  expect(
+    view.offers.some((o) => o.products[0].variantId === row.variantId),
+  ).toBe(false);
+  await expect(
+    state.buyer.mutation(internal.buyerMutations.selectAndReserve, {
+      input: {
+        request: state.ref,
+        runId: state.view.runId,
+        offer: row.offer,
+        clientKey: "blocked",
+      },
+    }),
+  ).rejects.toThrow();
+});

@@ -11,7 +11,9 @@ export const buyerTables = {
     activeRunId: nullableString,
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_owner", ["ownerId", "updatedAt"]),
+  })
+    .index("by_owner", ["ownerId", "updatedAt"])
+    .index("by_updated", ["updatedAt"]),
   buyerRequestVersions: defineTable({
     requestId: v.string(),
     version: v.number(),
@@ -107,6 +109,7 @@ export const buyerTables = {
     digest: v.string(),
     runId: v.string(),
     data: payload,
+    facts: v.optional(payload),
     retrievedAt: v.number(),
   })
     .index("by_digest_time", ["digest", "retrievedAt"])

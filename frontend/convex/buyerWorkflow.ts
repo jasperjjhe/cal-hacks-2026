@@ -1,4 +1,9 @@
-import { WorkflowManager, vWorkflowId } from "@convex-dev/workflow";
+import {
+  cancel,
+  type WorkflowId,
+  WorkflowManager,
+  vWorkflowId,
+} from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
 import { internalMutation } from "./_generated/server";
 import { internal, components } from "./_generated/api";
@@ -88,21 +93,23 @@ export const runBuyer = workflow
       internal.buyerEvidence.prepareResearch,
       { runId },
     );
-    for (const id of research) {
-      let pending = await step.runAction(
-        internal.buyerEvidence.acquire,
-        { researchJobId: id },
-        { retry: false },
-      );
-      for (let i = 0; pending && i < 8; i++) {
-        await step.sleep(i === 0 ? 2000 : i === 1 ? 5000 : 10000);
-        pending = await step.runAction(
+    await Promise.all(
+      research.map(async (id) => {
+        let pending = await step.runAction(
           internal.buyerEvidence.acquire,
-          { researchJobId: id, poll: true },
+          { researchJobId: id },
           { retry: false },
         );
-      }
-    }
+        for (let i = 0; pending && i < 8; i++) {
+          await step.sleep(i === 0 ? 2000 : i === 1 ? 5000 : 10000);
+          pending = await step.runAction(
+            internal.buyerEvidence.acquire,
+            { researchJobId: id, poll: true },
+            { retry: false },
+          );
+        }
+      }),
+    );
     const refill = await step.runMutation(
       internal.buyerEvidence.refillResearch,
       { runId },
@@ -414,7 +421,16 @@ export const publishResults = internalMutation({
     for (const row of rows) {
       const data = contracts.OfferVersion.parse(row.data);
       const card = contracts.OfferCard.parse(row.card);
+      const merchant = await ctx.db
+        .query("merchants")
+        .withIndex("by_merchantId", (q) => q.eq("merchantId", row.merchantId))
+        .unique();
       const valid =
+        !!merchant &&
+        merchant.enabled &&
+        !merchant.paused &&
+        merchant.currentPolicyId === data.policy.id &&
+        merchant.currentPolicyVersion === data.policy.version &&
         data.policyValid &&
         data.requirementsValidExceptBudget &&
         data.affordable &&
@@ -424,6 +440,10 @@ export const publishResults = internalMutation({
         data: { ...data, selectable: valid },
         card: {
           ...card,
+          evidenceStatus:
+            card.evidenceStatus === "pending"
+              ? "unavailable"
+              : card.evidenceStatus,
           selectable: valid,
           unavailableReason: valid
             ? null
@@ -482,5 +502,48 @@ export const workflowFinished = internalMutation({
           correlationId: String(run._id),
         },
       });
+  },
+});
+
+export const timeout = internalMutation({
+  args: { runId: v.string() },
+  handler: async (ctx, { runId }) => {
+    const run = await currentRun(ctx, runId);
+    if (
+      !run ||
+      ["results", "no_match", "cancelled", "failed"].includes(run.stage) ||
+      run.deadlineAt > Date.now()
+    )
+      return;
+    if (run.workflowId)
+      await cancel(ctx, components.workflow, run.workflowId as WorkflowId);
+    const jobs = await ctx.db
+      .query("buyerJobs")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .take(100);
+    for (const job of jobs)
+      if (!["completed", "failed", "stale", "cancelled"].includes(job.state)) {
+        await ctx.db.patch(job._id, { state: "stale" });
+        await ctx.scheduler.runAfter(0, internal.buyerJobs.cancelProvider, {
+          jobId: String(job._id),
+        });
+      }
+    const rows = await ctx.db
+      .query("buyerOffers")
+      .withIndex("by_run_effective", (q) =>
+        q.eq("runId", runId).eq("effective", true),
+      )
+      .take(6);
+    for (const row of rows)
+      if (row.card.evidenceStatus === "pending")
+        await ctx.db.patch(row._id, {
+          card: { ...row.card, evidenceStatus: "unavailable" },
+        });
+    await ctx.db.patch(run._id, {
+      stage: "researching",
+      partial: true,
+      updatedAt: Date.now(),
+    });
+    await ctx.runMutation(internal.buyerWorkflow.publishResults, { runId });
   },
 });

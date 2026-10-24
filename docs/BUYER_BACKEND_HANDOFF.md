@@ -1,117 +1,132 @@
-# Dev B buyer backend: local foundation
+# Dev B buyer backend handoff
 
-## Confirmed working decisions
+The user froze the contracts and authorized a complete backend on `dev`, followed
+by user-filled external integrations. Convex account/cloud deployment being
+postponed did not block implementation. The default interface now uses a real
+local Convex deployment; `/mock` is explicitly the old offline preview.
 
-- Dev B works on `dev`; Dev S works independently and integrates later.
-- CREAO is selected for buyer intake, moderation and evidence summarization.
-  Seller provider selection remains S's responsibility.
-- Convex deployment/account setup is deferred. No deployed backend exists.
-- The original split leaves production frontend ownership with the UI team. The
-  user subsequently authorized Dev B to build a working buyer-interface mock
-  from the changing Figma design. `frontend/README.md` records that implementation
-  and its local-only limitations. Simulation remains the checkout default.
+## Authoritative implementation
 
-## Current implementation
+- `frontend/src/contracts/index.ts`: strict runtime wire schemas, inferred types
+  and exported JSON Schema. No private request is spread into seller inputs.
+- `frontend/convex/buyer.ts`: authenticated public buyer actions and queries.
+- `buyerMutations.ts`, `buyer/checkout.ts`: transactional writes and exact quote
+  approval. Public commands wrap one internal transaction and catch errors
+  outside it, so a failed swap cannot commit an earlier release.
+- `buyerWorkflow.ts`: durable matching → optional council → one sealed final-price
+  round → research → checked results. Global/phase caps, stale-job rejection,
+  cancellation and partial outcomes are server-owned.
+- `buyerJobs.ts`, `buyerRoles.ts`: scoped intake, moderator, seller and evidence
+  summary jobs; provider reference/digest validation; one bounded retry/repair.
+- `buyerEvidence.ts`: server source registry, exact/family applicability,
+  provenance, 24-hour cache, up to 8 URLs/40 excerpts per identity, 5 identities
+  including one bounded refill. Authoritative exact facts call S's `assessLine`;
+  contradictions block selection. Owner/family commentary cannot certify fit or
+  unit health. Source failure produces unavailable evidence, never fake reviews.
+- `buyer/inventory.ts`, `buyerExecution.ts`: S inventory helpers in the same
+  transaction as quotes/approval/orders; reserve/lock/sell/release, three-minute
+  quote expiry, unknown reconciliation and unique execution/order handling.
+- `buyerAdmin.ts`, `auth.ts`: anonymous buyers; internally provisioned Password
+  operators; no public signup or client-selected role/payment scenario.
+- `buyerMaintenance.ts`, `crons.ts`: seven-day cleanup after reconciliation.
+  Unresolved attempts/allocations stay locked; sold stock ledger remains counted.
+- `frontend/src/BackendApp.tsx`: backend subscriptions drive the default journey.
+  Local state is limited to editable form inputs, navigation, modal and comparison
+  selections. Browser state never authorizes stock or payment.
 
-`frontend/src/contracts/index.ts` is the runtime schema source. TypeScript types
-are inferred from it; `schema.json` is generated for worker consumers. Import
-types from this source rather than copying interfaces into a second package.
-Objects reject unknown fields and all wire fields are required or explicitly
-nullable. Bounds on strings, collections and safe integer money are enforced.
+## Public API transport
 
-The contract subset covers requests, profiles, intake/drafts, offers, buyer views,
-evidence, quote/execution responses, and draft/confirmation commands. It is a
-**draft revision**, not a completed F0 freeze. Remaining seller catalog/policy,
-allocation, round, role-output and public API command schemas must be added with
-S's review before their boundaries are implemented. JSON Schema validates shape;
-it does not replace ownership, provenance, category or current-state checks.
+Convex actions accept `{input: payload}`; `payload` is the frozen command object.
+They return `{ok:true,value}` or `{ok:false,error:ApiError}`. Queries take their
+named fields directly. This envelope keeps transaction errors structured without
+catching them inside a write transaction.
 
-`frontend/src/backend/buyer/requests.ts` validates confirmation structure,
-deadline, unique line/requirement IDs and separate target consent. It requires an
-injected S-owned profile validator; it does not supply a permissive default.
-The seller projection selects only the confirmed brief fields, excluding private
-ceiling, raw messages and origins. It replaces the use-case summary with a neutral
-category/quantity template so copied private prose cannot enter that field.
-Profile-backed, reviewed public goal templates remain needed for richer context;
-S must still validate requirement fields/values before confirmation. Indirect-budget and prompt-injection acceptance cases remain
-required for the future intake/confirmation implementation.
+Actions: `saveDraft`, `interpretDraft`, `confirmRequest`, `startRun`, `cancelRun`,
+`reviseRequest`, `selectAndReserve`, `approveAndExecute`, `setSort`, `toggleSaved`,
+`removeSaved`. Queries: `getDraft`, `getConfirmedRequest`, `getBuyerRun`,
+`getRunEvents`, `getEvidence`, `getPurchase`, `getProfiles`, `listRequests`,
+`listSaved`, `listOrders`. Query denials throw a safe domain error and the UI has
+an error boundary for unavailable requests.
 
-`comparison.ts` implements the four documented stable orders and seller-diverse
-shortlist, excluding expired/nonselectable/failed-hard-check offers. It expects
-one effective version per offer, current S assessments and B affordability.
-Mixed scored/unscored snapshots fail instead of producing inconsistent sorting.
-It neither assesses product facts nor authorizes selection or stock holds.
+Expected draft/request versions guard edits. `startRun`, selection and approval
+require a caller-generated command key. Same key + changed payload is rejected;
+replaying selection does not extend expiry. A second approval key for the same
+quote still returns the same execution. Internal completions are never public
+callbacks; stale request/run/phase/provider references cannot promote offers.
 
-`integrations/agents.ts` defines the internal provider port and the CREAO buyer
-role selection. It contains **no live transport**, invented runtime endpoint,
-provider credentials or asserted model. Fixture mode is separate from provider
-identity. Context7 returned no relevant CREAO library; the official documentation
-entry serves a JavaScript shell, so its actual runtime API still needs inspection
-and a project-specific smoke test before implementation.
+## Dev S integration
 
-## Local commands
+Imported S source from `origin/feature/seller-side` commit `37d7ea5`, without
+merging or changing that branch. Buyer mutations reuse `loadSnapshots`,
+`getPolicy`, `toPolicy`, `assessLine`, `validateSellerProposal`,
+`minimumUnitCents`, `reserveInTransaction` and
+`transitionAllocationInTransaction`. The public buyer fit shape is an explicit
+adapter of S's assessment, not a separate fit algorithm.
 
-Use Node 24 (`frontend/.nvmrc` pins 24.18.0; package engines allow compatible 24.x).
-This machine also has compatible 24.21.0 installed. From `frontend/`:
+Integration changes to reconcile when the seller branch merges:
 
-```sh
-npm run security:dependencies
-npm ci --ignore-scripts
-npm run contracts:export # after schema changes; commit the generated export
-npm run contracts:check
-npm run test:buyer
-npm run lint
-npm run build
-```
+- Unified schema includes auth, buyer and seller tables; added quote lookup and
+  buyer retention indexes. Convex `_generated` files are CLI-generated.
+- Exported S snapshot/policy helpers. Expired unapproved holds no longer count.
+- `deferPromotion` stages final offers without updating the candidate's effective
+  offer or emitting accepted-price events until the round closes.
+- Explicit `decline` transition releases execution-locked allocations only after
+  a definite decline. Repeated transitions are guarded by B.
+- Unknown soft preferences stay in the denominator; multi-line fit is weighted
+  globally. Unit conversion reuses S's numeric unit registry.
+- Related accessories require exact primary compatibility; combined quantities
+  for one listing cannot exceed stock. Factual claims require scoped source IDs.
+- Password memberships use the stable authenticated user ID portion of the
+  subject, so refreshing a session does not lose merchant ownership.
+- Quotes compare current product facts as well as listing/policy versions before
+  execution-locking; locked execution continues using its approved snapshot.
 
-`npm run ci` additionally runs signatures, audit and repository security gates.
-Security boundary tests remain dependency-free so CI can run them before
-installation; buyer tests run after dependency installation. Zod 4.6.7 is pinned
-in the existing frontend lockfile and subject to the same seven-day policy.
-No extra package manager, root lockfile or second install tree was introduced.
+S still owns future catalog/policy improvements and the seller dashboard. Existing
+fixture identities are synthetic, including laptop aliases. Add a genuinely
+identified product via S's catalog before claiming live exact-product evidence.
+Included-charger facts must be seeded explicitly before asserting inclusion;
+missing facts are not inferred from product reviews. These are catalog/configuration
+requirements for an externally evidenced demo, not a buyer persistence blocker.
 
-## Dev S integration agreement still needed
+## Final adapter fill-in work
 
-Review the draft schema source and one laptop/clothing payload in
-`frontend/src/contracts/fixtures.ts`. In particular, agree profile IDs/field units
-and these interfaces from implementation document sections 3 and 6:
+Use `frontend/convex/integrations/buyerTools.ts`:
 
-- `prepareSellerJob`, `validateAndStoreProposal`, and `assessOffer`.
-- `reserveInTransaction` and `transitionAllocationInTransaction`.
-- Final-bid private staging and atomic promotion on B's round closure.
+1. `invokeCreao`, `pollCreao`, `cancelCreao`: implement the verified project API.
+   `ToolJob` contains immutable role-scoped inputs, job ID, deadline and expected
+   provider reference. Keep role outputs strict. Use the job ID as the vendor
+   idempotency key. Do not pass private buyer conversation/ceiling to seller roles.
+   The seller branch also has provider port utilities under `convex/integrations`;
+   coordinate transport reuse rather than guessing CREAO endpoints.
+2. `startEvidence`, `pollEvidence`: implement the pinned Actor and expected
+   dataset lookup. `BUYER_EVIDENCE_REGISTRY` is server JSON:
+   `{"build":"verified-build-id","sources":[{"id":"source-id","variantId":"exact-id","url":"https://approved.example/product"}]}`.
+   Enforce redirect/DNS/private-network rules inside the actual acquisition
+   adapter/Actor. Return the expected run/build and applicable Evidence; optional
+   structured facts require exact authoritative source evidence IDs. Do not use
+   guessed webhook datasets, family pages as exact facts, or reviews as unit
+   diagnostics. Synthetic products never receive manufactured owner reports.
+3. `executePayment`, `reconcilePayment`: simulation already works. Enable Visa
+   sandbox only after supported execution/status lookup, test-merchant mapping
+   and idempotency are demonstrated. External mode remains blocked until that
+   final implementation explicitly changes the server gate. Never replace a
+   timeout with a decline or start another attempt for an unknown purchase.
 
-S owns the stock/pricing/eligibility algorithms. B owns the surrounding mutations,
-affordability and lifecycle. Allocation helpers must run inside the same Convex
-transaction as the quote/approval/order write; never replace this with successive
-network calls. The pure functions here are not a persistence layer or temporary
-database.
+After implementing the agent adapter, select live mode internally with
+`buyerAdmin:configureDemo` (`agents:"live"`) and `BUYER_AGENT_MODE=live` for intake.
+Server-only `paymentScenario` supports `success`, `declined`,
+`unknown_then_success`; it cannot be selected through buyer commands. Do not
+claim live provider use simply because an adapter file or environment name exists.
 
-## Next implementation sequence
+## Verification and operating notes
 
-1. Complete F0 schemas/fixtures with S review, then configure the Convex schema,
-   Auth skeleton, Workflow component and generated bindings. No frontend auth
-   layout changes are part of B's work.
-2. B1: implement authenticated persistent drafts, versioned confirmation, safe
-   public projection, run stages, rate limits, stale completion checks and fixture
-   dispatch. Test cross-buyer reads, cancellation and reload through real functions.
-3. B2: integrate S's real transactional stock helpers for quote, hold, exact-hash
-   approval, idempotent simulation, decline and unknown reconciliation.
-4. Wire tested CREAO operations behind the port. Obtain project/agent identifiers
-   and server-only credentials privately when a concrete live operation is ready.
-   Verify supported non-Gemini reasoning and accepted-versus-completed semantics.
-5. B3: council/conditional sealed round, real Apify evidence and bounded refill.
-   Supply the full UI fixture bundle and live development API to the UI team.
+See `frontend/README.md` for exact local startup and checks. Keep `convex dev`
+running for the local DB; `--once` stops its local process after deployment. The
+local browser has completed one persisted simulated order and reload recovery.
+Automated backend tests exercise function handlers plus Workflow components;
+external adapters remain intentionally unconfigured and unverified.
 
-Contract amendments proposed for F0: `BuyerRunView.modes.agents` admits `mixed`
-to label mixed fixture/live work honestly. This is additive to the handoff's type
-snippet and implements its explicit provenance requirement. The sort mutation,
-event pagination envelope/cursor, full quote variant/condition snapshot and
-merchant analytics response still require agreement; no endpoint has been
-invented for these.
-
-## Verification boundary
-
-The local tests exercise pure validation, privacy projection and deterministic
-comparison. They do not prove Convex authentication, atomic stock, durable jobs,
-CREAO/Apify access or purchase behavior. Those acceptance gates remain open.
-Nothing has been pushed, deployed, published or communicated to Dev S externally.
+A deployed demo still needs the team's Convex hosting choice, authentication keys,
+public frontend URL and external provider configuration. There is no public
+production deployment or real payment claim. Guest recovery across browsers and
+optional sponsor add-ons remain outside the core scope.
