@@ -938,6 +938,9 @@ Technical reference checks:
 - [CREAO developer documentation](https://developer.creao.ai/docs/v2/agents/create): a primary documentation entry was found. Context7 did not return a relevant CREAO library. This plan therefore does not invent a runtime endpoint or pin a vendor payload; the team must verify execution of an existing configured role, not confuse agent creation with a shopping-agent run.
 - [Convex actions](https://docs.convex.dev/functions/actions), [Workflow component](https://www.convex.dev/components/workflow), [Convex Auth](https://labs.convex.dev/auth/setup), [Apify runs](https://docs.apify.com/api/v2/actors-runs-post): retained architectural references from v4; exact installed versions and account behavior must be tested during F0/provider smoke work. No SDK-specific calling code is certified here.
 - [Visa Intelligent Commerce](https://github.com/visa/ai/wiki/Visa-Intelligent-Commerce), [Hive prize listing](https://hive.hackberkeley.org/prizes), [Devpost](https://cal-hacks-13-0.devpost.com/): contextual references. Eligibility guidance supplied by the team overrides the old plan's blocking Fetch assumption.
+- [npm release-age and install-script configuration](https://docs.npmjs.com/cli/using-npm/config/), [npm provenance/signature verification](https://docs.npmjs.com/viewing-package-provenance/), [GitHub secure-use guidance](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use), and [CISA's npm compromise response](https://content.govdelivery.com/accounts/USDHSCISA/bulletins/3f408db): basis for the repository's seven-day minimum cooldown, script isolation, immutable Action pins, least-privilege workflows, credential rotation and clean rebuild rules.
+- [Singapore CSA's August 2026 Shai-Hulud/ChainDrop advisory](https://www.csa.gov.sg/alerts-and-advisories/advisories/ad-2026-009/): source for the versioned emergency blocklist and current incident-response indicators; the blocklist is not treated as complete protection.
+- [Fetch.ai CalHacks 13.0](https://www.fetch.ai/events/calhacks-13-0), [Cartesia docs](https://docs.cartesia.ai/), [Apify](https://apify.com/), and [Coinbase x402/Bazaar docs](https://docs.cdp.coinbase.com/api-reference/v2/rest-api/x402-facilitator/bazaar-mcp-server): current sponsor/technology references used for the §20 strategy. The supplied sponsor table remains the submission source of truth until organizer pages are reconciled.
 - Product identities: [Apple M2](https://support.apple.com/en-us/111867), [Apple M3](https://support.apple.com/en-us/118551), [Apple M4](https://support.apple.com/en-us/122209), [Lenovo US model](https://psref.lenovo.com/Detail/2475?M=21ML0053US). Retained source identifiers, not freshly verified availability or actual stock.
 
 **Verified in preparing this handoff:** project contained the two PDFs and Git metadata, without an existing application; all 29 original pages and 36 unique links were copied into Markdown; the supplied draft and subsequent corrections were incorporated. The original PDFs were not modified. Contract snippets and fixtures are drafted specifications, not an implemented backend or passing application tests.
@@ -945,3 +948,64 @@ Technical reference checks:
 **Implementation gates remaining:** freeze executable schemas; pick Fetch/CREAO role wiring and supported non-Gemini reasoning; test live provider/source access; run the acceptance suite; connect the UI team's frontend; map deployment to Mana. No repository push, external ticket, publication, account setup, wallet operation or deployment is performed by this plan.
 
 **TLDR:** S owns seller data, validation, inventory and seller agents; B owns buyer data, orchestration, evidence and approved execution. Shared schemas, fixtures and transaction helpers join the halves. UI/Figma owns the frontend. Fetch/CREAO assignment and Mana specifics stay with the team; core backend implementation can proceed from F0.
+
+## 19. Security and supply-chain review amendment (2026-10-24)
+
+The handoff's application-level controls in §12 are necessary but were not sufficient for a build that installs JavaScript dependencies. The repository now adds a separate release gate in `SECURITY.md`, `security/`, `frontend/.npmrc`, `frontend/scripts/` and `.github/workflows/`.
+
+### 19.1 Seven-day package rule
+
+The requested “7 day rule” is implemented as a **minimum release age / cooldown**: every exact package version in `frontend/package-lock.json`, including transitive and optional platform packages, must have been published at least seven full UTC days before CI installs it. A maximum age rule would reject old, stable packages and would increase supply-chain risk; it is not the security interpretation used here.
+
+The rule is enforced twice:
+
+1. npm's official `min-release-age=7` setting in `frontend/.npmrc` constrains resolution.
+2. `frontend/scripts/check-dependencies.mjs` queries the approved registry's publication timestamp for every locked `name@version`, fails closed on missing/outage/ambiguous metadata, checks registry-only HTTPS tarballs and `sha512` integrity, blocks reviewed compromised versions, and rejects unreviewed lifecycle scripts.
+
+Boundary tests cover exactly seven days, one millisecond younger, one millisecond older, future timestamps and invalid timestamps. CI runs the check before `npm ci --ignore-scripts`. A local `--offline` mode exists only for structural diagnostics and is rejected in CI.
+
+The initial lockfile was re-resolved under the seven-day cooldown. The current tree passes the registry age check, npm signature/provenance verification, high-severity audit, lint and build. The only lifecycle-script exception is the exact optional Darwin-only `fsevents@2.3.3` entry, which is version-allowlisted and does not run on the Linux CI runner or Windows demo host.
+
+### 19.2 Shai-Hulud-style hardening
+
+- `npm ci --ignore-scripts` is mandatory; provider, cloud, GitHub, npm, Convex, Mana and wallet credentials are absent from install/build jobs.
+- Every third-party GitHub Action is pinned to a full commit SHA. Workflows use read-only permissions, do not persist checkout credentials or dependency caches, avoid privileged fork-PR triggers, generate an SBOM and run signatures, audit and dependency-review gates.
+- `security/known-compromised-npm.json` is a small emergency blocklist tied to the current government advisory. It is deliberately additive: it cannot replace the age gate, integrity checks, signatures, audit, malware review or incident response.
+- Suspected exposure means stop installing/building, revoke and rotate tokens/keys/wallet signers, audit workflows/webhooks/OAuth apps and outbound traffic, discard potentially tainted caches, and rebuild from a clean checkout and runner. Do not “repair” a compromised environment by running another install.
+- Model output, crawled pages, callbacks and payment responses remain untrusted application input. The existing job scope, schema, SSRF, egress, idempotency, quote-hash, rate-limit, source-allowlist and unknown-state rules remain mandatory.
+
+The current repository is still a frontend scaffold; these controls do not claim that Convex, Fetch.ai, CREAO, Visa or Mana are already live. Backend work must implement the handoff contracts before the demo claims those integrations.
+
+## 20. Sponsor-track maximization plan
+
+The stack should maximize credible track coverage along one buyer journey, not add disconnected logos. A sponsor is entered only when its technology does real work in the running demo and the README records the exact feature, configuration, evidence and limitation.
+
+### 20.1 Recommended core path
+
+| Technology / track | Concrete role in BuyerUnion | Required proof and security boundary |
+|---|---|---|
+| Convex | Authoritative reactive database, typed functions, Auth, durable Workflows and live run progress. | A reloadable run survives retries/restarts; reservations are atomic; every query/mutation checks authenticated ownership; no second authoritative database. |
+| Fetch.ai | A real merchant/supplier agent (or agent network) produces a scoped proposal using the SellerBrief and returns provider provenance. | A reachable agent, actual request/response, job identity, bounded tools and a failure/retry demo. The official Fetch prize page currently lists a different prize breakdown than the supplied table; confirm with organizers before submission. |
+| CREAO | A real coordinator, negotiation or buyer-intake role behind the same `AgentProvider` contract. | A real run with the configured agent ID/project, async status/poll or callback deduplication, schema validation and visible safe events. Do not count agent creation or a peripheral summary as product use. |
+| Coinbase x402 | A bounded agent payment for one machine-to-machine product-evidence lookup, separate from buyer checkout. | Real supported test payment, typed evidence-payment receipt, fixed destination/network/token, per-request and aggregate caps, one attempt and reconciliation. Never call this a Visa purchase. |
+| Visa | The primary reimagined-shopping journey: compare validated offers, reserve, approve and complete simulation or a truthful Visa sandbox operation. | Quote hash, test-merchant mapping, duplicate protection, safe status lookup and visible distinction between simulation, tokenization and payment. |
+| Mana | Host the public demo and at least one real app/agent surface; use Mana pages/chats as part of the build record. | A working public link, exact runtime mapping, startup/health evidence and public Mana links requested by the sponsor. Do not assume Mana supplies Convex persistence or agent secrets. |
+
+### 20.2 Highest-value additions that fit the same path
+
+1. **Apify / Best Actor.** Promote the existing evidence service to a first-party `BuyerUnion Evidence Actor`: accept only server-issued product identity and approved source IDs, enforce URL/redirect/SSRF controls, normalize source evidence and return an input digest. This is already aligned with §10 and can support both the general Apify track and the Best Actor prize without inventing a second crawler architecture.
+2. **CRS Credit API.** Add an opt-in, sandbox-only “trust and fraud check” for a high-value purchase or merchant operator action. Use only supplied test identities, store a minimal derived risk outcome, never make a credit-eligibility or protected-class decision, and require explicit consent. This creates a meaningful CRS Financial AI Agent / Identity-Fraud story and strengthens Visa trust/responsibility.
+3. **Cartesia plus Moss.** If the team can make voice the default flow, use Cartesia for low-latency speech input/output and Moss for a personal voice agent that remembers the current shopping task and acts through the same scoped tools. Voice must drive intake, clarification and status—not just narrate a screen. Do this only after the text path is reliable and after current APIs/eligibility are confirmed.
+4. **Factory Droid SDK.** Add a scheduled or operator-triggered “merchant operations droid” that audits a listing against evidence, pricing policy and inventory, then shows a plan/diff and waits for approval before changing a listing. This is a strong Factory fit because Droid performs visible work with bounded access; it must be a real runtime integration, not a coding assistant.
+5. **Figma and Notability.** These are process/evidence tracks rather than backend dependencies. Keep the actual Figma design evolution and connected implementation; keep Notability notes with sketches, diagrams, audio, PDFs and dated decisions. Link the artifacts in the submission and show how they changed the build.
+
+### 20.3 Deliberately defer or avoid
+
+- **SpacetimeDB:** Convex already owns reactive state and workflows. Adding a second authoritative real-time database would create split-brain order/reservation risk. Reconsider only if the product is intentionally re-scoped around a Spacetime-backed live multi-user market projection.
+- **Meta, Microsoft, Anthropic and Bitdeer:** target their judging criteria through the real commerce problem, responsible AI, customer evidence and production path; do not add another model/provider unless it has a unique, live role. More model logos would weaken the Fetch/CREAO story.
+- **Nessie, Elastic, Bright Data, SpaceXAI, Atlassian and unrelated hosting:** no current core role is strong enough. Add only with a sponsor-approved feature that survives the “would the product still need it?” test.
+- **Armadin / Best Security Hack:** the new controls provide a credible foundation, but enter only with a live adversarial demo showing install-script isolation, callback forgery rejection, secret rotation/rebuild and recovery—not just a policy document.
+
+### 20.4 Demo and submission evidence ledger
+
+For every entered track, store one short record: `technology`, `feature`, `live URL/run ID`, `exact code path`, `security mode`, `what is simulated`, and `known limitation`. The two-minute demo should show one complete shopping flow, one visible agent plan/tool result, one security or failure recovery moment, and the exact distinction between real vendor operations, sandbox operations and deterministic fixtures. This prevents a prize claim from relying on a logo, key, generated code or a slide-only integration.

@@ -1,0 +1,4 @@
+# Security-sensitive changes should request review from the repository owner.
+/.github/ @jasperjjhe
+/security/ @jasperjjhe
+/SECURITY.md @jasperjjhe
