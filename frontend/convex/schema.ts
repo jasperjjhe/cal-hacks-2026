@@ -182,8 +182,23 @@ export default defineSchema({
     inputDigest: v.string(),
     inputRef: v.string(),
     deadlineAt: v.number(),
-    status: v.union(v.literal('created'), v.literal('pending'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'), v.literal('stale')),
+    status: v.union(
+      v.literal('created'),
+      v.literal('starting'),
+      v.literal('pending'),
+      v.literal('polling'),
+      v.literal('ambiguous'),
+      v.literal('completed'),
+      v.literal('failed'),
+      v.literal('cancelled'),
+      v.literal('stale'),
+    ),
     providerRunId: nullableString,
+    providerModel: nullableString,
+    providerElapsedMs: nullableNumber,
+    attemptCount: v.number(),
+    lastErrorCode: nullableString,
+    lastErrorRetryable: v.union(v.boolean(), v.null()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -191,6 +206,14 @@ export default defineSchema({
     .index('by_merchantId_and_status', ['merchantId', 'status'])
     .index('by_providerRunId', ['providerRunId'])
     .index('by_runId_and_phaseId', ['runId', 'phaseId']),
+
+  sellerJobInputs: defineTable({
+    jobId: v.string(),
+    brief: v.any(),
+    briefDigest: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_jobId', ['jobId']),
 
   candidates: defineTable({
     candidateId: v.string(),
@@ -278,7 +301,22 @@ export default defineSchema({
 
   sellerEvents: defineTable({
     merchantId: v.string(),
-    eventType: v.union(v.literal('listing_published'), v.literal('policy_published'), v.literal('merchant_paused'), v.literal('merchant_resumed'), v.literal('proposal_received'), v.literal('proposal_rejected'), v.literal('offer_accepted'), v.literal('allocation_changed')),
+    eventType: v.union(
+      v.literal('listing_published'),
+      v.literal('policy_published'),
+      v.literal('merchant_paused'),
+      v.literal('merchant_resumed'),
+      v.literal('proposal_received'),
+      v.literal('proposal_rejected'),
+      v.literal('offer_accepted'),
+      v.literal('allocation_changed'),
+      v.literal('provider_started'),
+      v.literal('provider_pending'),
+      v.literal('provider_completed'),
+      v.literal('provider_failed'),
+      v.literal('provider_ambiguous'),
+      v.literal('provider_cancelled'),
+    ),
     jobId: nullableString,
     candidateId: nullableString,
     offerId: nullableString,

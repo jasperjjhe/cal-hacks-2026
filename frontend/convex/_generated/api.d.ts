@@ -18,6 +18,7 @@ import type * as lib_sellerFixtures from "../lib/sellerFixtures.js";
 import type * as lib_sellerInventory from "../lib/sellerInventory.js";
 import type * as lib_sellerValidation from "../lib/sellerValidation.js";
 import type * as seller from "../seller.js";
+import type * as sellerAgent from "../sellerAgent.js";
 import type * as sellerAuth from "../sellerAuth.js";
 import type * as sellerInternal from "../sellerInternal.js";
 import type * as sellerSeed from "../sellerSeed.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sellerInventory": typeof lib_sellerInventory;
   "lib/sellerValidation": typeof lib_sellerValidation;
   seller: typeof seller;
+  sellerAgent: typeof sellerAgent;
   sellerAuth: typeof sellerAuth;
   sellerInternal: typeof sellerInternal;
   sellerSeed: typeof sellerSeed;

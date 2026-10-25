@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 
 import {
   assertSellerBriefSafe,
+  assertNoPrivateSellerFields,
   parseSellerDecision,
   safeReason,
   type CatalogSnapshot,
@@ -41,6 +42,7 @@ interface PrepareSellerJobArgs {
   inputDigest: string
   inputRef: string
   deadlineAt: number
+  brief?: unknown
 }
 
 interface ValidateProposalArgs {
@@ -48,6 +50,9 @@ interface ValidateProposalArgs {
   brief: unknown
   decision: unknown
   mode?: OfferMode
+  providerRunId?: string | null
+  providerModel?: string | null
+  providerElapsedMs?: number | null
 }
 
 function requireBoundedString(value: string, field: string) {
@@ -154,7 +159,16 @@ async function loadSnapshots(ctx: SellerQueryCtx | SellerMutationCtx, merchantId
 async function recordInternalEvent(
   ctx: SellerMutationCtx,
   merchantId: string,
-  eventType: 'proposal_received' | 'proposal_rejected' | 'offer_accepted',
+  eventType:
+    | 'proposal_received'
+    | 'proposal_rejected'
+    | 'offer_accepted'
+    | 'provider_started'
+    | 'provider_pending'
+    | 'provider_completed'
+    | 'provider_failed'
+    | 'provider_ambiguous'
+    | 'provider_cancelled',
   payload: unknown,
   reasons: Array<{ code: string; field: string | null; message: string }> = [],
   jobId: string | null = null,
@@ -212,6 +226,7 @@ export const prepareSellerJob = internalMutation({
     inputDigest: v.string(),
     inputRef: v.string(),
     deadlineAt: v.number(),
+    brief: v.optional(v.any()),
   },
   handler: async (ctx: SellerMutationCtx, args: PrepareSellerJobArgs) => {
     for (const [field, value] of Object.entries({
@@ -263,6 +278,11 @@ export const prepareSellerJob = internalMutation({
       deadlineAt: args.deadlineAt,
       status: 'created',
       providerRunId: null,
+      providerModel: null,
+      providerElapsedMs: null,
+      attemptCount: 0,
+      lastErrorCode: null,
+      lastErrorRetryable: null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     })
@@ -286,12 +306,316 @@ export const prepareSellerJob = internalMutation({
         })
       }
     }
+    if (args.brief !== undefined) {
+      await storeSellerBrief(ctx, args.jobId, args.brief, args.requestId, args.requestVersion, args.runId)
+    }
     return { jobId: args.jobId, status: 'created' as const, replayed: false }
   },
 })
 
+async function storeSellerBrief(
+  ctx: SellerMutationCtx,
+  jobId: string,
+  value: unknown,
+  requestId: string,
+  requestVersion: number,
+  runId: string,
+) {
+  assertSellerBriefSafe(value)
+  const brief = value as SellerBrief
+  if (brief.request.id !== requestId || brief.request.version !== requestVersion || brief.runId !== runId) {
+    throwSellerError('WRONG_JOB_SCOPE', 'seller brief does not match the prepared job')
+  }
+  const briefDigest = await payloadDigest(brief)
+  const existing = await ctx.db
+    .query('sellerJobInputs')
+    .withIndex('by_jobId', (query) => query.eq('jobId', jobId))
+    .collect()
+  if (existing.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate input records')
+  if (existing.length === 1) {
+    if (existing[0].briefDigest !== briefDigest) throwSellerError('REPLAY_REJECTED', 'seller job input cannot be replaced')
+    return { replayed: true }
+  }
+  await ctx.db.insert('sellerJobInputs', {
+    jobId,
+    brief,
+    briefDigest,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  })
+  return { replayed: false }
+}
+
+function publicCatalogSnapshot(snapshot: CatalogSnapshot) {
+  return {
+    variant: snapshot.variant,
+    listing: {
+      listing: snapshot.listing.listing,
+      merchantId: snapshot.listing.merchantId,
+      variantId: snapshot.listing.variantId,
+      condition: snapshot.listing.condition,
+      unitId: snapshot.listing.unitId,
+      initialQuantity: snapshot.listing.initialQuantity,
+      referenceUnitCents: snapshot.listing.referenceUnitCents,
+      diagnosticAttributes: snapshot.listing.diagnosticAttributes,
+    },
+    availableQuantity: snapshot.availableQuantity,
+  }
+}
+
+function publicPolicy(policy: PricingPolicy | null) {
+  if (!policy) return null
+  return {
+    policy: policy.policy,
+    merchantId: policy.merchantId,
+    enabled: policy.enabled,
+    shippingCents: policy.shippingCents,
+    arrivalCalendarDays: policy.arrivalCalendarDays,
+    warrantyMonths: policy.warrantyMonths,
+    returnDays: policy.returnDays,
+  }
+}
+
+function providerInput(
+  job: {
+    jobId: string
+    runId: string
+    phaseId: string
+    role: SellerRole
+    merchantId: string
+    candidateIds: string[]
+  },
+  brief: SellerBrief,
+  merchant: { merchantId: string; displayName: string },
+  catalog: CatalogSnapshot[],
+  policy: PricingPolicy | null,
+) {
+  const input = {
+    schemaVersion: 1 as const,
+    job: {
+      jobId: job.jobId,
+      runId: job.runId,
+      phaseId: job.phaseId,
+      role: job.role,
+      merchantId: job.merchantId,
+      candidateIds: [...job.candidateIds],
+    },
+    merchant,
+    brief,
+    catalog: catalog.map(publicCatalogSnapshot),
+    policy: publicPolicy(policy),
+  }
+  assertNoPrivateSellerFields(input)
+  return input
+}
+
+export const attachSellerBrief = internalMutation({
+  args: { jobId: v.string(), brief: v.any() },
+  handler: async (ctx: SellerMutationCtx, args: { jobId: string; brief: unknown }) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) throwSellerError('WRONG_JOB_SCOPE', 'seller job was not found')
+    const job = jobs[0]
+    if (job.status !== 'created') throwSellerError('REPLAY_REJECTED', 'seller brief cannot be attached after dispatch')
+    return storeSellerBrief(ctx, job.jobId, args.brief, job.requestId, job.requestVersion, job.runId)
+  },
+})
+
+export const getProviderJob = internalQuery({
+  args: { jobId: v.string() },
+  handler: async (ctx: SellerQueryCtx, args: { jobId: string }) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) return null
+    const job = jobs[0]
+    const inputs = await ctx.db
+      .query('sellerJobInputs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .collect()
+    if (inputs.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate input records')
+    if (inputs.length === 0) return { job, brief: null, input: null }
+    const merchant = await requireMerchant(ctx, job.merchantId)
+    const policy = await getPolicy(ctx, { id: job.policyId, version: job.policyVersion })
+    const inputBrief = inputs[0].brief as SellerBrief
+    assertSellerBriefSafe(inputBrief)
+    const input = providerInput(
+      job,
+      inputBrief,
+      { merchantId: merchant.merchantId, displayName: merchant.displayName },
+      await loadSnapshots(ctx, job.merchantId),
+      toPolicy(policy),
+    )
+    return { job, brief: inputBrief, input }
+  },
+})
+
+export const claimSellerJob = internalMutation({
+  args: { jobId: v.string(), poll: v.optional(v.boolean()), reconcile: v.optional(v.boolean()) },
+  handler: async (
+    ctx: SellerMutationCtx,
+    args: { jobId: string; poll?: boolean; reconcile?: boolean },
+  ) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) return null
+    const job = jobs[0]
+    if (['completed', 'failed', 'cancelled', 'stale'].includes(job.status)) return null
+    if (Date.now() >= job.deadlineAt) {
+      await ctx.db.patch(job._id, { status: 'stale', updatedAt: Date.now() })
+      return null
+    }
+    const mode = args.reconcile ? 'reconcile' : args.poll ? 'poll' : 'start'
+    const allowed = mode === 'start'
+      ? job.status === 'created'
+      : mode === 'poll'
+        ? job.status === 'pending' && Boolean(job.providerRunId)
+        : job.status === 'ambiguous'
+    if (!allowed) return null
+    const inputs = await ctx.db
+      .query('sellerJobInputs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .collect()
+    if (inputs.length !== 1) throwSellerError('INVALID_INPUT', 'seller job has no unique sanitized input')
+    const nextStatus = mode === 'start' ? 'starting' : 'polling'
+    const attemptCount = job.attemptCount + 1
+    await ctx.db.patch(job._id, {
+      status: nextStatus,
+      attemptCount,
+      updatedAt: Date.now(),
+    })
+    await recordInternalEvent(ctx, job.merchantId, 'provider_started', {
+      provider: job.provider,
+      role: job.role,
+      mode,
+      attemptCount,
+    }, [], job.jobId)
+    return { ...job, status: nextStatus, attemptCount }
+  },
+})
+
+export const recordProviderResult = internalMutation({
+  args: {
+    jobId: v.string(),
+    status: v.union(v.literal('pending'), v.literal('failed')),
+    providerRunId: v.union(v.string(), v.null()),
+    providerModel: v.union(v.string(), v.null()),
+    providerElapsedMs: v.union(v.number(), v.null()),
+    errorCode: v.union(v.string(), v.null()),
+    errorRetryable: v.union(v.boolean(), v.null()),
+  },
+  handler: async (ctx: SellerMutationCtx, args) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) throwSellerError('WRONG_JOB_SCOPE', 'seller job was not found')
+    const job = jobs[0]
+    if (['completed', 'cancelled', 'stale'].includes(job.status)) return { replayed: true, retry: false, pending: false }
+    if (!['starting', 'polling'].includes(job.status)) throwSellerError('REPLAY_REJECTED', 'provider result arrived for an unclaimed seller job')
+    if (job.providerRunId && args.providerRunId && job.providerRunId !== args.providerRunId) {
+      throwSellerError('WRONG_JOB_SCOPE', 'provider run ID does not match the seller job')
+    }
+    const providerRunId = args.providerRunId ?? job.providerRunId
+    if (args.status === 'pending') {
+      if (!providerRunId) throwSellerError('INVALID_INPUT', 'pending provider result must include a run ID')
+      await ctx.db.patch(job._id, {
+        status: 'pending',
+        providerRunId,
+        providerModel: args.providerModel,
+        providerElapsedMs: args.providerElapsedMs,
+        lastErrorCode: null,
+        lastErrorRetryable: null,
+        updatedAt: Date.now(),
+      })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_pending', { providerRunId }, [], job.jobId)
+      return { replayed: false, retry: false, pending: true }
+    }
+    const errorCode = args.errorCode ?? 'PROVIDER_PROTOCOL'
+    const retryable = args.errorRetryable ?? false
+    const ambiguous = errorCode === 'PROVIDER_TIMEOUT' && !providerRunId
+    if (ambiguous) {
+      await ctx.db.patch(job._id, {
+        status: 'ambiguous',
+        providerModel: args.providerModel,
+        providerElapsedMs: args.providerElapsedMs,
+        lastErrorCode: errorCode,
+        lastErrorRetryable: retryable,
+        updatedAt: Date.now(),
+      })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_ambiguous', { errorCode }, [], job.jobId)
+      return { replayed: false, retry: false, pending: false, ambiguous: true }
+    }
+    const canRetry = retryable && job.attemptCount < 2
+    if (canRetry) {
+      await ctx.db.patch(job._id, {
+        status: providerRunId ? 'pending' : 'created',
+        providerRunId,
+        providerModel: args.providerModel,
+        providerElapsedMs: args.providerElapsedMs,
+        lastErrorCode: errorCode,
+        lastErrorRetryable: retryable,
+        updatedAt: Date.now(),
+      })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_failed', { errorCode, retryable: true }, [], job.jobId)
+      return { replayed: false, retry: true, poll: Boolean(providerRunId), pending: false }
+    }
+    await ctx.db.patch(job._id, {
+      status: 'failed',
+      providerRunId,
+      providerModel: args.providerModel,
+      providerElapsedMs: args.providerElapsedMs,
+      lastErrorCode: errorCode,
+      lastErrorRetryable: retryable,
+      updatedAt: Date.now(),
+    })
+    await recordInternalEvent(ctx, job.merchantId, 'provider_failed', { errorCode, retryable: false }, [], job.jobId)
+    return { replayed: false, retry: false, pending: false }
+  },
+})
+
+export const markSellerJobCancelled = internalMutation({
+  args: { jobId: v.string() },
+  handler: async (ctx: SellerMutationCtx, args: { jobId: string }) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) return { cancelled: false, replayed: false }
+    const job = jobs[0]
+    if (['completed', 'failed', 'cancelled', 'stale'].includes(job.status)) return { cancelled: false, replayed: true }
+    await ctx.db.patch(job._id, { status: 'cancelled', updatedAt: Date.now() })
+    await recordInternalEvent(ctx, job.merchantId, 'provider_cancelled', { provider: job.provider }, [], job.jobId)
+    return { cancelled: true, replayed: false }
+  },
+})
+
+function providerMetadata(args: ValidateProposalArgs) {
+  if (args.providerRunId === undefined && args.providerModel === undefined && args.providerElapsedMs === undefined) return {}
+  return {
+    providerRunId: args.providerRunId ?? null,
+    providerModel: args.providerModel ?? null,
+    providerElapsedMs: args.providerElapsedMs ?? null,
+    lastErrorCode: null,
+    lastErrorRetryable: null,
+  }
+}
+
 export const validateAndStoreProposal = internalMutation({
-  args: { jobId: v.string(), brief: v.any(), decision: v.any(), mode: v.optional(v.union(v.literal('fixture'), v.literal('live'), v.literal('cached'), v.literal('simulation'), v.literal('visa_sandbox'))) },
+  args: {
+    jobId: v.string(),
+    brief: v.any(),
+    decision: v.any(),
+    mode: v.optional(v.union(v.literal('fixture'), v.literal('live'), v.literal('cached'), v.literal('simulation'), v.literal('visa_sandbox'))),
+    providerRunId: v.optional(v.union(v.string(), v.null())),
+    providerModel: v.optional(v.union(v.string(), v.null())),
+    providerElapsedMs: v.optional(v.union(v.number(), v.null())),
+  },
   handler: async (ctx: SellerMutationCtx, args: ValidateProposalArgs) => {
     const jobs = await ctx.db
       .query('sellerJobs')
@@ -303,6 +627,14 @@ export const validateAndStoreProposal = internalMutation({
       if (job.status !== 'stale') await ctx.db.patch(job._id, { status: 'stale', updatedAt: Date.now() })
       return { ok: false as const, outcome: 'late', reasons: [safeReason('LATE_COMPLETION', 'seller completion arrived after the job deadline')] }
     }
+    if (args.providerRunId !== undefined) {
+      if (job.providerRunId && args.providerRunId && job.providerRunId !== args.providerRunId) {
+        return { ok: false as const, outcome: 'rejected', reasons: [safeReason('WRONG_JOB_SCOPE', 'provider run does not match the seller job')] }
+      }
+      if (!['starting', 'polling', 'pending'].includes(job.status)) {
+        return { ok: false as const, outcome: 'rejected', reasons: [safeReason('REPLAY_REJECTED', 'provider completion arrived outside the active job state')] }
+      }
+    }
     assertSellerBriefSafe(args.brief)
     const decision = parseSellerDecision(args.decision)
     if ('jobId' in decision && decision.jobId !== job.jobId) {
@@ -312,14 +644,16 @@ export const validateAndStoreProposal = internalMutation({
     if (decision.kind === 'abstain') {
       const candidate = await findCandidate(ctx, job.jobId, decision.jobId, job.merchantId)
       if (candidate) await ctx.db.patch(candidate._id, { status: 'abstained', updatedAt: Date.now() })
-      await ctx.db.patch(job._id, { status: 'completed', updatedAt: Date.now() })
+      await ctx.db.patch(job._id, { status: 'completed', ...providerMetadata(args), updatedAt: Date.now() })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome: 'abstain' }, [], job.jobId)
       return { ok: true as const, outcome: 'abstain', reasons: [] }
     }
     if (decision.kind === 'hold') {
       const candidate = await findCandidateByOffer(ctx, job.jobId, decision.offer.id, job.merchantId)
       if (!candidate) return { ok: false as const, outcome: 'rejected', reasons: [safeReason('WRONG_JOB_SCOPE', 'hold references an unknown candidate or offer')] }
       await ctx.db.patch(candidate._id, { status: 'held', updatedAt: Date.now() })
-      await ctx.db.patch(job._id, { status: 'completed', updatedAt: Date.now() })
+      await ctx.db.patch(job._id, { status: 'completed', ...providerMetadata(args), updatedAt: Date.now() })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome: 'hold' }, [], job.jobId)
       return { ok: true as const, outcome: 'hold', offer: decision.offer, reasons: [] }
     }
     const proposal = decision.proposal
@@ -337,6 +671,8 @@ export const validateAndStoreProposal = internalMutation({
     const validated = validateSellerProposal(context, proposal as SellerProposal)
     if (!validated.ok) {
       await recordInternalEvent(ctx, job.merchantId, 'proposal_rejected', { jobId: job.jobId, candidateId: proposal.candidateId }, validated.reasons, job.jobId, proposal.candidateId)
+      await ctx.db.patch(job._id, { status: 'completed', ...providerMetadata(args), updatedAt: Date.now() })
+      await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome: 'rejected' }, validated.reasons, job.jobId, proposal.candidateId)
       return { ok: false as const, outcome: 'rejected', reasons: validated.reasons }
     }
     const priorOffers = await ctx.db
@@ -383,8 +719,9 @@ export const validateAndStoreProposal = internalMutation({
       assessment: validated.offer.fit,
       createdAt: Date.now(),
     })
-    await ctx.db.patch(job._id, { status: 'completed', updatedAt: Date.now() })
+    await ctx.db.patch(job._id, { status: 'completed', ...providerMetadata(args), updatedAt: Date.now() })
     await recordInternalEvent(ctx, job.merchantId, 'offer_accepted', { offerId, version, totalCents: validated.offer.totalCents }, [], job.jobId, proposal.candidateId, offerId)
+    await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome: 'accepted' }, [], job.jobId, proposal.candidateId, offerId)
     return { ok: true as const, outcome: 'accepted', offer: offerRef, totalCents: validated.offer.totalCents, reasons: [] }
   },
 })

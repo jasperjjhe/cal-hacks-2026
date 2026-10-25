@@ -13,6 +13,7 @@ export interface HttpAgentPortConfig {
   provider: Exclude<AgentProvider, 'fixture'>
   startUrl: string
   pollUrlTemplate: string
+  reconcileUrlTemplate?: string
   cancelUrlTemplate: string
   allowedHosts: string[]
   requestTimeoutMs: number
@@ -33,8 +34,14 @@ function validateConfig(config: HttpAgentPortConfig) {
   if (!Number.isSafeInteger(config.requestTimeoutMs) || config.requestTimeoutMs < 1_000 || config.requestTimeoutMs > 30_000) {
     throw new Error('provider request timeout must be between one and thirty seconds')
   }
-  for (const [name, template] of Object.entries({ startUrl: config.startUrl, pollUrlTemplate: config.pollUrlTemplate, cancelUrlTemplate: config.cancelUrlTemplate })) {
-    const url = new URL(template.replace('{providerRunId}', 'run-placeholder'))
+  for (const [name, template] of Object.entries({
+    startUrl: config.startUrl,
+    pollUrlTemplate: config.pollUrlTemplate,
+    reconcileUrlTemplate: config.reconcileUrlTemplate,
+    cancelUrlTemplate: config.cancelUrlTemplate,
+  })) {
+    if (!template) continue
+    const url = new URL(template.replace('{providerRunId}', 'run-placeholder').replace('{jobId}', 'job-placeholder'))
     if (url.protocol !== 'https:') throw new Error(`${name} must use HTTPS`)
     if (!config.allowedHosts.includes(url.hostname)) throw new Error(`${name} host is not in the provider allowlist`)
   }
@@ -135,8 +142,10 @@ export function createHttpAgentPort(
     },
     async poll(jobId: string) {
       const providerRunIdValue = await dependencies.resolveProviderRunId(jobId)
-      if (!providerRunIdValue) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider run ID is not recorded; refusing to start a duplicate job', false) }
-      const url = config.pollUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
+      const url = providerRunIdValue
+        ? config.pollUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
+        : config.reconcileUrlTemplate?.replace('{jobId}', encodeURIComponent(jobId))
+      if (!url) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider run ID is not recorded and no reconciliation endpoint is configured', false) }
       return request(url, 'GET', undefined, jobId)
     },
     async cancel(jobId: string) {

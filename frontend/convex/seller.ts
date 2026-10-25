@@ -135,7 +135,21 @@ async function recordEvent(
   ctx: SellerMutationCtx,
   event: {
     merchantId: string
-    eventType: 'listing_published' | 'policy_published' | 'merchant_paused' | 'merchant_resumed' | 'proposal_received' | 'proposal_rejected' | 'offer_accepted' | 'allocation_changed'
+    eventType:
+      | 'listing_published'
+      | 'policy_published'
+      | 'merchant_paused'
+      | 'merchant_resumed'
+      | 'proposal_received'
+      | 'proposal_rejected'
+      | 'offer_accepted'
+      | 'allocation_changed'
+      | 'provider_started'
+      | 'provider_pending'
+      | 'provider_completed'
+      | 'provider_failed'
+      | 'provider_ambiguous'
+      | 'provider_cancelled'
     jobId?: string | null
     candidateId?: string | null
     offerId?: string | null
@@ -339,6 +353,40 @@ export const pauseOwnMerchant = mutation({
       })
     }
     return { merchantId: merchant.merchantId, paused: args.paused }
+  },
+})
+
+export const getOwnAgentJobs = query({
+  args: {},
+  handler: async (ctx: SellerQueryCtx) => {
+    const membership = await requireSellerMembership(ctx)
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_merchantId_and_status', (query) => query.eq('merchantId', membership.merchantId))
+      .collect()
+    return jobs
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, 50)
+      .map((job) => ({
+        jobId: job.jobId,
+        requestId: job.requestId,
+        requestVersion: job.requestVersion,
+        runId: job.runId,
+        phaseId: job.phaseId,
+        role: job.role,
+        provider: job.provider,
+        providerConfigRevision: job.providerConfigRevision,
+        status: job.status,
+        providerRunId: job.providerRunId,
+        providerModel: job.providerModel,
+        providerElapsedMs: job.providerElapsedMs,
+        attemptCount: job.attemptCount,
+        lastErrorCode: job.lastErrorCode,
+        lastErrorRetryable: job.lastErrorRetryable,
+        deadlineAt: job.deadlineAt,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      }))
   },
 })
 
