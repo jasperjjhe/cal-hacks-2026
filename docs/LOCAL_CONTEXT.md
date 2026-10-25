@@ -403,6 +403,9 @@ Completed:
 
 - Seller contracts, validation, inventory helpers, Convex schema/functions,
   provider-neutral adapters, job orchestration, fixture catalog, and tests.
+- The canonical `contracts:export` command now generates both the Convex seller
+  schema and the Fetch worker schema byte-for-byte; `contracts:check` fails on
+  drift so no manually maintained duplicate contract artifact can diverge.
 - Agentverse-compatible Fetch seller source, typed query plus optional fixed
   REST routes, shared secret authentication, Agent Storage state, replay
   protection, bounded matching, and pure Python tests.
