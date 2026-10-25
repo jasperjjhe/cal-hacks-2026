@@ -52,6 +52,43 @@ function proposalFor(merchantId, variantId, unitCents, requestLineId = 'line_mai
   }
 }
 
+function openingOfferFor(merchantId = 'merchant_a', brief = fixtures.briefs.laptop) {
+  const openingResult = validateSellerProposal(contextFor(merchantId, brief), makeValidProposal(merchantId))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) throw new Error('opening fixture must validate')
+  return {
+    offer: { id: `offer_demo_${merchantId}_candidate_1`, version: 1 },
+    ...openingResult.offer,
+  }
+}
+
+function finalContextFor(openingOffer, overrides = {}) {
+  return {
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant[openingOffer.merchantId],
+    currentCatalog: fixtures.snapshotsByMerchant[openingOffer.merchantId],
+    policy: fixtures.policiesByMerchant[openingOffer.merchantId],
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+    ...overrides,
+  }
+}
+
+function finalCandidateFor(openingOffer, overrides = {}) {
+  return {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+    ...overrides,
+  }
+}
+
 test('seller brief construction excludes private buyer fields', () => {
   const brief = buildSellerBrief({
     schemaVersion: 1,
@@ -298,6 +335,219 @@ test('final seller revisions reject non-integer quantities before doing money ar
   })
   assert.equal(result.ok, false)
   if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'QUANTITY_INVALID'))
+})
+
+test('final seller revisions cannot escape the opening parent offer', () => {
+  const openingOffer = openingOfferFor()
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer, { parentOffer: { id: openingOffer.offer.id, version: 2 } }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'PARENT_OFFER_MISMATCH'))
+})
+
+test('final seller revisions cannot invent a service option outside policy authority', () => {
+  const openingOffer = openingOfferFor()
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:unapproved' }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'INVALID_INPUT' && reason.field === 'serviceOptionId'))
+})
+
+test('final seller revisions recompute an authorized service option and its incremental economics', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:priority',
+      shippingCents: 2_000,
+      arrivalCalendarDays: 1,
+      warrantyMonths: 24,
+      returnDays: 30,
+      incrementalCostCents: 500,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_priority_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:priority' }),
+  )
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.offer.serviceOptionId, 'service:priority')
+  assert.equal(result.offer.shippingCents, 2_000)
+  assert.equal(result.offer.totalCents, 98_000)
+  assert.equal(result.offer.arrivalCalendarDays, 1)
+  assert.equal(result.offer.warrantyMonths, 24)
+  assert.equal(result.offer.returnDays, 30)
+})
+
+test('final seller revisions reject an option whose private bundle cost breaks contribution', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:expensive',
+      shippingCents: 1_500,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 15_000,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_expensive_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:expensive',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 95_000 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'CONTRIBUTION_TOO_LOW'))
+})
+
+test('final seller revisions reject a delivered total increase even when the item price falls', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:high-shipping',
+      shippingCents: 5_000,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_high_shipping_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:high-shipping',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_TOTAL_INCREASED'))
+})
+
+test('final seller revisions reject weaker delivery, warranty or return terms', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:weaker',
+      shippingCents: 1_500,
+      arrivalCalendarDays: 4,
+      warrantyMonths: 11,
+      returnDays: 13,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_weaker_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:weaker' }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_TERM_WEAKENED'))
+})
+
+test('final seller revisions fail closed when the seller policy changes after opening', () => {
+  const openingOffer = openingOfferFor()
+  const currentPolicy = applyPolicyChanges(fixtures.policiesByMerchant.merchant_a, {
+    maxDiscountBps: 500,
+  }, fixtures.policiesByMerchant.merchant_a.policy.version + 1)
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy: currentPolicy }),
+    finalCandidateFor(openingOffer),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'POLICY_VERSION_STALE'))
+})
+
+test('final seller revisions cannot raise an item price even with a lower shipping option', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:free-shipping',
+      shippingCents: 0,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_free_shipping_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:free-shipping',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 97_600 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_LINE_PRICE_INCREASED'))
 })
 
 test('seller validation rejects wrong merchant, stale policy, invalid price and missing lines', () => {

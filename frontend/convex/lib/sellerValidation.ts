@@ -549,8 +549,6 @@ export function validateFinalOfferRevision(
     reasons.push(safeReason('INVALID_INPUT', message, 'serviceOptionId'))
   }
 
-  const openingLines = new Map<string, OfferLine>()
-  for (const line of opening.lines) openingLines.set(line.requestLineId, line)
   const candidateLines = new Map<string, OfferLine>()
   for (const line of candidate.lines) {
     if (candidateLines.has(line.requestLineId)) {
