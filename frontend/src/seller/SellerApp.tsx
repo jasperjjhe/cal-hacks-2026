@@ -14,7 +14,7 @@ import {
 } from "./assets.ts";
 import type { InventoryState, Product } from "./inventory.ts";
 import { inventoryFilePath, loadInventory, saveInventory } from "./storage.ts";
-import type { StorageMode } from "./storage.ts";
+import type { SaveResult, StorageMode } from "./storage.ts";
 import SellerHome from "./SellerHome.tsx";
 import InventoryPage from "./InventoryPage.tsx";
 import ProductForm from "./ProductForm.tsx";
@@ -37,9 +37,10 @@ const pageTitles: Record<SellerPage, string> = {
   orders: "Orders",
 };
 
-function savedLabel(savedAt: number | null, mode: StorageMode, fileFailed: boolean) {
-  const where = mode === "file" && !fileFailed ? "data/seller-inventory.json" : "this browser";
-  if (fileFailed) return `Couldn’t write ${inventoryFilePath} · saved in this browser`;
+function savedLabel(savedAt: number | null, mode: StorageMode, result: SaveResult) {
+  const where = mode === "file" ? "data/seller-inventory.json" : "this browser";
+  if (result === "unsaved") return "Not saved · changes will be lost when you leave";
+  if (result === "backup") return `Couldn’t write ${inventoryFilePath} · saved in this browser`;
   if (!savedAt) return `Sample inventory · ${where}`;
   const time = new Date(savedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   const sameDay = new Date(savedAt).toDateString() === new Date().toDateString();
@@ -97,7 +98,7 @@ function WorkspaceBadge({ footer }: { footer?: boolean }) {
   );
 }
 
-type Loaded = { state: InventoryState; mode: StorageMode; seeded: boolean };
+type Loaded = { state: InventoryState; mode: StorageMode; needsSave: boolean };
 
 export default function SellerApp() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -118,22 +119,22 @@ export default function SellerApp() {
   return <Workspace {...loaded} />;
 }
 
-function Workspace({ state, mode, seeded }: Loaded) {
+function Workspace({ state, mode, needsSave }: Loaded) {
   const [inventory, setInventory] = useState<InventoryState>(state);
   const [page, setPage] = useState<SellerPage>("home");
   const [editing, setEditing] = useState<Product | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const [fileFailed, setFileFailed] = useState(false);
-  // Write the sample data out on first run; otherwise only save after a change.
-  const skipSave = useRef(!seeded);
+  const [saveResult, setSaveResult] = useState<SaveResult>("saved");
+  // Write out sample data on first run or a recovered browser copy; otherwise only save after a change.
+  const skipSave = useRef(!needsSave);
 
   useEffect(() => {
     if (skipSave.current) {
       skipSave.current = false;
       return;
     }
-    void saveInventory(inventory, mode).then((ok) => setFileFailed(!ok));
+    void saveInventory(inventory, mode).then(setSaveResult);
   }, [inventory, mode]);
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -251,7 +252,7 @@ function Workspace({ state, mode, seeded }: Loaded) {
               {merchantName} · {title}
             </strong>
           </div>
-          <span className={`su-synced${fileFailed ? " is-warning" : ""}`}>{savedLabel(inventory.savedAt, mode, fileFailed)}</span>
+          <span className={`su-synced${saveResult !== "saved" ? " is-warning" : ""}`}>{savedLabel(inventory.savedAt, mode, saveResult)}</span>
         </header>
         <main className="su-content">{content}</main>
       </div>

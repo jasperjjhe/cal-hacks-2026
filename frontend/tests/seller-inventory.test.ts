@@ -51,6 +51,24 @@ describe("seller inventory", () => {
     expect(parseBulkInventory("x.json", JSON.stringify({ products: rows })).records).toHaveLength(1);
   });
 
+  it("parses pretty-printed JSON wrappers and single objects as whole documents", () => {
+    const rows = [
+      { title: "A", sku: "A-1", price: 10, quantity: 3 },
+      { title: "B", sku: "B-1", price: 12, quantity: 1 },
+    ];
+    const wrapper = parseBulkInventory("x.json", JSON.stringify({ products: rows }, null, 2));
+    expect(wrapper.format).toBe("JSON");
+    expect(wrapper.records.map((r) => r.sku)).toEqual(["A-1", "B-1"]);
+    expect(wrapper.issues).toEqual([]);
+    const single = parseBulkInventory("x.json", JSON.stringify(rows[0], null, 2));
+    expect(single.records).toHaveLength(1);
+    expect(single.issues).toEqual([]);
+    // Line-delimited content in a .json file still falls back to JSONL.
+    const lines = parseBulkInventory("x.json", rows.map((r) => JSON.stringify(r)).join("\n"));
+    expect(lines.format).toBe("JSONL");
+    expect(lines.records).toHaveLength(2);
+  });
+
   it("rejects negative or fractional quantities and inverted ranges", () => {
     const text = [
       { title: "A", sku: "A", price: 1, quantity: -1 },

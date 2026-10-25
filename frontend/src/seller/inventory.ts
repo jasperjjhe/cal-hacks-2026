@@ -325,13 +325,15 @@ function toRecord(raw: unknown, line: number): BulkRecord | string {
 
 export function parseBulkInventory(fileName: string, text: string): BulkParseResult {
   const trimmed = text.trim();
-  const looksJsonl = /\.jsonl$/i.test(fileName) || (!trimmed.startsWith("[") && !trimmed.startsWith("{\"products\"") && trimmed.includes("\n"));
+  // .jsonl/.ndjson are always line-delimited; anything else is parsed as one document first
+  // (so pretty-printed JSON works) and only falls back to line parsing if that fails.
+  const explicitJsonl = /\.(jsonl|ndjson)$/i.test(fileName);
   const issues: BulkIssue[] = [];
   let rows: { raw: unknown; line: number }[] = [];
-  let format: BulkParseResult["format"] = looksJsonl ? "JSONL" : "JSON";
+  let format: BulkParseResult["format"] = explicitJsonl ? "JSONL" : "JSON";
   let unreadable = 0;
 
-  if (!looksJsonl) {
+  if (!explicitJsonl) {
     try {
       const parsed: unknown = JSON.parse(trimmed);
       const list = Array.isArray(parsed)

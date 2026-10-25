@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +28,26 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')))
     req.on('error', fail)
   })
+}
+
+// Writes from every tab go through one chain, each with its own temp file, so two requests can
+// never interleave their write-and-rename.
+let writeQueue: Promise<unknown> = Promise.resolve()
+
+function writeInventory(data: unknown): Promise<void> {
+  const next = writeQueue.then(async () => {
+    await mkdir(dirname(inventoryFile), { recursive: true })
+    const temp = `${inventoryFile}.${randomUUID()}.tmp`
+    try {
+      await writeFile(temp, `${JSON.stringify(data, null, 2)}\n`)
+      await rename(temp, inventoryFile)
+    } catch (error) {
+      await rm(temp, { force: true })
+      throw error
+    }
+  })
+  writeQueue = next.catch(() => {})
+  return next
 }
 
 function send(res: ServerResponse, status: number, body: string) {
@@ -60,10 +81,7 @@ const handleInventory: Connect.NextHandleFunction = (req, res, next) => {
           send(res, 400, '{"error":"expected an inventory object"}')
           return
         }
-        await mkdir(dirname(inventoryFile), { recursive: true })
-        const temp = `${inventoryFile}.tmp`
-        await writeFile(temp, `${JSON.stringify(parsed, null, 2)}\n`)
-        await rename(temp, inventoryFile)
+        await writeInventory(parsed)
         send(res, 200, '{"ok":true}')
       } catch {
         send(res, 400, '{"error":"could not save inventory"}')

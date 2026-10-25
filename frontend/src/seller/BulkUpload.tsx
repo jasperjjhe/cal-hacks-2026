@@ -12,8 +12,8 @@ import {
 } from "./inventory.ts";
 import type { BulkIssue, BulkRecord, InventoryState, Product } from "./inventory.ts";
 import { StockPill } from "./ui.tsx";
-import { clearUploadCookie, loadUploadCookie, saveUploadCookie } from "./uploadCookie.ts";
-import type { PendingUpload } from "./uploadCookie.ts";
+import { clearPendingUpload, loadPendingUpload, savePendingUpload } from "./pendingUpload.ts";
+import type { PendingUpload } from "./pendingUpload.ts";
 
 function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -38,7 +38,7 @@ export default function BulkUpload({
   onImported: (apply: (state: InventoryState) => InventoryState, message: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState<PendingUpload>(() => loadUploadCookie() ?? { fileName: "", records: [] });
+  const [pending, setPending] = useState<PendingUpload>(() => loadPendingUpload() ?? { fileName: "", records: [] });
   const [issues, setIssues] = useState<BulkIssue[]>([]);
   const [error, setError] = useState("");
   const [tooLarge, setTooLarge] = useState(false);
@@ -46,7 +46,7 @@ export default function BulkUpload({
 
   function commit(next: PendingUpload) {
     setPending(next);
-    setTooLarge(!saveUploadCookie(next));
+    setTooLarge(!savePendingUpload(next));
   }
 
   function load(fileName: string, text: string) {
@@ -94,7 +94,7 @@ export default function BulkUpload({
     const { added, updated } = applyBulkImport(products, records);
     const parts = [added && `added ${plural(added, "product")}`, updated && `updated ${plural(updated, "product")}`].filter(Boolean);
     const message = `Bulk upload from ${pending.fileName}: ${parts.join(" and ")}.`;
-    clearUploadCookie();
+    clearPendingUpload();
     onImported(
       (state) => withActivity({ ...state, products: applyBulkImport(state.products, records).products }, message),
       message,
@@ -162,7 +162,7 @@ export default function BulkUpload({
       )}
       {tooLarge && (
         <p className="su-notice is-warning" role="status">
-          This upload is too large to keep in a cookie, so it will be lost if you reload before adding it.
+          This upload is too large to keep in this browser, so it will be lost if you reload before adding it.
         </p>
       )}
 
