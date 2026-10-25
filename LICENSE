@@ -1,0 +1,34 @@
+Converge Proprietary License
+
+Copyright (c) 2026 the Converge contributors, as recorded in this
+repository's git history. All rights reserved.
+
+This repository is publicly visible so that its source code can be read
+and evaluated. Public visibility does not grant any license. No part of
+this repository may be used except as expressly permitted below.
+
+1. Permitted use. You may view the source code. Cal Hacks 13.0 organizers,
+   sponsors and judges may also clone, build and run it locally, solely to
+   evaluate the project for the hackathon. GitHub users keep only the rights
+   that GitHub's Terms of Service grant for public repositories (viewing
+   and forking on GitHub).
+
+2. Prohibited use. Without the prior written permission of the copyright
+   holders, you may not copy, modify, merge, publish, distribute,
+   sublicense, sell, host, deploy, train machine-learning models on, or
+   create derivative works from any part of this repository, in whole or
+   in part, for any purpose, commercial or non-commercial.
+
+3. Third-party material. Dependencies remain under their own licenses.
+   Third-party names, logos, trademarks and product images belong to their
+   owners and are not licensed under this file.
+
+4. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+   NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+   OR ITS USE.
+
+5. Termination. Any use outside this license automatically ends every
+   permission granted here.
