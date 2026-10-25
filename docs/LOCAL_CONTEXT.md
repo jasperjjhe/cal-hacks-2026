@@ -395,7 +395,7 @@ Status at this context update: **seller v2 contract/worker migration,
 unified buyer-plus-seller Convex schema/bindings, durable v2 result records,
 seller-owned final validation, buyer-compatible dispatch/completion bridge,
 buyer Apify updates and fixture-safe operator surface implemented and pushed
-on `feature/seller-side` at `eb29a16`; hosted deployment, live route
+on `feature/seller-side` at `7ce562a`; hosted deployment, live route
 verification and sponsor evidence remain pending. Signup/onboarding is
 intentionally out of demo scope.**
 
@@ -446,7 +446,7 @@ Completed:
   dispatch bridge with a result query before buyer publication.
 - Branch protection policy checked in with no required second approval.
 - Seller/buyer reconciliation is pushed to `origin/feature/seller-side` at
-  `b39bc51`; the current buyer compatibility ref is `9f150fa`.
+  `7ce562a`; the current buyer compatibility ref is `9f150fa`.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
   Convex typecheck, dependency/workflow policy, `npm ci --ignore-scripts`, npm
