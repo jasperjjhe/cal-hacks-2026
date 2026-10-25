@@ -1,7 +1,8 @@
 // Comparative labels derived from catalog attributes and offer prices. They only state facts the
 // compared offers share a field for, and are skipped when offers tie or fewer than two can be compared.
+// Keyed by offer: several merchants can offer the same variant at different prices.
 export interface HighlightInput {
-  variantId: string
+  offerId: string
   totalCents: number
   attributes: Record<string, { value: unknown }>
 }
@@ -25,8 +26,8 @@ const number = (input: HighlightInput, field: string) => {
 }
 
 export function computeHighlights(inputs: HighlightInput[]): Map<string, string[]> {
-  const labels = new Map<string, string[]>(inputs.map((input) => [input.variantId, []]))
-  const add = (row: { input: HighlightInput } | null, text: string) => row && labels.get(row.input.variantId)!.push(text)
+  const labels = new Map<string, string[]>(inputs.map((input) => [input.offerId, []]))
+  const add = (row: { input: HighlightInput } | null, text: string) => row && labels.get(row.input.offerId)!.push(text)
   const battery = winners(inputs, (input) => number(input, 'batteryHours'), 'max')
   add(battery, `Longest battery life (${battery?.value} h rated)`)
   const anc = winners(inputs, (input) => {

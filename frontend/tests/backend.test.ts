@@ -795,8 +795,8 @@ test("fixture intake asks headphone-specific clarifying questions", async () => 
   expect(result.suggestedReplies.length).toBeGreaterThan(0);
 });
 test("comparative highlights only label unique winners", () => {
-  const input = (variantId: string, totalCents: number, attrs: Record<string, unknown>) => ({
-    variantId, totalCents, attributes: Object.fromEntries(Object.entries(attrs).map(([k, value]) => [k, { value }])),
+  const input = (offerId: string, totalCents: number, attrs: Record<string, unknown>) => ({
+    offerId, totalCents, attributes: Object.fromEntries(Object.entries(attrs).map(([k, value]) => [k, { value }])),
   });
   const labels = computeHighlights([
     input("a", 100, { batteryHours: 30, weightG: 250 }),
@@ -805,6 +805,35 @@ test("comparative highlights only label unique winners", () => {
   expect(labels.get("a")).toEqual(["Lightest (250 g)", "Lowest delivered price"]);
   expect(labels.get("b")).toEqual([]);
   expect(computeHighlights([input("solo", 1, { batteryHours: 9 })]).get("solo")).toEqual([]);
+});
+test("price labels belong to the winning offer even when merchants offer the same product", () => {
+  const input = (offerId: string, totalCents: number) => ({ offerId, totalCents, attributes: { weightG: { value: 250 } } });
+  const labels = computeHighlights([input("merchant_a:X", 100), input("merchant_b:X", 120)]);
+  expect(labels.get("merchant_a:X")).toEqual(["Lowest delivered price"]);
+  expect(labels.get("merchant_b:X")).toEqual([]);
+});
+test("fixture headphone intake output is accepted by brief confirmation as produced", async () => {
+  const { buyer } = await setup();
+  const message = "black noise cancelling headphones under $450 by 2026-11-30";
+  const draft = await buyer.mutation(internal.buyerMutations.saveDraft, {
+    input: { requestId: null, expectedDraftVersion: null, message },
+  });
+  const intake = fixtureIntake({ draftVersion: 1, messages: [{ id: "m1", role: "buyer", text: message }] } as never);
+  expect(intake.proposedLines?.[0].allowedConditions).toEqual(["new"]);
+  await expect(
+    buyer.mutation(internal.buyerMutations.confirmRequest, {
+      input: {
+        requestId: draft.requestId,
+        expectedDraftVersion: 1,
+        lines: intake.proposedLines,
+        deliveryDeadline: intake.proposedDeadline,
+        privateMaximumCents: intake.proposedPrivateMaximumCents,
+        sharedTargetCents: null,
+        shareTarget: false,
+        sort: "best_fit",
+      },
+    }),
+  ).resolves.toBeTruthy();
 });
 test("authoritative exact-product contradictions invoke shared assessment and prevent selection", async () => {
   const state = await resultRun();

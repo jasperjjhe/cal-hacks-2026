@@ -55,6 +55,7 @@ NUMERIC_UNITS: Dict[str, Tuple[str, float]] = {
     "V": ("voltage", 1.0),
     "Hz": ("frequency", 1.0),
     "%": ("percentage", 1.0),
+    "h": ("duration", 1.0),
 }
 
 

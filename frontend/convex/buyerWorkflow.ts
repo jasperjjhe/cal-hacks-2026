@@ -374,7 +374,7 @@ export const publishResults = internalMutation({
         .withIndex("by_variantId", (q) => q.eq("variantId", variantId))
         .first();
       if (variant && row.data.policyValid && row.data.requirementsValidExceptBudget && row.data.affordable)
-        highlightInputs.push({ variantId, totalCents: row.card.totalCents, attributes: variant.attributes });
+        highlightInputs.push({ offerId: String(row._id), totalCents: row.card.totalCents, attributes: variant.attributes });
     }
     const highlights = computeHighlights(highlightInputs);
     for (const row of rows) {
@@ -404,7 +404,7 @@ export const publishResults = internalMutation({
               ? "unavailable"
               : card.evidenceStatus,
           selectable: valid,
-          highlights: highlights.get(card.products[0].variantId) ?? [],
+          highlights: highlights.get(String(row._id)) ?? [],
           unavailableReason: valid
             ? null
             : !data.affordable

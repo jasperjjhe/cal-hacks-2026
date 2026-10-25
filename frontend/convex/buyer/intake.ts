@@ -164,7 +164,7 @@ export function fixtureIntake(
       quantity: 1,
       allowedConditions:
         /only new|new only/i.test(raw) ||
-        ["clothing", "household_accessory"].includes(category)
+        ["clothing", "household_accessory", "headphones"].includes(category)
           ? ["new"]
           : ["new", "refurbished"],
       requirements,
