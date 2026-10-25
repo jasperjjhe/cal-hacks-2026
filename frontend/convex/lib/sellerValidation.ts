@@ -525,6 +525,9 @@ export function validateFinalOfferRevision(
   if (opening.jobId !== context.jobId || opening.merchantId !== context.merchantId) {
     reasons.push(safeReason('WRONG_JOB_SCOPE', 'opening offer is outside the seller job scope', 'openingOffer'))
   }
+  if (opening.status !== 'accepted') {
+    reasons.push(safeReason('INVALID_INPUT', 'final revision requires an accepted opening offer', 'openingOffer.status'))
+  }
   if (opening.candidateId !== context.candidateId || candidate.candidateId !== context.candidateId) {
     reasons.push(safeReason('WRONG_JOB_SCOPE', 'final candidate is outside the seller job scope', 'candidateId'))
   }

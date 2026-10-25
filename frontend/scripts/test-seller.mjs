@@ -550,6 +550,16 @@ test('final seller revisions cannot raise an item price even with a lower shippi
   if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_LINE_PRICE_INCREASED'))
 })
 
+test('final seller revisions require an accepted opening offer', () => {
+  const openingOffer = { ...openingOfferFor(), status: 'hold' }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'INVALID_INPUT' && reason.field === 'openingOffer.status'))
+})
+
 test('seller validation rejects wrong merchant, stale policy, invalid price and missing lines', () => {
   const wrongMerchant = {
     ...makeValidProposal('merchant_a'),
