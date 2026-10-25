@@ -400,7 +400,9 @@ function Workspace() {
                       : run?.modes.agents === "mixed"
                         ? "Live buyer agents; deterministic seller fixtures."
                       : "Deterministic agent fixtures."}{" "}
-                    No payment is taken.
+                    {run?.modes.payment === "stripe_test"
+                      ? "Stripe test checkout; no real money is charged."
+                      : "No payment is taken."}
                   </p>
                 </div>
                 <div className="backend-actions">
@@ -886,7 +888,11 @@ function Workspace() {
                     )
                     .join(" + ")}
                 </p>
-                <p>Demo order completed; no payment taken.</p>
+                <p>
+                  {o.quote.paymentMode === "stripe_test"
+                    ? "Stripe test payment completed; no real money charged."
+                    : "Demo order completed; no payment taken."}
+                </p>
                 <button
                   className="secondary"
                   onClick={() => openRequest(o.requestId)}

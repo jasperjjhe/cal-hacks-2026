@@ -54,7 +54,8 @@ export const executeAttempt = internalAction({
     let outcome;
     try {
       outcome = await executePayment(claim);
-    } catch {
+    } catch (error) {
+      console.error("Payment execution failed:", error instanceof Error ? error.message : "unknown error");
       outcome = { status: "unknown" as const, providerReference: null };
     }
     await ctx.runMutation(internal.buyerExecution.settleAttempt, {
@@ -74,7 +75,8 @@ export const reconcileAttempt = internalAction({
     let outcome;
     try {
       outcome = await reconcilePayment(claim);
-    } catch {
+    } catch (error) {
+      console.error("Payment reconciliation failed:", error instanceof Error ? error.message : "unknown error");
       outcome = {
         status: "unknown" as const,
         providerReference: claim.providerReference,

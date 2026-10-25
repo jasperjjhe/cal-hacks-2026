@@ -63,7 +63,6 @@ export async function stripePayment(claim: PaymentClaim): Promise<PaymentOutcome
     returnUrl.searchParams.set("request", claim.quote.request.id);
     body = new URLSearchParams({
       mode: "payment",
-      "payment_method_types[0]": "card",
       "line_items[0][price_data][currency]": "usd",
       "line_items[0][price_data][unit_amount]": String(claim.quote.totalCents),
       "line_items[0][price_data][product_data][name]": "BuyerUnion demo bundle (test purchase)",
@@ -84,7 +83,10 @@ export async function stripePayment(claim: PaymentClaim): Promise<PaymentOutcome
     redirect: "error",
     signal: AbortSignal.timeout(10000),
   });
-  if (!response.ok) throw new Error(`Stripe HTTP ${response.status}.`);
+  if (!response.ok) {
+    const detail = await response.json().then(body => body?.error?.message, () => undefined);
+    throw new Error(`Stripe HTTP ${response.status}${typeof detail === "string" ? `: ${detail.slice(0, 300)}` : "."}`);
+  }
   const session = await response.json();
   if (
     typeof session.id !== "string" || !session.id.startsWith("cs_test_") ||

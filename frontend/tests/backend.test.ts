@@ -1449,6 +1449,7 @@ test("Stripe checkout resumes, settles once, and keeps its order after retention
         const fields = new URLSearchParams(String(options.body));
         expect(fields.get("line_items[0][price_data][unit_amount]")).toBe(String(quote.totalCents));
         expect(fields.get("success_url")).toContain(state.ref.id);
+        expect(fields.has("payment_method_types[0]")).toBe(false);
         expect((options.headers as Record<string, string>)["Idempotency-Key"]).toBe(execution.executionId);
       }
       return Response.json({ id: "cs_test_checkout", client_reference_id: execution.executionId,
