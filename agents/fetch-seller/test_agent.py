@@ -99,6 +99,21 @@ class AgentJobTests(unittest.TestCase):
         other = dict(authority, lines=[dict(authority["lines"][0], lowestAuthorizedUnitCents=95_000)])
         self.assertEqual(start(ctx, payload, "seller_final", "final_job_1", authority=other).errorCode, "REPLAY_REJECTED")
 
+    def test_final_reusing_the_opening_job_id_is_a_new_job_not_a_replay(self):
+        # Convex reuses the opening seller job ID for the same candidate's sealed final.
+        ctx = FakeCtx()
+        opening_input = sample_input()
+        opening_input["job"]["jobId"] = "final_job_1"
+        opening = start(ctx, opening_input, "seller_initial", "final_job_1", digest="opening-digest")
+        self.assertEqual(opening.status, "completed", opening.errorCode)
+        payload = with_rival_total(final_input(), 99_000)
+        final = start(ctx, payload, "seller_final", "final_job_1", digest="final-digest", authority=authority_for(payload, 90_000))
+        self.assertEqual(final.status, "completed", final.errorCode)
+        self.assertEqual(final.output["decision"]["kind"], "propose")
+        poll = A._poll_seller_job(ctx, PollRequest(jobId="final_job_1", providerAuthToken="shared-token"))
+        self.assertEqual(poll.output, final.output)
+        self.assertEqual(start(ctx, payload, "seller_final", "final_job_1", digest="other-digest").errorCode, "REPLAY_REJECTED")
+
     def test_authority_is_refused_outside_final_invitations_and_when_inconsistent(self):
         payload = final_input()
         authority = authority_for(payload, 90_000)

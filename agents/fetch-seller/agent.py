@@ -168,6 +168,11 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
             raise SellerInputError("price authority is accepted only for final invitations")
         authority_digest = _authority_digest(authority)
         existing = _load_record(ctx, job_id)
+        # Convex reuses the opening seller job ID for that candidate's sealed final, so a
+        # stored record for a different role is an earlier phase, not a replay: replace it.
+        # Records written before roles were stored carry no role and keep the digest check.
+        if existing is not None and existing.get("role") not in (None, request.role):
+            existing = None
         if existing is not None:
             if existing.get("inputDigest") != request.inputDigest:
                 return _failed(provider_run_id, "REPLAY_REJECTED")
@@ -187,6 +192,7 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
     # the buyer polls every 15 s; an artificial pending step cannot fit.
     # Pending records written by older revisions still finish via _poll_record.
     record = {
+        "role": request.role,
         "inputDigest": request.inputDigest,
         "authorityDigest": authority_digest,
         "providerRunId": provider_run_id,

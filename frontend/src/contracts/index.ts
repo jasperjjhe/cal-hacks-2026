@@ -211,7 +211,8 @@ export const contracts = {
   // Seller-private sibling of SellerFinalJobInput. Convex derives it at dispatch from the
   // merchant's own frozen opening offer and policy, sends it only to that merchant's
   // provider, and never stores it in buyer records. It states the merchant's own lowest
-  // authorized unit price per frozen line, never raw costs, floors or contribution inputs.
+  // authorized unit price per frozen line (equal to the operator floor when that binds),
+  // never raw cost, discount-cap or contribution inputs.
   SellerFinalAuthority: z.strictObject({
     schemaVersion: z.literal(2), jobId: id, candidateId: id, offer: ref,
     lines: z.array(z.strictObject({

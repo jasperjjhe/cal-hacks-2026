@@ -4,10 +4,12 @@ This is the seller-side Fetch.ai uAgent. It performs the seller's bounded
 catalog matching and v5.3 council work and returns canonical outputs that the
 Convex backend validates again. It never receives the buyer's raw conversation,
 requirement origins, private maximum, arbitrary rival records, seller cost,
-operator floor, or sealed final terms. For a sealed final invitation it also
-receives its own merchant's price authority: the lowest unit price that
-merchant's policy allows for each frozen line, derived by Convex (see
-"Final pricing strategy"). Council roles receive only the
+contribution or discount-cap inputs, or sealed final terms. For a sealed final
+invitation it also receives its own merchant's price authority: the lowest unit
+price that merchant's policy allows for each frozen line, derived by Convex (see
+"Final pricing strategy"). That value equals the operator floor whenever the
+floor is the binding limit, so the merchant's own walk-away price does cross to
+its own agent, as spec §4/§5.6 allow ("its own inventory/policy"). Council roles receive only the
 canonical immutable public competition snapshot and checked outcome
 references; the worker cannot adjudicate or publish buyer results.
 
@@ -152,13 +154,15 @@ receives) and the merchant's own price authority:
    floors, discount caps or contribution inputs.
 2. **Concede only against concrete pressure.** A *comparable rival* is another
    merchant's snapshot offer for the same request lines whose checked soft-fit
-   score is at least this offer's. If one is no more expensive, the target is
+   coverage is at least this offer's (computed like the backend's
+   `weightedCoverage`: unknown checks leave the denominator). If one is no more expensive, the target is
    that rival's total minus the smallest meaningful step (0.5%, at least $1).
 3. **Do not chase what cannot be won.** If beating the rival would take the
    offer below its authorized lowest total, the merchant holds and competes on
    its non-price advantages instead of giving margin away.
 4. **A buyer target cannot ratchet the price down.** A consented shared target
-   is met exactly only when it needs at most half of the merchant's room
+   is met (or beaten by less than one cent per unit, from integer rounding)
+   only when it needs at most half of the merchant's room
    (current total minus authorized lowest total); a deeper target is ignored.
 5. **Already competitive means hold.** No pressure, or a target at or above the
    current total, produces a hold. Holding is valid and carries no penalty.
@@ -169,7 +173,9 @@ receives) and the merchant's own price authority:
 Convex derives the authority at dispatch with the same `minimumUnitCents` rule
 `validateFinalOfferRevision` enforces, sends it beside (not inside) the
 canonical `SellerFinalJobInput`, and never stores it with buyer or seller job
-inputs. Convex still revalidates every revision; an authority-respecting
+inputs. Each final job carries only its own merchant's authority; in the demo one
+hosted agent serves all three fictional merchants, so isolation is per job, not
+per agent deployment. Convex still revalidates every revision; an authority-respecting
 proposal is accepted rather than rejected for price.
 
 **Deterministic, not LLM-prompted.** The final decision is numeric and must
@@ -199,7 +205,9 @@ seed through the environment before running `python agent.py`.
 
 - Requests are authenticated with a shared secret and bound to the job ID,
   run ID, phase ID, role, and input digest.
-- Reusing a job ID with a different input digest or price authority is rejected.
+- Reusing a job ID for the same role with a different input digest or price
+  authority is rejected. Convex reuses a candidate's opening job ID for its
+  sealed final, so a start for a different role replaces the earlier record.
 - Storage records contain only bounded state and the validated decision; they do
   not contain the token or the full request envelope.
 - Input fields are allowlisted and recursively scanned for private buyer/seller

@@ -658,9 +658,18 @@ def validate_final_authority(value: Any, root: Mapping[str, Any]) -> Mapping[str
     return authority
 
 
-def _soft_fit_score(offer: Mapping[str, Any], weights: Mapping[str, int]) -> int:
-    matched = {check["requirementId"] for check in offer["checks"] if check["status"] == "matched"}
-    return sum(weight for requirement_id, weight in weights.items() if requirement_id in matched)
+def _soft_coverage(offer: Mapping[str, Any], weights: Mapping[str, int]) -> Optional[float]:
+    """Checked soft-fit coverage, mirroring the backend's weightedCoverage.
+
+    Unknown checks leave the denominator; None means no known soft requirement.
+    """
+
+    statuses = {check["requirementId"]: check["status"] for check in offer["checks"]}
+    known = {rid: weight for rid, weight in weights.items() if statuses.get(rid) in ("matched", "unmet")}
+    total = sum(known.values())
+    if total == 0:
+        return None
+    return sum(weight for rid, weight in known.items() if statuses[rid] == "matched") / total
 
 
 def _price_plan(root: Mapping[str, Any], authority: Mapping[str, Any]) -> Tuple[Optional[int], str]:
@@ -681,13 +690,17 @@ def _price_plan(root: Mapping[str, Any], authority: Mapping[str, Any]) -> Tuple[
             for requirement in line["requirements"]:
                 if requirement["strength"] == "soft":
                     weights[requirement["id"]] = int(requirement["weight"])
-        own_score = _soft_fit_score(own, weights)
+        def coverage_key(offer: Mapping[str, Any]) -> float:
+            coverage = _soft_coverage(offer, weights)
+            return -1.0 if coverage is None else coverage
+
+        own_coverage = coverage_key(own)
         own_lines = sorted(line["requestLineId"] for line in own["lines"])
         rivals = [
             offer for offer in competition["offers"]
             if offer["merchantId"] != root["merchantId"]
             and sorted(line["requestLineId"] for line in offer["lines"]) == own_lines
-            and _soft_fit_score(offer, weights) >= own_score
+            and coverage_key(offer) >= own_coverage
         ]
         if rivals:
             best = min(offer["totalCents"] for offer in rivals)

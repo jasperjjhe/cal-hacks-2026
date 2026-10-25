@@ -35,7 +35,7 @@ The buyer-owned workflow supplies a server-built, sanitized `SellerBrief`. The s
 1. prepares a `sellerJobs` record bound to request/version, run, phase, merchant, candidates, policy version and input digest;
 2. stores the brief in `sellerJobInputs` after strict validation;
 3. calls the internal `sellerAgent:dispatch` action for a Fetch job;
-4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms. A v5.3 advocacy/reply/final job additionally receives the immutable allowlisted common competition snapshot and checked public outcome references for the current phase, never arbitrary rival records; a final job also carries its own merchant's derived lowest authorized unit prices (`sellerAuthority`), never cost or floor inputs;
+4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms. A v5.3 advocacy/reply/final job additionally receives the immutable allowlisted common competition snapshot and checked public outcome references for the current phase, never arbitrary rival records; a final job also carries its own merchant's derived lowest authorized unit prices (`sellerAuthority`), never cost, discount-cap or contribution inputs (the value equals the operator floor when it binds);
 5. accepts `pending`, polls the same provider run, or reconciles an ambiguous start by application `jobId`;
 6. passes completed output to `validateAndStoreProposal`, which recomputes fit, stock, floor, delivered price and policy terms before creating an immutable offer.
 

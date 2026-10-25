@@ -719,8 +719,8 @@ export interface FinalPricingAuthority {
  * Derived from the frozen opening offer, the opening catalog snapshot and the pinned
  * policy with the same `minimumUnitCents` rule that `validateFinalOfferRevision`
  * enforces, so a proposal inside this authority is not rejected for price. Only the
- * resulting lowest unit price leaves Convex; costs, operator floors, discount caps and
- * contribution inputs do not. Returns null when any frozen line cannot be priced,
+ * resulting lowest unit price leaves Convex (it equals the operator floor when that
+ * floor binds); costs, discount caps and contribution inputs do not. Returns null when any frozen line cannot be priced,
  * in which case the provider receives no authority and can only hold or abstain.
  */
 export function finalPricingAuthority(input: {

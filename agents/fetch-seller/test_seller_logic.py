@@ -348,6 +348,18 @@ class FinalPricingStrategyTests(unittest.TestCase):
         with_rival_total(payload, 95_000, matched=("r_weight",))
         self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "propose")
 
+    def test_unknown_checks_do_not_make_a_worse_fitting_rival_comparable(self):
+        payload = final_input()
+        payload["brief"]["lines"][0]["requirements"].append(
+            {"id": "r_color", "fieldId": "color", "operator": "equals", "value": "black", "unit": None, "strength": "soft", "weight": 1})
+        def check(rid, status):
+            return {"requirementId": rid, "status": status, "actual": None, "sourceIds": [], "explanation": "checked"}
+        payload["ownOffer"]["checks"] = [check("r_weight", "matched"), check("r_color", "unknown")]   # coverage 100
+        payload["competition"]["offers"][0] = payload["ownOffer"]
+        with_rival_total(payload, 95_000)
+        payload["competition"]["offers"][1]["checks"] = [check("r_weight", "matched"), check("r_color", "unmet")]  # 67
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "hold")
+
     def test_holds_at_the_authorized_lowest_price(self):
         payload = with_rival_total(final_input(), 90_000)
         unit = payload["ownOffer"]["totalCents"] - payload["ownOffer"]["shippingCents"]
