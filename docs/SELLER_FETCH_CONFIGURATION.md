@@ -23,9 +23,11 @@ The provider never receives the raw buyer conversation, requirement origins, pri
 ## v5.3 seller council roles
 
 The current worker still accepts the legacy seller role names and must not be
-advertised as v5.3 council support. After the buyer-owned canonical contract
-source publishes schema-versioned council envelopes, migrate the Fetch worker
-and gateway together:
+advertised as v5.3 council support. The seller branch now has a pure,
+server-side `validateFinalOfferRevision` seam for the final-phase invariants,
+but it is not a provider wire contract or a persistence path. After the
+buyer-owned canonical contract source publishes schema-versioned council
+envelopes, migrate the Fetch worker, gateway and Convex handoff together:
 
 - seller advocacy: defend the merchant's frozen candidates and optionally emit
   one scoped peer challenge;

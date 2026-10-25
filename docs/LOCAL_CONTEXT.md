@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current implementation checkpoint: `f6af203` (`feat: add seller final service policy authority`).
+Current implementation checkpoint: `d3609ac` (`fix: gate final revisions on accepted offers`).
 This context file is pushed in subsequent documentation-only checkpoints.
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`.
@@ -120,7 +120,12 @@ use the product's private secret-entry mechanism or a protected local shell.
   contracts.
 - `frontend/convex/lib/sellerValidation.ts` recomputes category/profile/
   condition fit, stock, price floors, shipping, contribution, and policy
-  terms. Provider/model totals are never authoritative.
+  terms. Provider/model totals are never authoritative. Its seller-owned
+  `validateFinalOfferRevision` seam now checks accepted-opening status,
+  parent/frozen-basket scope, brief fit, stock, price reductions, policy-
+  authorized service terms, private incremental contribution, total
+  monotonicity and term monotonicity. It is pure validation only until the
+  buyer-owned v2 council envelope and sealed Convex persistence are available.
 - `frontend/convex/lib/sellerInventory.ts` contains transactional reservation,
   execution-lock, sale, release, expiration, and idempotent replay helpers.
 - `frontend/convex/integrations/` contains the provider-neutral port, fixture
@@ -314,8 +319,9 @@ specific proof criteria.
   step.
 - The local and remote seller branches contain merge commit `84db50c`, which
   brings in the latest documentation-only `origin/dev` council v5.3 revision,
-  followed by pushed documentation checkpoints `c1e788c` and `fe9b70a`, then
-  the tested seller service-authority checkpoint `f6af203`.
+  followed by the seller service-authority checkpoint `f6af203`, the pushed
+  pure final-revision implementation/test checkpoints `2a82ff7`, `35864ec`,
+  and `d3609ac`, plus this documentation update.
 - `origin/dev` is the merge base's current remote line; the seller branch has
   no commits missing from `origin/dev` at this check. Later context-only
   commits do not change the implementation merge boundary.
@@ -358,9 +364,9 @@ specific proof criteria.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime baseline and v5.3
-final-service policy authority groundwork implemented; council contract
-migration, final parent/basket economics, hosted deployment, live route
+Status at this context update: **seller runtime baseline and seller-owned v5.3
+final validation core implemented; canonical council contract migration,
+sealed Convex final-invitation persistence, hosted deployment, live route
 verification and buyer integration pending.**
 
 Completed:
@@ -385,6 +391,13 @@ Completed:
   rejects unapproved IDs and provides baseline terms for `null`; accepted
   offer versions record `serviceOptionId`. The v1 provider wire contract is
   intentionally unchanged until the buyer-owned canonical v2 envelopes land.
+- `validateFinalOfferRevision` is implemented as a pure seller-owned seam. It
+  rechecks accepted opening status, candidate/parent/policy scope, frozen
+  listing identity/economics, current brief fit, quantity/stock, price floors,
+  authorized service terms, private incremental contribution, delivered-total
+  monotonicity and term monotonicity. Thirty seller tests cover the accepted
+  path and these rejection cases; Convex final-invitation persistence and v2
+  provider wiring remain intentionally pending.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -404,14 +417,13 @@ Pending:
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
   sponsor ledger.
-- Implement documented seller-owned v5.3 deterministic behavior now; when the
-  buyer-owned canonical v2 contract lands, derive the final seller worker,
-  parser and fixture wire migration from it without adding a duplicate council
+- Consume the buyer-owned canonical v2 final envelope and route its parsed
+  seller-owned fields through `validateFinalOfferRevision`; derive the worker,
+  parser and fixtures from that source without adding a duplicate council
   schema.
-- Consume the buyer-owned v2 final envelope, then add parent-bound frozen
-  basket, monotonic delivered-total/term and bundle-contribution validation;
-  policy allowlist groundwork is complete but service concessions remain
-  unadvertised/unclaimed until those checks exist.
+- Add the Convex sealed-invitation/final-version persistence and buyer-owned
+  atomic promotion around the existing pure parent-bound frozen-basket,
+  monotonic-total/term and bundle-contribution checks.
 - Finish a seller-only operator/demo surface and buyer-to-seller integration
   tests.
 - Merge with the buyer branch only after contract regeneration and duplicate
@@ -427,10 +439,12 @@ Pending:
 2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
    snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the
    change dependency-free and test deterministic privacy/parent-scope gates.
-3. Implement the seller final validator against the resolved v2 envelope:
+3. Once the buyer-owned v2 envelope lands, derive its parser and fixtures and
+   route the seller-owned fields through the existing final validator:
    parent candidate, frozen goods/configuration/condition/quantity, policy
    option authority, incremental contribution, no weaker terms and no higher
-   delivered total. Add golden fixtures before enabling the role.
+   delivered total. Then add golden fixtures and sealed Convex persistence
+   before enabling the role.
 4. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
    agent, then configure `gateway.py` on Mana with a separate gateway token and
    the fixed Agentverse address. Do not paste either secret into chat.

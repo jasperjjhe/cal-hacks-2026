@@ -71,13 +71,17 @@ terms. B validates cross-offer references, approved facts, challenge routing,
 phase membership and public event safety; S validates seller authorship, own
 offer references, policy authority, frozen-basket invariants and economics.
 
-The seller branch has now added the policy-side service authority needed by the
-v5.3 final phase without inventing a v2 wire schema: `PricingPolicy` versions
-store an immutable `finalServiceOptions` allowlist, `resolveFinalServiceTerms`
-accepts only a server-authorized option ID (or `null` for baseline), and
-accepted offer versions carry `serviceOptionId`. The buyer-owned v2 envelope
-must still supply the parent offer, frozen basket and final proposal before the
-seller can enable contribution, monotonic-total and weakened-term checks.
+The seller branch has now added the policy-side service authority and a pure
+seller validation seam needed by the v5.3 final phase without inventing a v2
+wire schema: `PricingPolicy` versions store an immutable
+`finalServiceOptions` allowlist, `resolveFinalServiceTerms` accepts only a
+server-authorized option ID (or `null` for baseline), accepted offer versions
+carry `serviceOptionId`, and `validateFinalOfferRevision` checks the accepted
+opening offer, parent/frozen-basket scope, current brief fit, stock, price
+floors, private incremental contribution, delivered-total monotonicity and
+term monotonicity. The buyer-owned v2 envelope must still supply the parent
+offer, frozen basket and final proposal before Convex persistence and the Fetch
+worker can enable the migrated role.
 
 Seller entry points:
 
