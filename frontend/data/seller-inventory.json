@@ -1,0 +1,138 @@
+{
+  "products": [
+    {
+      "id": "prd_mvnkwoafdp6uan",
+      "description": "Modular 16-inch laptop with repairable parts, a bright display, and all-day battery life.",
+      "specifications": [
+        {
+          "id": "opt_mvnkwoafam5ode",
+          "name": "Materials",
+          "required": true,
+          "choices": [
+            "Leather finish",
+            "Copper wiring"
+          ]
+        }
+      ],
+      "customizations": [
+        {
+          "id": "opt_mvnkwoafhp09rv",
+          "name": "Storage",
+          "required": true,
+          "choices": [
+            "512GB SSD",
+            "1TB SSD",
+            "2TB SSD"
+          ]
+        }
+      ],
+      "updatedAt": 1792918928343,
+      "name": "Framework Laptop 16",
+      "sku": "FW-16-B",
+      "category": "Laptops",
+      "minPrice": 1799,
+      "maxPrice": 1799,
+      "stock": 11,
+      "status": "draft",
+      "image": "framework-16"
+    },
+    {
+      "id": "prd_mvnkwoafnz84zy",
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "updatedAt": 1792918928343,
+      "name": "Framework Laptop 13",
+      "sku": "FW-13-A",
+      "category": "Laptops",
+      "minPrice": 1099,
+      "maxPrice": 1499,
+      "stock": 42,
+      "status": "published",
+      "image": "framework-13"
+    },
+    {
+      "id": "prd_mvnkwoaf3d82cv",
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "updatedAt": 1792860120000,
+      "name": "Framework Laptop 12",
+      "sku": "FW-12-C",
+      "category": "Laptops",
+      "minPrice": 799,
+      "maxPrice": 999,
+      "stock": 36,
+      "status": "published",
+      "image": "framework-12"
+    },
+    {
+      "id": "prd_mvnkwoaffv3ytj",
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "updatedAt": 1792860120000,
+      "name": "Standing Desk Frame",
+      "sku": "SD-FR-01",
+      "category": "Workspace",
+      "minPrice": 389,
+      "maxPrice": 499,
+      "stock": 27,
+      "status": "published",
+      "image": "standing-desk"
+    },
+    {
+      "id": "prd_mvnkwoaff479xo",
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "updatedAt": 1792860120000,
+      "name": "Desk Kit Pro",
+      "sku": "DK-PRO",
+      "category": "Workspace",
+      "minPrice": 249,
+      "maxPrice": 349,
+      "stock": 18,
+      "status": "published",
+      "image": "desk-kit"
+    },
+    {
+      "id": "prd_mvnkwoafskutxe",
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "updatedAt": 1792860120000,
+      "name": "4K Monitor Arm",
+      "sku": "MA-4K-01",
+      "category": "Accessories",
+      "minPrice": 119,
+      "maxPrice": 149,
+      "stock": 0,
+      "status": "published",
+      "image": "monitor-arm"
+    },
+    {
+      "id": "prd_mvnlmz13o1nrao",
+      "name": "Travel Dock Mini",
+      "sku": "TD-MINI",
+      "category": "Accessories",
+      "minPrice": 89,
+      "maxPrice": 89,
+      "stock": 64,
+      "description": "",
+      "specifications": [],
+      "customizations": [],
+      "status": "published",
+      "image": null,
+      "updatedAt": 1792918928343
+    }
+  ],
+  "activity": [
+    {
+      "id": "act_mvnlmz138xojc1",
+      "message": "Bulk upload from vendor_inventory.jsonl: added 1 product and updated 2 products.",
+      "at": 1792918928343
+    }
+  ],
+  "savedAt": 1792918928343
+}
