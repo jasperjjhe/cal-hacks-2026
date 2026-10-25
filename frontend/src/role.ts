@@ -1,6 +1,6 @@
 export type Role = "buyer" | "seller";
 
-const storageKey = "buyerunion.role.v1";
+const storageKey = "converge.role.v1";
 
 function isRole(value: unknown): value is Role {
   return value === "buyer" || value === "seller";
