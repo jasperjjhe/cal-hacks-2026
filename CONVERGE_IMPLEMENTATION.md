@@ -4,7 +4,7 @@ Version 5.3 | October 24, 2026 | Working product and implementation specificatio
 
 **Outcome:** a buyer confirms one shopping request; isolated seller agents prepare policy-valid offers; the platform checks requirements and evidence; the buyer chooses and explicitly approves exact terms; the prototype records a truthful simulated order.
 
-This document replaces v4's implementation direction. The complete original is preserved in `converge-prd-v4-source.md`; the PDFs remain unchanged. Everything needed to build the backend is specified here. The archive is history, not a second active specification.
+This document replaces v4's implementation direction. The complete original is preserved in `converge-prd-v4-source.md`; the PDFs are historical and were only rebranded to Converge. Everything needed to build the backend is specified here. The archive is history, not a second active specification.
 
 ## 1. Confirmed changes and decisions left to the team
 
