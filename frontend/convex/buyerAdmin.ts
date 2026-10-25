@@ -1,4 +1,4 @@
-import { createAccount } from "@convex-dev/auth/server";
+import { createAccount, retrieveAccount } from "@convex-dev/auth/server";
 import {
   internalAction,
   internalMutation,
@@ -6,7 +6,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-// Internal-only provisioning. No public role or signup endpoint exists.
+// Internal-only operator provisioning; public signup never grants roles.
 export const provisionOperator = internalAction({
   args: { merchantId: v.string(), email: v.string(), password: v.string() },
   handler: async (ctx, args): Promise<{ userId: string }> => {
@@ -21,6 +21,14 @@ export const provisionOperator = internalAction({
     const existing = await ctx.runQuery(internal.buyerAdmin.findAccount, {
       email,
     });
+    // Public buyers may already use this email; verify its password before granting access.
+    if (existing) {
+      const account = await retrieveAccount(ctx, {
+        provider: "password", account: { id: email, secret: args.password },
+      });
+      if (!account || String(account.user._id) !== existing)
+        throw new Error("Existing account credentials do not match.");
+    }
     const userId =
       existing ??
       String(

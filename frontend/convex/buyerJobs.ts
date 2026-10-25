@@ -77,7 +77,7 @@ const validateSellerProposal = internal.sellerInternal.validateAndStoreProposal 
   providerElapsedMs?: number | null;
   deferPromotion?: boolean;
 }, SellerValidationBridgeResult>;
-type SellerDispatchReference = FunctionReference<"action", "internal", { jobId: string; poll?: boolean; reconcile?: boolean }, {
+type SellerDispatchReference = FunctionReference<"action", "internal", { jobId: string; poll?: boolean; reconcile?: boolean; managedByBuyer?: boolean }, {
   pending: boolean;
   state: string;
   providerRunId?: string;
@@ -488,6 +488,7 @@ export const dispatch = internalAction({
         const seller = await ctx.runAction(dispatchSellerJob, {
           jobId: job.sellerJobId!,
           poll: args.poll ?? false,
+          managedByBuyer: true,
         });
         if (seller.pending) {
           result = {

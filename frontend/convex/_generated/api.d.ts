@@ -39,6 +39,7 @@ import type * as integrations_creaoBuyer from "../integrations/creaoBuyer.js";
 import type * as integrations_fetchAdapter from "../integrations/fetchAdapter.js";
 import type * as integrations_fixtureAgentPort from "../integrations/fixtureAgentPort.js";
 import type * as integrations_httpAgentPort from "../integrations/httpAgentPort.js";
+import type * as integrations_redditBuyer from "../integrations/redditBuyer.js";
 import type * as lib_sellerContracts from "../lib/sellerContracts.js";
 import type * as lib_sellerFixtures from "../lib/sellerFixtures.js";
 import type * as lib_sellerInventory from "../lib/sellerInventory.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/fetchAdapter": typeof integrations_fetchAdapter;
   "integrations/fixtureAgentPort": typeof integrations_fixtureAgentPort;
   "integrations/httpAgentPort": typeof integrations_httpAgentPort;
+  "integrations/redditBuyer": typeof integrations_redditBuyer;
   "lib/sellerContracts": typeof lib_sellerContracts;
   "lib/sellerFixtures": typeof lib_sellerFixtures;
   "lib/sellerInventory": typeof lib_sellerInventory;

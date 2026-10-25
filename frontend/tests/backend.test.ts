@@ -2,6 +2,8 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { convexTest } from "convex-test";
 import workflow from "@convex-dev/workflow/test";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import schema from "../convex/schema";
 import * as buyerTools from "../convex/integrations/buyerTools";
 import { contracts } from "../src/contracts";
@@ -64,14 +66,14 @@ async function confirmed(context?: Awaited<ReturnType<typeof setup>>, noRequirem
   });
   return { t, buyer, draft, ref };
 }
-async function resultRun(context?: Awaited<ReturnType<typeof setup>>) {
+async function resultRun(context?: Awaited<ReturnType<typeof setup>>, tickMs = 100) {
   const state = await confirmed(context);
   await state.buyer.mutation(internal.buyerMutations.startRun, {
     input: { request: state.ref, clientKey: "start" },
   });
   for (let i = 0; i < 150; i++) {
     await state.t.finishInProgressScheduledFunctions();
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(tickMs);
     const view = await state.buyer.query(api.buyer.getBuyerRun, {
       requestId: state.ref.id,
     });
@@ -1378,7 +1380,8 @@ test("final revisions reject changed quantities, substituted listings and ungran
 
 test("genuine offered products queue automatic discovery without curated URLs", async () => {
   vi.stubEnv('BUYER_EVIDENCE_REGISTRY', JSON.stringify({
-    actorId: '3ox4R101TgZz67sLr', build: 'pinned', buildNumber: '1.0.33'
+    actorId: '3ox4R101TgZz67sLr', build: 'pinned', buildNumber: '1.0.33',
+    reddit: { build: 'reddit-build', buildNumber: '0.0.750', community: 'SonyHeadphones' }
   }));
   try {
     const state = await resultRun();
@@ -1397,5 +1400,158 @@ test("genuine offered products queue automatic discovery without curated URLs", 
     expect(job?.input.query).toBe('Sony WH-1000XM5 review');
     expect(job?.input.urls).toBeUndefined();
     expect(job?.input.domains).toContain('reddit.com');
+    expect(jobs.filter(j => j.variantId === job?.variantId)).toHaveLength(2);
+    expect(jobs.find(j => j.variantId === job?.variantId && j.input.provider === 'reddit')?.input.community).toBe('SonyHeadphones');
   } finally { vi.unstubAllEnvs(); }
+});
+
+test.each([false, true])('one failed evidence provider preserves the other provider sources (%s)', async (failedFirst) => {
+  const state = await resultRun();
+  const target = await state.t.run(async ctx => {
+    await ctx.db.patch(ctx.db.normalizeId('buyerRuns', state.view.runId)!, { stage: 'researching' });
+    const offer = (await ctx.db.query('buyerOffers').withIndex('by_run_effective', q => q.eq('runId', state.view.runId).eq('effective', true)).first())!;
+    const ids = [];
+    for (const provider of ['web', 'reddit']) ids.push(await ctx.db.insert('buyerResearch', {
+      runId: state.view.runId, variantId: offer.card.products[0].variantId, digest: provider, state: 'acquiring',
+      providerRunId: provider, providerBuild: provider, input: { domains: ['reddit.com'], syntheticProduct: false }, deadlineAt: Date.now() + 60000, createdAt: Date.now()
+    }));
+    return { ids, offerId: offer._id, variantId: offer.card.products[0].variantId };
+  });
+  const result = { status: 'completed', providerRunId: 'web', build: 'web', evidence: [{
+    id: 'retained-comment', variantId: target.variantId, applicability: 'family', sourceType: 'owner_report',
+    url: 'https://reddit.com/r/SonyHeadphones/comments/abc/discussion/comment/', sourceDate: null, retrievedAt: Date.now(),
+    claim: 'Owner anecdote', excerpt: 'An actual comment excerpt.', sourceVerifiedPurchaseLabel: null,
+    verification: 'unknown', providerRunId: 'web', providerBuild: 'web', duplicateGroup: 'thread'
+  }] };
+  for (const i of failedFirst ? [1, 0] : [0, 1]) await state.t.mutation(internal.buyerEvidence.complete, {
+    researchJobId: String(target.ids[i]), result: i === 0 ? result : { status: 'unavailable' }
+  });
+  const offer = await state.t.run(ctx => ctx.db.get(target.offerId));
+  expect(offer?.card.evidenceIds).toContain('retained-comment');
+  expect(offer?.card.evidenceStatus).toBe('partial');
+});
+
+
+test("Stripe checkout resumes, settles once, and keeps its order after retention", async () => {
+  const state = await resultRun();
+  vi.stubEnv("PAYMENT_MODE", "stripe_test");
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fixture");
+  vi.stubEnv("SITE_URL", "http://localhost:5173");
+  try {
+    const quote = await state.buyer.mutation(internal.buyerMutations.selectAndReserve, {
+      input: { request: state.ref, runId: state.view.runId, offer: state.view.offers[0].offer, clientKey: "stripe-select" },
+    });
+    const input = { request: state.ref, quoteId: quote.quoteId, quoteHash: quote.quoteHash, clientKey: "stripe-approve" };
+    const execution = await state.buyer.mutation(internal.buyerMutations.approveAndExecute, { input });
+    let paid = false;
+    const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      if (options?.body) {
+        const fields = new URLSearchParams(String(options.body));
+        expect(fields.get("line_items[0][price_data][unit_amount]")).toBe(String(quote.totalCents));
+        expect(fields.get("success_url")).toContain(state.ref.id);
+        expect(fields.has("payment_method_types[0]")).toBe(false);
+        expect((options.headers as Record<string, string>)["Idempotency-Key"]).toBe(execution.executionId);
+      }
+      return Response.json({ id: "cs_test_checkout", client_reference_id: execution.executionId,
+        livemode: false, currency: "usd", amount_total: quote.totalCents,
+        status: paid ? "complete" : "open", payment_status: paid ? "paid" : "unpaid",
+        url: "https://checkout.stripe.com/c/pay/cs_test_checkout" });
+    });
+    await state.t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(1);
+    await state.t.finishInProgressScheduledFunctions();
+    const pending = await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id });
+    expect(pending.execution?.status).toBe("pending");
+    expect(pending.execution?.checkoutUrl).toContain("checkout.stripe.com");
+    const repeated = await state.buyer.mutation(internal.buyerMutations.approveAndExecute, { input });
+    expect(repeated.executionId).toBe(execution.executionId);
+    paid = true;
+    await vi.advanceTimersByTimeAsync(15000);
+    await state.t.finishInProgressScheduledFunctions();
+    expect((await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id })).execution?.status).toBe("succeeded");
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+    expect(transport.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(8 * 86400000);
+    await state.t.mutation(internal.buyerMaintenance.retain, {});
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+  } finally { vi.unstubAllEnvs(); }
+});
+
+test("Stripe rejects changed totals and live credentials, and only releases expired unpaid sessions", async () => {
+  const quote = await reserve(await resultRun());
+  const claim = { executionId: "execution_test", createdAt: Date.now(), quote: { ...quote, paymentMode: "stripe_test" as const }, scenario: "success", providerReference: "cs_test_checkout" };
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fixture");
+  const session = { id: "cs_test_checkout", client_reference_id: claim.executionId, livemode: false,
+    currency: "usd", amount_total: quote.totalCents, status: "expired", payment_status: "unpaid" };
+  const transport = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(session));
+  try {
+    expect((await buyerTools.stripePayment(claim)).status).toBe("declined");
+    transport.mockResolvedValue(Response.json({ ...session, amount_total: quote.totalCents + 1 }));
+    await expect(buyerTools.stripePayment(claim)).rejects.toThrow("approved terms");
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_forbidden");
+    await expect(buyerTools.stripePayment(claim)).rejects.toThrow("test secret");
+  } finally { vi.unstubAllEnvs(); }
+});
+
+
+test("operator provisioning verifies an existing account before granting access", async () => {
+  const { t } = await setup();
+  const email = "operator@example.com";
+  const password = "correct-secret-123";
+  const account = await t.action(internal.buyerAdmin.provisionOperator, { merchantId: "merchant_a", email, password });
+  await t.run(async ctx => {
+    const memberships = await ctx.db.query("operatorAccounts").collect();
+    for (const membership of memberships) await ctx.db.delete(membership._id);
+  });
+  await expect(t.action(internal.buyerAdmin.provisionOperator, {
+    merchantId: "merchant_a", email, password: "wrong-password-123",
+  })).rejects.toThrow();
+  expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(0);
+  const verified = await t.action(internal.buyerAdmin.provisionOperator, { merchantId: "merchant_a", email, password });
+  expect(verified.userId).toBe(account.userId);
+  expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(1);
+});
+
+test("configured Fetch worker runs through council and a persisted simulated purchase", async () => {
+  for (const [key, value] of Object.entries({
+    START_URL: 'https://seller-test.example/seller/jobs',
+    POLL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/poll',
+    RECONCILE_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/reconcile',
+    CANCEL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/cancel',
+    ALLOWED_HOSTS: 'seller-test.example', REQUEST_TIMEOUT_MS: '8000',
+    CONFIG_REVISION: 'local-worker-e2e', AGENT_TOKEN: 'local-test-token'
+  })) vi.stubEnv(`FETCH_SELLER_${key}`, value);
+  const pending = new Map<string, unknown>();
+  const roles = new Set<string>();
+  const workerDir = fileURLToPath(new URL('../../agents/fetch-seller/', import.meta.url));
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    expect(new URL(String(url)).hostname).toBe('seller-test.example');
+    const body = JSON.parse(String(options?.body));
+    if (String(url).endsWith('/jobs')) {
+      roles.add(body.role);
+      const output = JSON.parse(execFileSync('python3', ['-c',
+        'import sys,json;sys.path.insert(0,sys.argv[1]);from seller_logic import build_decision;r=json.load(sys.stdin);print(json.dumps(build_decision(r["input"],r["role"])))', workerDir
+      ], { input: JSON.stringify(body), encoding: 'utf8' }));
+      pending.set(body.jobId, output);
+      return new Response(JSON.stringify({ status: 'pending', providerRunId: body.jobId }));
+    }
+    return new Response(JSON.stringify({ status: 'completed', providerRunId: body.jobId, output: pending.get(body.jobId), model: 'local-python-policy-worker' }));
+  }));
+  try {
+    const state = await resultRun(undefined, 1000);
+    expect(state.view.stage).toBe('results');
+    expect(state.view.offers.length).toBeGreaterThan(0);
+    expect(roles.has('seller_initial')).toBe(true);
+    expect(roles.has('seller_advocacy')).toBe(true);
+    expect(roles.has('seller_final')).toBe(true);
+    const quote = await reserve(state);
+    const approval = await approveQuote(state, quote);
+    const repeated = await approveQuote(state, quote);
+    expect(repeated.executionId).toBe(approval.executionId);
+    await state.t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(1);
+    await state.t.finishInProgressScheduledFunctions();
+    expect((await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id })).execution?.status).toBe('succeeded');
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
 });

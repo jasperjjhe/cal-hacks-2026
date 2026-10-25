@@ -201,7 +201,7 @@ def _run_query(message: SellerMessage) -> ProviderResponse:
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
-    server_version = "BuyerUnionFetchGateway/1"
+    server_version = "ConvergeFetchGateway/1"
 
     def log_message(self, format: str, *args: Any) -> None:
         # Do not log authorization headers, request bodies, buyer data, or
@@ -268,7 +268,7 @@ def main() -> None:
     host = os.getenv("FETCH_SELLER_GATEWAY_HOST", "127.0.0.1")
     port = int(os.getenv("FETCH_SELLER_GATEWAY_PORT", os.getenv("PORT", "8787")))
     server = ThreadingHTTPServer((host, port), GatewayHandler)
-    print(f"BuyerUnion Fetch gateway listening on {host}:{port}")
+    print(f"Converge Fetch gateway listening on {host}:{port}")
     server.serve_forever()
 
 

@@ -19,7 +19,7 @@ export const claimAttempt = internalMutation({
       return null;
     if (
       args.reconcile
-        ? attempt.state !== "unknown"
+        ? !["unknown", ...(attempt.mode === "stripe_test" ? ["pending"] : [])].includes(attempt.state)
         : attempt.state !== "pending" || attempt.attemptCount > 0
     )
       return null;
@@ -38,6 +38,7 @@ export const claimAttempt = internalMutation({
       executionId: args.executionId,
       quote: contracts.FirmQuote.parse(quote.data),
       scenario: attempt.scenario,
+      createdAt: attempt.createdAt,
       providerReference: attempt.data.providerReference as string | null,
     };
   },
@@ -53,7 +54,8 @@ export const executeAttempt = internalAction({
     let outcome;
     try {
       outcome = await executePayment(claim);
-    } catch {
+    } catch (error) {
+      console.error("Payment execution failed:", error instanceof Error ? error.message : "unknown error");
       outcome = { status: "unknown" as const, providerReference: null };
     }
     await ctx.runMutation(internal.buyerExecution.settleAttempt, {
@@ -73,7 +75,8 @@ export const reconcileAttempt = internalAction({
     let outcome;
     try {
       outcome = await reconcilePayment(claim);
-    } catch {
+    } catch (error) {
+      console.error("Payment reconciliation failed:", error instanceof Error ? error.message : "unknown error");
       outcome = {
         status: "unknown" as const,
         providerReference: claim.providerReference,
@@ -95,6 +98,7 @@ export const settleAttempt = internalMutation({
       v.literal("unknown"),
     ),
     providerReference: v.union(v.string(), v.null()),
+    checkoutUrl: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const id = ctx.db.normalizeId("buyerExecutions", args.executionId);
@@ -104,11 +108,22 @@ export const settleAttempt = internalMutation({
     const quote = quoteId ? await ctx.db.get(quoteId) : null;
     if (!quote || quote.state !== "execution_locked") return;
     const run = await runFor(ctx, quote.runId);
+    if (args.status === "pending" && attempt.mode === "stripe_test" && args.checkoutUrl) {
+      const view = contracts.ExecutionView.parse({
+        ...attempt.data, status: "pending", providerReference: args.providerReference,
+        checkoutUrl: args.checkoutUrl, resultMessage: "Complete your test payment on Stripe. No real money is charged.", nextAction: "wait",
+      });
+      await ctx.db.patch(attempt._id, { state: "pending", data: view, updatedAt: Date.now() });
+      if (run) await ctx.db.patch(run._id, { purchaseStage: "executing", updatedAt: Date.now() });
+      await ctx.scheduler.runAfter(15000, internal.buyerExecution.reconcileAttempt, { executionId: args.executionId });
+      return;
+    }
     if (args.status === "unknown" || args.status === "pending") {
       const view = contracts.ExecutionView.parse({
         ...attempt.data,
         status: "unknown",
-        providerReference: args.providerReference,
+        providerReference: args.providerReference ?? attempt.data.providerReference,
+        checkoutUrl: null,
         resultMessage:
           "The purchase result is unresolved. Do not start another attempt; the same attempt is being reconciled.",
         nextAction: "wait",
@@ -123,9 +138,9 @@ export const settleAttempt = internalMutation({
           purchaseStage: "unknown",
           updatedAt: Date.now(),
         });
-      if (attempt.attemptCount < 8)
+      if (attempt.attemptCount < (attempt.mode === "stripe_test" ? 200 : 8))
         await ctx.scheduler.runAfter(
-          5000,
+          attempt.mode === "stripe_test" ? 15000 : 5000,
           internal.buyerExecution.reconcileAttempt,
           { executionId: args.executionId },
         );
@@ -163,10 +178,11 @@ export const settleAttempt = internalMutation({
       ...attempt.data,
       status: args.status,
       providerReference: args.providerReference,
+      checkoutUrl: null,
       orderId,
-      resultMessage: succeeded
-        ? "Demo order completed; no payment taken."
-        : "The simulated purchase was declined. Select a fresh quote to try again.",
+      resultMessage: attempt.mode === "stripe_test"
+        ? succeeded ? "Stripe test payment completed. No real money charged." : "Stripe checkout expired. Select a fresh quote to try again."
+        : succeeded ? "Demo order completed; no payment taken." : "The simulated purchase was declined. Select a fresh quote to try again.",
       nextAction: succeeded ? "none" : "choose_offer",
     });
     await ctx.db.patch(attempt._id, {

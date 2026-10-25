@@ -1,4 +1,4 @@
-"""BuyerUnion's Fetch.ai seller agent.
+"""Converge's Fetch.ai seller agent.
 
 This file can be pasted into an Agentverse Hosted Agent or run as a local
 uAgent. The REST surface is deliberately small and uses typed POST envelopes
@@ -26,7 +26,7 @@ from protocol import (
 from seller_logic import SellerInputError, bounded_id, build_decision, validate_v2_input
 
 
-AGENT_NAME = os.getenv("FETCH_SELLER_AGENT_NAME", "buyerunion-fetch-seller")
+AGENT_NAME = os.getenv("FETCH_SELLER_AGENT_NAME", "converge-fetch-seller")
 SHARED_TOKEN_ENV = "FETCH_SELLER_SHARED_TOKEN"
 MODEL_NAME = "fetch-seller-deterministic-v1"
 V2_ROLES = {"seller_advocacy", "seller_reply", "seller_final"}
@@ -335,4 +335,3 @@ async def seller_query(ctx: Context, sender: str, request: SellerMessage) -> Non
 
 if __name__ == "__main__":
     agent.run()
-

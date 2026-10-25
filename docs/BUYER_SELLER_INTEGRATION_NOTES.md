@@ -1,6 +1,6 @@
 # Buyer/seller integration notes
 
-This note records the boundary observed while cross-referencing `origin/geoff/buyer` with the seller branch. It is a merge aid, not a second product specification; `BUYERUNION_IMPLEMENTATION.md` remains authoritative.
+This note records the boundary observed while cross-referencing `origin/geoff/buyer` with the seller branch. It is a merge aid, not a second product specification; `CONVERGE_IMPLEMENTATION.md` remains authoritative.
 
 ## Latest compatibility audit
 
@@ -114,7 +114,7 @@ Seller entry points:
 - `internal.sellerInternal.getV2ProviderResult`: buyer-only read of the
   validated seller result for its publication/phase logic.
 
-## Merge hazards found on `origin/geoff/buyer`
+## Historical merge hazards (resolved by the current combined code)
 
 - The buyer dispatcher currently calls seller preparation without the new optional `brief` field. Use `attachSellerBrief` or pass the brief in the preparation call before dispatch.
 - The buyer dispatcher currently maps every live agent role to CREAO. That is acceptable for buyer-owned roles, but a seller job configured for Fetch must use `sellerAgent.dispatch` and must not also be started by the buyer's generic provider dispatcher.
@@ -125,3 +125,15 @@ Seller entry points:
 ## Data boundary checks
 
 The seller provider input may contain the confirmed public requirements, candidate IDs, the seller's own catalog and inventory facts, MSRP/reference price, public service terms, and the explicit allowlisted common competition snapshot plus checked outcome references for the active v5.3 role. It must not contain raw buyer messages, origins, private maximums, arbitrary competitor records, competitor costs/floors, private affordability, private rationale or sealed final submissions. The seller response is untrusted until the server recomputes the offer and, for council roles, checks the parent snapshot, author scope and phase rules.
+
+## Combined acceptance update — 2026-10-25
+
+Buyer v2, seller v2 and dedicated Reddit search are now combined on `geoff/buyer`.
+The configured Fetch regression runs the real Python policy worker through a
+mocked gateway, buyer council/finals, stock reservation and one persisted simulated
+purchase. It caught explicit-opening-role rejection and competing poll owners;
+both are fixed in this integration. Seller-managed standalone jobs retain their
+scheduler; buyer-managed jobs are polled only by the durable buyer workflow.
+See `INTEGRATED_MVP_AUDIT.md` for the separate browser/deployment evidence and
+remaining headphone-demo blockers. Historical notes above are not current setup
+instructions.

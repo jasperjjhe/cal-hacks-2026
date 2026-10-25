@@ -1,20 +1,20 @@
-# BuyerUnion PRD v4 - complete source conversion
+# Converge PRD v4 - complete source conversion
 
-> Superseded council format: [active PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md)
+> Superseded council format: [active PRD/technical spec v5.3](CONVERGE_IMPLEMENTATION.md)
 > now specifies public offer snapshots, merchant peer challenges/grouped replies
 > and a sealed final-offer invitation for every eligible competitive candidate.
 > This archive remains historical; its extracted source text below is unchanged.
 
 Archived October 24, 2026 before revision. This is a full text conversion of the 29-page original, not the current implementation plan. Page order and extracted text are preserved, including historical decisions that the new plan supersedes. PDF table layout is flattened by extraction; source hyperlinks are retained in the ledger below.
 
-Source: `buyerunion-audit-and-prd.pdf`
+Source: `converge-audit-and-prd.pdf`
 
 ## PDF page 1
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 1
-BuyerUnion | Complete Project PRD v4
+Converge | Complete Project PRD v4
 CalHacks 13.0 | Revised October 23, 2026 | Product, engineering, economics and sponsor reference | No
 length limit
 1. Core Details and Why
@@ -65,7 +65,7 @@ and source/API smoke tests remain explicit gates. Live merchant adoption and eco
 
 ## PDF page 2
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 2
 validation questions, not prototype blockers.
@@ -124,7 +124,7 @@ category, location and deadline.
 
 ## PDF page 3
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 3
 Success story to prove: a buyer writes an ordinary request; agents identify relevant variants, reject
@@ -187,7 +187,7 @@ payment/demo attempt.
 
 ## PDF page 4
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 4
 4. Flow: screens, requirements and comparison
@@ -234,7 +234,7 @@ percent; explicit supported-device compatibility.
 
 ## PDF page 5
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 5
 Profile
@@ -299,7 +299,7 @@ Low-spec fixture [S7]
 
 ## PDF page 6
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 6
 Retain source/checked date. Unknown attributes stay null. Apple OS family is macOS; no unsupported
@@ -360,7 +360,7 @@ warranty/returns/shipping remain policy constants.
 
 ## PDF page 7
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 7
 7. Agent roles, offer contract and compute policy
@@ -422,7 +422,7 @@ bypass policy, identity, approval or time guards.
 
 ## PDF page 8
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 8
 8. Merchant incentives and variable-price policy
@@ -468,7 +468,7 @@ undisclosed ranking.
 
 ## PDF page 9
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 9
 9. Bidding mechanism and council sequence
@@ -516,7 +516,7 @@ server enforces authority even when a model's strategy is poor.
 
 ## PDF page 10
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 10
 Worked mock run
@@ -573,7 +573,7 @@ remains. Take the best qualifying offer from each participating merchant, fill r
 
 ## PDF page 11
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 11
 order, maximum five, then display that shortlist in the selected order. Explain diversity selection; do not imply
@@ -630,7 +630,7 @@ unresolved sandbox-attempt evidence.
 
 ## PDF page 12
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 12
 Display: separate neutral fit, merchant sales argument, commercial offer, independent tests, owner reports
@@ -687,7 +687,7 @@ reason.
 
 ## PDF page 13
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 13
 Record
@@ -738,7 +738,7 @@ state; browser/model memory is not authoritative.
 
 ## PDF page 14
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 14
 On stage/overall deadline, close outstanding jobs. Continue with already validated offers and truthful partial
@@ -791,7 +791,7 @@ distinguish initial, revised and final terms.
 
 ## PDF page 15
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 15
 14. Implementation Plan: architecture and setup
@@ -838,7 +838,7 @@ owns totals, eligibility, rank, timestamps, modes and allowedActions; UI renders
 
 ## PDF page 16
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 16
 primary input; profile fields drive assistant clarification, optional detail chips and comparison rows, never a
@@ -865,7 +865,7 @@ rule supports the label.
 
 ## PDF page 17
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 17
 16. Sponsor strategy: core targets and listed prizes
@@ -959,7 +959,7 @@ other. Avoid duplicate agent frameworks or databases.
 
 ## PDF page 18
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 18
 Submission evidence: save a short integration log for each claimed sponsor: feature, code/config location,
@@ -1060,7 +1060,7 @@ permissions does not by itself establish track qualification.
 
 ## PDF page 19
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 19
 Track
@@ -1085,7 +1085,7 @@ claims.
 
 ## PDF page 20
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 20
 18. Sponsor strategy: alternatives, exclusions and discrepancies
@@ -1184,7 +1184,7 @@ and required artifacts before submission.
 
 ## PDF page 21
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 21
 19. General awards, event requirements and demonstration
@@ -1245,18 +1245,18 @@ Explain which pieces are live, cached, synthetic and simulated.
 
 ## PDF page 22
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 22
 20. Existing products, differentiation and alternatives
 Buyer requests, supplier quotes, consumer deal distribution, AI catalog search and autonomous negotiation all
 have precedents. These comparisons rely on official descriptions, not hands-on testing. Their existence does
-not prove demand for BuyerUnion or rule out another startup with similar features.
+not prove demand for Converge or rule out another startup with similar features.
 Product / pattern
 Overlap and credible distinction
 Alibaba.com RFQ
 Buyers post product requests and suppliers respond with quotations. Direct
-overlap with the marketplace mechanism. BuyerUnion proposes consumer-scale,
+overlap with the marketplace mechanism. Converge proposes consumer-scale,
 low-friction requests, authorized agent offer formation and independent product
 evidence. [C1]
 Amazon Business RFQ
@@ -1266,12 +1266,12 @@ are not restated as verified. It remains a procurement precedent, not proof of
 consumer autonomous bidding. [C2]
 Carwow
 Consumer car configuration and retailer offers show a buyer-led vertical model.
-Current partner materials describe enquiry-funded distribution. BuyerUnion spans
+Current partner materials describe enquiry-funded distribution. Converge spans
 manufactured products and proposes constrained agent pricing and evidence
 rather than only referrals. [C3]
 Google Direct Offers
 Merchant-controlled promotions and AI commerce substantially overlap with
-personalized offers. BuyerUnion's proposed difference is a persistent buyer
+personalized offers. Converge's proposed difference is a persistent buyer
 request, independent merchant strategies and transparent comparison instead of
 undisclosed promotional priority. No universal availability is assumed. [C4]
 Shopify Agentic Storefronts / Catalog
@@ -1280,7 +1280,7 @@ infrastructure. These may be future connectors; a shopping chat over catalog
 data alone is weak differentiation. [C5]
 Pactum
 Enterprise procurement agents run RFQs and negotiate terms. Autonomous
-negotiation is already a product category. BuyerUnion proposes merchant-side
+negotiation is already a product category. Converge proposes merchant-side
 agents for ordinary consumer purchases, with a simple buyer flow. [C6]
 Best differentiation to demonstrate: the buyer's ordinary-language intent becomes a common confirmed
 request; each seller's authorized agent constructs a feasible profitable offer; bounded competition changes a
@@ -1303,7 +1303,7 @@ is made.
 
 ## PDF page 23
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 23
 21. Trust, platform incentives and commercial risks
@@ -1360,7 +1360,7 @@ selected offer record for support; the prototype ends at an explicitly fictional
 
 ## PDF page 24
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 24
 22. Impact, experiments and success measures
@@ -1416,7 +1416,7 @@ business. A technically impressive council is insufficient if the offers are unr
 
 ## PDF page 25
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 25
 23. Functional and failure acceptance requirements
@@ -1476,7 +1476,7 @@ idempotently.
 
 ## PDF page 26
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 26
 • Eligible-only ranking and score components are reproducible. A seller's persuasive prose cannot make
@@ -1527,7 +1527,7 @@ mock commercial stock and policies throughout.
 
 ## PDF page 27
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 27
 Authorized merchant pilot
@@ -1564,7 +1564,7 @@ merchant permission is resolved for the mock demo, not for a production launch.
 
 ## PDF page 28
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 28
 26. External dependencies and questions to resolve
@@ -1616,7 +1616,7 @@ eligibility and real market economics remain open.
 
 ## PDF page 29
 
-BUYERUNION  /  VISA AUDIT + PRODUCT REQUIREMENTS
+CONVERGE  /  VISA AUDIT + PRODUCT REQUIREMENTS
 CalHacks 13.0 | Planning document | Checked October 23, 2026
 29
 27. Source ledger and evidence limits
@@ -1649,7 +1649,7 @@ Research and market references
 
 • R4: Selected clothing-size discussion. Anecdotal fit concerns.
 
-• R5: FTC individualized pricing study. Initial staff findings, not a legal ruling about BuyerUnion.
+• R5: FTC individualized pricing study. Initial staff findings, not a legal ruling about Converge.
 
 • R6: Auction theory overview. Mechanism background, not a proof of this marketplace's equilibrium.
 
@@ -1670,7 +1670,7 @@ Research and market references
 Sponsor prize details principally use the two supplied event snapshots; their heading/description conflicts are
 preserved. Official event/Fetch/Spacetime pages provide current cross-checks, not confirmation of eligibility or
 award stacking. Original research reports remain background: visa-shopping-research.md and
-buyerunion-marketplace-report.md. Older laptop-first recommendations in those reports are superseded here.
+converge-marketplace-report.md. Older laptop-first recommendations in those reports are superseded here.
 
 ## Original hyperlink ledger
 

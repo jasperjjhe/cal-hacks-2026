@@ -1,4 +1,4 @@
-# BuyerUnion Fetch seller agent
+# Converge Fetch seller agent
 
 This is the seller-side Fetch.ai uAgent. It performs the seller's bounded
 catalog matching and v5.3 council work and returns canonical outputs that the
@@ -148,4 +148,3 @@ The Fetch sponsor claim remains pending until the team records an actual
 Agentverse URL, non-secret provider run ID, pending-to-terminal transition,
 accepted proposal, and malformed/timeout recovery in
 `docs/SELLER_SPONSOR_PROOF.md`.
-

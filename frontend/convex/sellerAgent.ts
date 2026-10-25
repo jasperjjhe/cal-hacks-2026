@@ -172,8 +172,9 @@ export const dispatch = internalAction({
     jobId: v.string(),
     poll: v.optional(v.boolean()),
     reconcile: v.optional(v.boolean()),
+    managedByBuyer: v.optional(v.boolean()),
   },
-  handler: async (ctx, args: { jobId: string; poll?: boolean; reconcile?: boolean }): Promise<SellerDispatchResult> => {
+  handler: async (ctx, args: { jobId: string; poll?: boolean; reconcile?: boolean; managedByBuyer?: boolean }): Promise<SellerDispatchResult> => {
     const providerJob = await ctx.runQuery(internal.sellerInternal.getProviderJob, { jobId: args.jobId })
     if (!providerJob) return { pending: false, state: 'missing' as const }
     const mode = args.reconcile ? 'reconcile' : args.poll ? 'poll' : 'start'
@@ -218,7 +219,7 @@ export const dispatch = internalAction({
         errorCode: null,
         errorRetryable: null,
       })
-      if (stored.pending && !v2Role) {
+      if (stored.pending && !v2Role && !args.managedByBuyer) {
         await ctx.scheduler.runAfter(POLL_DELAY_MS, internal.sellerAgent.dispatch, { jobId: args.jobId, poll: true })
       }
       return { pending: stored.pending, state: 'pending' as const, providerRunId: providerResult.providerRunId }
@@ -234,7 +235,7 @@ export const dispatch = internalAction({
         errorCode: providerResult.error.code,
         errorRetryable: providerResult.error.retryable,
       })
-      if (stored.retry && !v2Role) {
+      if (stored.retry && !v2Role && !args.managedByBuyer) {
         await ctx.scheduler.runAfter(RETRY_DELAY_MS, internal.sellerAgent.dispatch, {
           jobId: args.jobId,
           poll: stored.poll,

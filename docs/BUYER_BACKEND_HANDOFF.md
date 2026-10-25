@@ -7,7 +7,7 @@
 
 ## v5.3 council revision — specified, not implemented
 
-The active [PRD/technical spec](../BUYERUNION_IMPLEMENTATION.md), sections 5.7
+The active [PRD/technical spec](../CONVERGE_IMPLEMENTATION.md), sections 5.7
 and 9, replaces the old council with a common frozen public snapshot, checked
 competitive briefs, merchant defense/peer challenge, one grouped reply per target,
 checked outcomes and a sealed final invitation for every eligible candidate.
@@ -145,7 +145,9 @@ Use `frontend/convex/integrations/buyerTools.ts`:
    coordinate transport reuse rather than guessing CREAO endpoints.
 2. `startEvidence`, `pollEvidence`: implemented using pinned Apify RAG Web Browser.
    `BUYER_EVIDENCE_REGISTRY` now contains `actorId`, immutable `build`, numeric
-   `buildNumber` and optional `domains`; no manually curated `sources` array.
+   `buildNumber`, optional `domains`, and optional pinned `reddit` configuration; no
+   manually curated `sources` array. Reddit runs as a separate comment-search job;
+   source aggregation preserves successful evidence when the other provider fails.
    Searches come from genuine catalog product names. Approved-domain/model-matching
    scraped pages become unverified family-level Evidence, with run/build attribution.
    Existing cache/deadline/ownership checks remain. Fictional products skip research.

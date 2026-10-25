@@ -15,6 +15,19 @@ Agentverse Hosted Agent or run as a local uAgent. Hosted process globals are
 not treated as durable state; the agent uses Fetch Agent Storage for the
 pending/completed job record.
 
+## Integration acceptance update — 2026-10-25
+
+The buyer checkout now merges seller v2 code from `dev` (`59f7de4`). An integration
+regression caught and fixed two blockers: the Python worker rejected explicit
+`seller_initial` roles, and opening jobs were polled by both the buyer workflow
+and seller scheduler. Buyer-managed dispatch now disables the seller's independent
+poll/retry scheduling. The configured-port test uses the actual Python logic,
+pending/completed HTTP responses, council/finals and a persisted simulated order.
+The HTTP/Agentverse transport in that test is mocked; it is not hosted proof.
+Redeploy the fixed Python worker to the existing Agentverse agent before enabling
+Fetch. Deploy the matching Convex functions together. See
+[the integrated audit](INTEGRATED_MVP_AUDIT.md) for remaining activation work.
+
 ## Runtime flow
 
 The buyer-owned workflow supplies a server-built, sanitized `SellerBrief`. The seller side then:
