@@ -2,7 +2,10 @@ import { lazy, Suspense } from "react";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import BuyerErrorBoundary from "./BuyerErrorBoundary.tsx";
-import BackendApp from "./BackendApp.tsx";
+import ConvergeApp from "./converge/ConvergeApp.tsx";
+// The earlier workspace and the offline mock carry global stylesheets, so they
+// load only on their own routes and never restyle the Converge buyer UI.
+const ClassicApp = lazy(() => import("./BackendApp.tsx"));
 const MockApp = lazy(() => import("./App.tsx"));
 const url = import.meta.env.VITE_CONVEX_URL;
 const client = url ? new ConvexReactClient(url) : null;
@@ -16,7 +19,13 @@ export default function BuyerApp() {
       ) : client ? (
         <ConvexAuthProvider client={client}>
           <BuyerErrorBoundary>
-            <BackendApp />
+            {location.pathname === "/classic" ? (
+              <Suspense fallback={<p>Loading the classic workspace…</p>}>
+                <ClassicApp />
+              </Suspense>
+            ) : (
+              <ConvergeApp />
+            )}
           </BuyerErrorBoundary>
         </ConvexAuthProvider>
       ) : (
