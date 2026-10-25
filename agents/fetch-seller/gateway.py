@@ -162,6 +162,9 @@ def _message_for(path: str, payload: Dict[str, Any]) -> SellerMessage:
             inputDigest=request.inputDigest,
             inputJson=json.dumps(request.input, separators=(",", ":"), ensure_ascii=True),
             providerAuthToken=shared_token,
+            authorityJson=""
+            if request.sellerAuthority is None
+            else json.dumps(request.sellerAuthority, separators=(",", ":"), ensure_ascii=True),
         )
     if path == "/seller/jobs/poll":
         request = PollRequest(**payload)

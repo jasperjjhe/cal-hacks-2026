@@ -19,7 +19,7 @@ import {
   type SellerReply,
   type SafeReason,
 } from './lib/sellerContracts.ts'
-import { validateFinalOfferRevision, validateSellerProposal } from './lib/sellerValidation.ts'
+import { finalPricingAuthority, validateFinalOfferRevision, validateSellerProposal, type FinalPricingAuthority } from './lib/sellerValidation.ts'
 import {
   payloadDigest,
   requireMerchant,
@@ -554,6 +554,37 @@ export const attachSellerProviderInput = internalMutation({
   },
 })
 
+async function finalAuthorityFor(
+  ctx: SellerQueryCtx,
+  job: { jobId: string; merchantId: string },
+  input: ReturnType<typeof contracts.SellerFinalJobInput.parse>,
+  policy: PricingPolicy | null,
+  openingCatalog: CatalogSnapshot[] | undefined,
+): Promise<FinalPricingAuthority | null> {
+  if (!policy) return null
+  const rows = await ctx.db
+    .query('offerVersions')
+    .withIndex('by_offerId_and_version', (query) => query.eq('offerId', input.ownOffer.offer.id).eq('version', input.ownOffer.offer.version))
+    .take(2)
+  if (rows.length !== 1) return null
+  const opening = rows[0]
+  if (opening.merchantId !== job.merchantId || opening.candidateId !== input.candidateId || opening.status !== 'accepted') return null
+  const authority = finalPricingAuthority({
+    jobId: input.jobId,
+    candidateId: input.candidateId,
+    openingOffer: {
+      offer: { id: opening.offerId, version: opening.version },
+      lines: opening.lines,
+      shippingCents: opening.shippingCents,
+      totalCents: opening.totalCents,
+    },
+    catalog: openingCatalog ?? await loadSnapshots(ctx, job.merchantId),
+    policy,
+  })
+  if (!authority) return null
+  return contracts.SellerFinalAuthority.parse(authority)
+}
+
 export const getProviderJob = internalQuery({
   args: { jobId: v.string() },
   handler: async (ctx: SellerQueryCtx, args: { jobId: string }) => {
@@ -575,7 +606,12 @@ export const getProviderJob = internalQuery({
     const roleInput = inputs[0].roleInput
     if (roleInput !== undefined && roleInput !== null) {
       const input = assertRoleInputScope(job.role, job, roleInput)
-      return { job, brief: inputBrief, input }
+      // Final invitations also carry the merchant's own price authority, derived here
+      // and sent only to this merchant's provider. It is never persisted with the input.
+      const authority = job.role === 'seller_final'
+        ? await finalAuthorityFor(ctx, job, input as ReturnType<typeof contracts.SellerFinalJobInput.parse>, toPolicy(policy), inputs[0].openingCatalog as CatalogSnapshot[] | undefined)
+        : null
+      return { job, brief: inputBrief, input, authority }
     }
     if (!inputBrief) return { job, brief: null, input: null }
     assertSellerBriefSafe(inputBrief)

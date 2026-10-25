@@ -4,7 +4,12 @@ This is the seller-side Fetch.ai uAgent. It performs the seller's bounded
 catalog matching and v5.3 council work and returns canonical outputs that the
 Convex backend validates again. It never receives the buyer's raw conversation,
 requirement origins, private maximum, arbitrary rival records, seller cost,
-operator floor, or sealed final terms. Council roles receive only the
+contribution or discount-cap inputs, or sealed final terms. For a sealed final
+invitation it also receives its own merchant's price authority: the lowest unit
+price that merchant's policy allows for each frozen line, derived by Convex (see
+"Final pricing strategy"). That value equals the operator floor whenever the
+floor is the binding limit, so the merchant's own walk-away price does cross to
+its own agent, as spec §4/§5.6 allow ("its own inventory/policy"). Council roles receive only the
 canonical immutable public competition snapshot and checked outcome
 references; the worker cannot adjudicate or publish buyer results.
 
@@ -135,6 +140,57 @@ The gateway authenticates that token, discards the client-supplied provider
 token, and injects the separately stored Agentverse shared secret into the
 typed uAgents query. Neither token is logged or persisted by the agent.
 
+## Final pricing strategy
+
+The sealed final round is one shot per candidate, so the strategy must not
+drift toward the floor. It uses only public competition data, the buyer's
+consented shared target (never the private maximum, which no seller job
+receives) and the merchant's own price authority:
+
+1. **No authority, no price change.** Without a valid `sellerAuthority` the
+   worker holds. The authority must match the frozen offer exactly (job,
+   candidate, offer, lines, quantities, unit prices summing to the total) and
+   carries one number per line, `lowestAuthorizedUnitCents` = max(operator
+   floor, discount bound, unit cost + minimum contribution). No separate cost,
+   cap or contribution fields are sent, but the value equals whichever term
+   binds, so it can reveal the merchant's own floor or cost-plus-contribution
+   basis to that merchant's own agent (permitted by spec §4: a seller job holds
+   only its own policy). It never reaches the buyer or another merchant.
+2. **Concede only against concrete pressure.** A *comparable rival* is another
+   merchant's snapshot offer for the same request lines whose checked soft-fit
+   coverage is at least this offer's (computed like the backend's
+   `weightedCoverage`: unknown checks leave the denominator). If one is no more expensive, the target is
+   that rival's total minus the smallest meaningful step (0.5%, at least $1).
+3. **Do not chase what cannot be won.** If beating the rival would take the
+   offer below its authorized lowest total, the merchant holds and competes on
+   its non-price advantages instead of giving margin away.
+4. **A buyer target cannot ratchet the price down.** A consented shared target
+   is met (or beaten by less than one cent per unit, from integer rounding)
+   only when it needs at most half of the merchant's room
+   (current total minus authorized lowest total); a deeper target is ignored.
+5. **Already competitive means hold.** No pressure, or a target at or above the
+   current total, produces a hold. Holding is valid and carries no penalty.
+6. The concession is spread across lines in proportion to each line's room,
+   never below a line's authorized lowest price or above its current price.
+   Goods, quantities and service terms stay frozen; `serviceOptionId` is null.
+
+Convex derives the authority at dispatch with the same `minimumUnitCents` rule
+`validateFinalOfferRevision` enforces, sends it beside (not inside) the
+canonical `SellerFinalJobInput`, and never stores it with buyer or seller job
+inputs. Each final job carries only its own merchant's authority; in the demo one
+hosted agent serves all three fictional merchants, so isolation is per job, not
+per agent deployment. Convex still revalidates every revision; an authority-respecting
+proposal is accepted rather than rejected for price.
+
+**Deterministic, not LLM-prompted.** The final decision is numeric and must
+satisfy exact integer constraints inside a 30-second job whose hosted round
+trip already takes 2–20 s. A rule-based strategy is reproducible, testable and
+cannot be steered by untrusted text in the snapshot (rival claims and source
+excerpts). Spec §1 requires a model only where the agent interprets language;
+these inputs are structured, and the backend replaces seller prose with checked
+wording anyway. A language model could later draft advocacy text or explain a
+decision to the merchant, but it should not set prices.
+
 ## Local smoke test
 
 The pure seller logic has no third-party dependency:
@@ -153,7 +209,9 @@ seed through the environment before running `python agent.py`.
 
 - Requests are authenticated with a shared secret and bound to the job ID,
   run ID, phase ID, role, and input digest.
-- Reusing a job ID with a different digest is rejected.
+- Reusing a job ID for the same role with a different input digest or price
+  authority is rejected. Convex reuses a candidate's opening job ID for its
+  sealed final, so a start for a different role replaces the earlier record.
 - Storage records contain only bounded state and the validated decision; they do
   not contain the token or the full request envelope.
 - Input fields are allowlisted and recursively scanned for private buyer/seller
@@ -162,7 +220,8 @@ seed through the environment before running `python agent.py`.
 - Catalog matching fails closed for unknown hard facts, wrong units, wrong
   category/profile, disallowed condition, insufficient stock, and malformed
   policy/catalog data.
-- The agent proposes only a public reference price. Convex recomputes hidden
+- The agent opens at the public reference price and revises a final only
+  inside its merchant's own authorized lowest prices. Convex recomputes
   floors, contribution, stock, shipping, and buyer-visible totals.
 - This agent does not authorize checkout, reserve inventory, transfer money, or
   become the source of truth for offers.

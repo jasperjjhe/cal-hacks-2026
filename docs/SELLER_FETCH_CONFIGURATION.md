@@ -35,7 +35,7 @@ The buyer-owned workflow supplies a server-built, sanitized `SellerBrief`. The s
 1. prepares a `sellerJobs` record bound to request/version, run, phase, merchant, candidates, policy version and input digest;
 2. stores the brief in `sellerJobInputs` after strict validation;
 3. calls the internal `sellerAgent:dispatch` action for a Fetch job;
-4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms. A v5.3 advocacy/reply/final job additionally receives the immutable allowlisted common competition snapshot and checked public outcome references for the current phase, never arbitrary rival records;
+4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms. A v5.3 advocacy/reply/final job additionally receives the immutable allowlisted common competition snapshot and checked public outcome references for the current phase, never arbitrary rival records; a final job also carries its own merchant's derived lowest authorized unit prices (`sellerAuthority`), one number per line, the maximum of the operator floor, discount bound and unit cost plus minimum contribution; no separate cost, cap or contribution fields, though the value equals whichever term binds and so can reveal the merchant's own floor or cost basis to its own agent (spec §4);
 5. accepts `pending`, polls the same provider run, or reconciles an ambiguous start by application `jobId`;
 6. passes completed output to `validateAndStoreProposal`, which recomputes fit, stock, floor, delivered price and policy terms before creating an immutable offer.
 
@@ -56,6 +56,15 @@ offer.
   merchant, with `defend`, `correct` or `unknown` dispositions;
 - seller final: submit one hold, abstention or parent-bound revision per invited
   candidate, keeping the frozen basket and policy authority intact.
+  The start envelope for this role carries `sellerAuthority`
+  (`SellerFinalAuthority`): the merchant's own lowest authorized unit price per
+  frozen line, derived in Convex at dispatch and sent beside the canonical
+  input. Without it the worker holds. The gateway forwards it as
+  `authorityJson`; the agent binds it into the replay record.
+
+Changing `SellerMessage`/`StartRequest` changes the uAgents protocol digest, so
+redeploy the hosted agent and restart the Mana gateway together from the same
+commit.
 
 The worker does not produce moderator briefs or adjudication outcomes. It does
 not browse for new seller facts, invent source IDs, change the snapshot, rank

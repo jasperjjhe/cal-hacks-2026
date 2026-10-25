@@ -1652,6 +1652,63 @@ test("configured Fetch worker that completes on the start call never needs a pol
   } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
 }, 30000);
 
+test("Fetch finals receive the merchant's own price authority and stay inside it", async () => {
+  for (const [key, value] of Object.entries({
+    START_URL: 'https://seller-test.example/seller/jobs',
+    POLL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/poll',
+    RECONCILE_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/reconcile',
+    CANCEL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/cancel',
+    ALLOWED_HOSTS: 'seller-test.example', REQUEST_TIMEOUT_MS: '25000',
+    CONFIG_REVISION: 'local-worker-e2e', AGENT_TOKEN: 'local-test-token'
+  })) vi.stubEnv(`FETCH_SELLER_${key}`, value);
+  type AuthorityLine = { requestLineId: string; unitCents: number; lowestAuthorizedUnitCents: number };
+  type FinalDecision = { kind: string; offer?: unknown; proposal?: { parentOffer: unknown; lines: Array<{ requestLineId: string; unitCents: number }> } };
+  const finals: Array<{ authority: { offer: unknown; lines: AuthorityLine[] }; output: { decision: FinalDecision }; body: string }> = [];
+  const workerDir = fileURLToPath(new URL('../../agents/fetch-seller/', import.meta.url));
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    const body = JSON.parse(String(options?.body));
+    if (!String(url).endsWith('/jobs')) return new Response('{}', { status: 500 });
+    if (body.role !== 'seller_final') expect(body.sellerAuthority).toBeUndefined();
+    const output = JSON.parse(execFileSync('python3', ['-c',
+      'import sys,json;sys.path.insert(0,sys.argv[1]);from seller_logic import build_decision;r=json.load(sys.stdin);print(json.dumps(build_decision(r["input"],r["role"],r.get("sellerAuthority"))))', workerDir
+    ], { input: JSON.stringify(body), encoding: 'utf8' }));
+    if (body.role === 'seller_final') finals.push({ authority: body.sellerAuthority, output, body: String(options?.body) });
+    return new Response(JSON.stringify({ status: 'completed', providerRunId: body.jobId, output, model: 'local-python-policy-worker' }));
+  }));
+  try {
+    const state = await resultRun(undefined, 1000);
+    expect(state.view.stage).toBe('results');
+    expect(finals.length).toBeGreaterThan(0);
+    for (const final of finals) {
+      // Only the derived lowest price crosses the boundary, never its private inputs.
+      for (const key of ['operatorFloorCents', 'unitCostByListing', 'minimumContributionByListing', 'maxDiscountBps', 'privateMaximumCents'])
+        expect(final.body).not.toContain(key);
+      expect(final.authority.offer).toEqual(final.output.decision.offer ?? final.output.decision.proposal?.parentOffer ?? final.authority.offer);
+      for (const line of final.authority.lines) expect(line.lowestAuthorizedUnitCents).toBeLessThanOrEqual(line.unitCents);
+      if (final.output.decision.kind === 'propose') {
+        for (const line of final.output.decision.proposal!.lines) {
+          const bound = final.authority.lines.find(entry => entry.requestLineId === line.requestLineId)!;
+          expect(line.unitCents).toBeGreaterThanOrEqual(bound.lowestAuthorizedUnitCents);
+          expect(line.unitCents).toBeLessThanOrEqual(bound.unitCents);
+        }
+      }
+    }
+    // Every worker revision priced inside its authority passes the seller validator.
+    const results = await state.t.run(ctx => ctx.db.query('sellerJobResults').collect());
+    const finalResults = results.filter(row => row.role === 'seller_final');
+    const proposed = finals.filter(final => final.output.decision.kind === 'propose').length;
+    expect(proposed).toBeGreaterThan(0);
+    expect(finalResults.filter(row => row.validatedOffer !== null && row.validatedOffer !== undefined).length).toBe(proposed);
+    // The authority is computed at dispatch and never persisted with buyer or seller inputs.
+    const stored = JSON.stringify([
+      await state.t.run(ctx => ctx.db.query('buyerJobs').collect()),
+      await state.t.run(ctx => ctx.db.query('sellerJobInputs').collect()),
+      await state.t.run(ctx => ctx.db.query('buyerEvents').collect()),
+    ]);
+    expect(stored).not.toContain('lowestAuthorizedUnitCents');
+  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+}, 30000);
+
 test("configured Fetch worker runs through council and a persisted simulated purchase", async () => {
   for (const [key, value] of Object.entries({
     START_URL: 'https://seller-test.example/seller/jobs',

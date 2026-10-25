@@ -117,6 +117,7 @@ function createPort(
   provider: AgentProvider,
   input: unknown,
   providerRunId: string | null,
+  sellerAuthority: unknown = null,
 ): AgentPort {
   if (provider === 'fixture') throw new Error('fixture provider is available only to deterministic tests')
   const config = livePortConfig(provider)
@@ -124,6 +125,8 @@ function createPort(
     getToken: async () => providerToken(provider),
     resolveInput: async () => input,
     resolveProviderRunId: async () => providerRunId,
+    // Merchant-private final price authority; only the Fetch start envelope carries it.
+    resolveSellerAuthority: async () => (provider === 'fetch' ? sellerAuthority : null),
   }
   return provider === 'fetch'
     ? createFetchAgentPort({ ...config, provider: 'fetch' }, dependencies)
@@ -201,7 +204,7 @@ export const dispatch = internalAction({
     let port: AgentPort | null = null
     let portError: unknown = null
     try {
-      port = createPort(job.provider, providerJob.input, claimed.providerRunId)
+      port = createPort(job.provider, providerJob.input, claimed.providerRunId, 'authority' in providerJob ? providerJob.authority : null)
     } catch (error) {
       portError = error
     }

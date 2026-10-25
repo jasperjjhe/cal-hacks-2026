@@ -165,7 +165,9 @@ use the product's private secret-entry mechanism or a protected local shell.
 - `agents/fetch-seller/seller_logic.py` is dependency-free bounded catalog
   matching. It rejects private fields, oversized/non-JSON input, wrong merchant
   scope, malformed catalog/policy data, unsupported units, and unknown hard
-  requirements. It proposes the public reference price only.
+  requirements. It opens at the public reference price; in the sealed final it
+  applies a deterministic margin-preserving strategy inside its merchant's own
+  authorized lowest prices (see `agents/fetch-seller/README.md`).
 - `agents/fetch-seller/protocol.py` is the single source of truth for the
   typed seller message, mailbox response, REST request, and provider response
   models. Hosted Agentverse uses its schema-safe query wire form.

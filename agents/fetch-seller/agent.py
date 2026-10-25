@@ -7,6 +7,7 @@ so the Convex adapter does not depend on undocumented path parameters.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 import json
@@ -28,7 +29,7 @@ from seller_logic import SellerInputError, bounded_id, build_decision, validate_
 
 AGENT_NAME = os.getenv("FETCH_SELLER_AGENT_NAME", "converge-fetch-seller")
 SHARED_TOKEN_ENV = "FETCH_SELLER_SHARED_TOKEN"
-MODEL_NAME = "fetch-seller-deterministic-v1"
+MODEL_NAME = "fetch-seller-deterministic-v2"
 V2_ROLES = {"seller_advocacy", "seller_reply", "seller_final"}
 
 
@@ -74,6 +75,15 @@ def _store_record(ctx: Context, job_id: str, record: Dict[str, Any]) -> None:
     # decision. It deliberately does not contain the inbound auth token or
     # the complete request envelope.
     ctx.storage.set(f"seller_job:{job_id}", record)
+
+
+def _authority_digest(authority: Optional[Dict[str, Any]]) -> str:
+    """Bind a stored decision to the exact price authority it was computed from."""
+
+    if authority is None:
+        return ""
+    canonical = json.dumps(authority, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _validate_job_id(value: Any) -> str:
@@ -153,12 +163,23 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
         return _failed(provider_run_id, "PROVIDER_AUTH")
     try:
         _validate_start_envelope(request, job_id)
+        authority = getattr(request, "sellerAuthority", None)
+        if authority is not None and request.role != "seller_final":
+            raise SellerInputError("price authority is accepted only for final invitations")
+        authority_digest = _authority_digest(authority)
         existing = _load_record(ctx, job_id)
+        # Convex reuses the opening seller job ID for that candidate's sealed final, so a
+        # stored record for a different role is an earlier phase, not a replay: replace it.
+        # Records written before roles were stored carry no role and keep the digest check.
+        if existing is not None and existing.get("role") not in (None, request.role):
+            existing = None
         if existing is not None:
             if existing.get("inputDigest") != request.inputDigest:
                 return _failed(provider_run_id, "REPLAY_REJECTED")
+            if existing.get("authorityDigest", "") != authority_digest:
+                return _failed(provider_run_id, "REPLAY_REJECTED")
             return _response_from_record(existing)
-        decision = build_decision(request.input, request.role)
+        decision = build_decision(request.input, request.role, authority)
     except SellerInputError:
         return _failed(provider_run_id, "INVALID_INPUT")
     except Exception:
@@ -171,7 +192,9 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
     # the buyer polls every 15 s; an artificial pending step cannot fit.
     # Pending records written by older revisions still finish via _poll_record.
     record = {
+        "role": request.role,
         "inputDigest": request.inputDigest,
+        "authorityDigest": authority_digest,
         "providerRunId": provider_run_id,
         "pollCount": 0,
         "decision": decision,
@@ -228,6 +251,10 @@ def _handle_mailbox_message(ctx: Context, request: SellerMessage) -> ProviderRes
             input_value = json.loads(request.inputJson)
             if not isinstance(input_value, dict):
                 return _failed(provider_run_id, "INVALID_INPUT")
+            authority_json = getattr(request, "authorityJson", "") or ""
+            authority_value = json.loads(authority_json) if authority_json else None
+            if authority_value is not None and not isinstance(authority_value, dict):
+                return _failed(provider_run_id, "INVALID_INPUT")
             return _start_seller_job(
                 ctx,
                 StartRequest(
@@ -239,6 +266,7 @@ def _handle_mailbox_message(ctx: Context, request: SellerMessage) -> ProviderRes
                     inputDigest=request.inputDigest,
                     input=input_value,
                     providerAuthToken=request.providerAuthToken,
+                    sellerAuthority=authority_value,
                 ),
             )
         except Exception:

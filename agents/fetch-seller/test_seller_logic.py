@@ -334,5 +334,129 @@ class SellerLogicTests(unittest.TestCase):
             build_decision(payload, "seller_advocacy")
 
 
+def authority_for(payload, lowest_unit):
+    own = payload["ownOffer"]
+    unit = own["totalCents"] - own["shippingCents"]
+    return {
+        "schemaVersion": 2,
+        "jobId": payload["jobId"],
+        "candidateId": payload["candidateId"],
+        "offer": own["offer"],
+        "lines": [{
+            "requestLineId": "line_main",
+            "listing": own["lines"][0]["listing"],
+            "quantity": 1,
+            "unitCents": unit,
+            "lowestAuthorizedUnitCents": lowest_unit,
+        }],
+        "shippingCents": own["shippingCents"],
+        "totalCents": own["totalCents"],
+    }
+
+
+def with_rival_total(payload, total, matched=()):
+    rival = payload["competition"]["offers"][1]
+    rival["totalCents"] = total
+    rival["checks"] = [
+        {"requirementId": requirement_id, "status": "matched", "actual": None, "sourceIds": [], "explanation": "checked"}
+        for requirement_id in matched
+    ]
+    return payload
+
+
+class FinalPricingStrategyTests(unittest.TestCase):
+    def proposal(self, payload, authority):
+        result = build_decision(payload, "seller_final", authority)
+        return result["decision"]
+
+    def test_undercuts_a_comparable_rival_by_the_smallest_step_not_to_the_floor(self):
+        payload = with_rival_total(final_input(), 99_000)
+        decision = self.proposal(payload, authority_for(payload, 90_000))
+        self.assertEqual(decision["kind"], "propose")
+        proposal = decision["proposal"]
+        # 0.5% of $990 is $4.95: $990.00 -> $985.05, far above the $915 authorized lowest total.
+        self.assertEqual(proposal["lines"][0]["unitCents"], 97_005)
+        self.assertEqual(proposal["parentOffer"], payload["ownOffer"]["offer"])
+        self.assertEqual(proposal["policy"], payload["policy"])
+        self.assertIsNone(proposal["serviceOptionId"])
+
+    def test_holds_when_already_cheaper_than_every_comparable_rival(self):
+        payload = with_rival_total(final_input(), 105_000)
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "hold")
+
+    def test_does_not_chase_a_rival_it_cannot_beat_within_authority(self):
+        payload = with_rival_total(final_input(), 90_000)
+        self.assertEqual(self.proposal(payload, authority_for(payload, 94_000))["kind"], "hold")
+
+    def test_ignores_cheaper_rivals_with_worse_checked_fit(self):
+        payload = with_rival_total(final_input(), 95_000)
+        payload["ownOffer"]["checks"] = [
+            {"requirementId": "r_weight", "status": "matched", "actual": 1240, "sourceIds": [], "explanation": "checked"},
+        ]
+        payload["competition"]["offers"][0] = payload["ownOffer"]
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "hold")
+        with_rival_total(payload, 95_000, matched=("r_weight",))
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "propose")
+
+    def test_unknown_checks_do_not_make_a_worse_fitting_rival_comparable(self):
+        payload = final_input()
+        payload["brief"]["lines"][0]["requirements"].append(
+            {"id": "r_color", "fieldId": "color", "operator": "equals", "value": "black", "unit": None, "strength": "soft", "weight": 1})
+        def check(rid, status):
+            return {"requirementId": rid, "status": status, "actual": None, "sourceIds": [], "explanation": "checked"}
+        payload["ownOffer"]["checks"] = [check("r_weight", "matched"), check("r_color", "unknown")]   # coverage 100
+        payload["competition"]["offers"][0] = payload["ownOffer"]
+        with_rival_total(payload, 95_000)
+        payload["competition"]["offers"][1]["checks"] = [check("r_weight", "matched"), check("r_color", "unmet")]  # 67
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "hold")
+
+    def test_holds_at_the_authorized_lowest_price(self):
+        payload = with_rival_total(final_input(), 90_000)
+        unit = payload["ownOffer"]["totalCents"] - payload["ownOffer"]["shippingCents"]
+        self.assertEqual(self.proposal(payload, authority_for(payload, unit))["kind"], "hold")
+
+    def test_meets_a_reachable_shared_target_exactly(self):
+        payload = with_rival_total(final_input(), 120_000)
+        payload["brief"]["sharedTarget"] = {"amountCents": 96_000, "consentId": "consent_1", "consentedAt": 1_700_000_000_000}
+        decision = self.proposal(payload, authority_for(payload, 90_000))
+        self.assertEqual(decision["kind"], "propose")
+        self.assertEqual(decision["proposal"]["lines"][0]["unitCents"] + payload["ownOffer"]["shippingCents"], 96_000)
+
+    def test_a_low_target_does_not_pull_the_merchant_to_its_lowest_price(self):
+        payload = with_rival_total(final_input(), 120_000)
+        # Room is $990 - $915 = $75. A $916 target would need $74 of it (more than half): hold.
+        payload["brief"]["sharedTarget"] = {"amountCents": 91_600, "consentId": "consent_1", "consentedAt": 1_700_000_000_000}
+        self.assertEqual(self.proposal(payload, authority_for(payload, 90_000))["kind"], "hold")
+
+    def test_rejects_authority_that_does_not_match_the_frozen_offer(self):
+        payload = final_input()
+        authority = authority_for(payload, 90_000)
+        authority["totalCents"] += 1
+        with self.assertRaises(SellerInputError):
+            build_decision(payload, "seller_final", authority)
+        authority = authority_for(payload, 90_000)
+        authority["lines"][0]["lowestAuthorizedUnitCents"] = authority["lines"][0]["unitCents"] + 1
+        with self.assertRaises(SellerInputError):
+            build_decision(payload, "seller_final", authority)
+        authority = authority_for(payload, 90_000)
+        authority["operatorFloorCents"] = 1
+        with self.assertRaises(SellerInputError):
+            build_decision(payload, "seller_final", authority)
+
+    def test_allocation_spreads_concession_by_room_and_respects_each_lowest_price(self):
+        from seller_logic import _allocate_concession
+        authority = {"lines": [
+            {"requestLineId": "a", "listing": {"id": "l_a", "version": 1}, "quantity": 2, "unitCents": 10_000, "lowestAuthorizedUnitCents": 9_000},
+            {"requestLineId": "b", "listing": {"id": "l_b", "version": 1}, "quantity": 1, "unitCents": 5_000, "lowestAuthorizedUnitCents": 4_999},
+        ]}
+        for concession in (1, 333, 1_000, 2_001):
+            lines = _allocate_concession(authority, concession)
+            reduction = sum(line["quantity"] * (original["unitCents"] - line["unitCents"]) for line, original in zip(lines, authority["lines"]))
+            self.assertGreaterEqual(reduction, concession)
+            for line, original in zip(lines, authority["lines"]):
+                self.assertGreaterEqual(line["unitCents"], original["lowestAuthorizedUnitCents"])
+                self.assertLessEqual(line["unitCents"], original["unitCents"])
+
+
 if __name__ == "__main__":
     unittest.main()

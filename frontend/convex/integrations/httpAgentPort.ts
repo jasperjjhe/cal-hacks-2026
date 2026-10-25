@@ -33,6 +33,12 @@ export interface HttpAgentPortDependencies {
   getToken: () => Promise<string | undefined>
   resolveInput: (job: AgentJob) => Promise<unknown>
   resolveProviderRunId: (jobId: string) => Promise<string | null>
+  /**
+   * Optional merchant-private context for the start envelope (the final-invitation
+   * price authority). Sent beside `input`, never inside it, so the canonical input
+   * and its digest stay unchanged; omitted when null.
+   */
+  resolveSellerAuthority?: (job: AgentJob) => Promise<unknown>
 }
 
 function validateConfig(config: HttpAgentPortConfig) {
@@ -180,6 +186,10 @@ export function createHttpAgentPort(
       assertAgentJobScope(job, config.provider)
       const input = await dependencies.resolveInput(job)
       assertNoPrivateSellerFields(input)
+      const sellerAuthority = job.role === 'seller_final' && dependencies.resolveSellerAuthority
+        ? await dependencies.resolveSellerAuthority(job)
+        : null
+      if (sellerAuthority !== null && sellerAuthority !== undefined) assertNoPrivateSellerFields(sellerAuthority)
       return request(config.startUrl, 'POST', {
         jobId: job.jobId,
         runId: job.runId,
@@ -188,6 +198,7 @@ export function createHttpAgentPort(
         inputRef: job.inputRef,
         inputDigest: job.inputDigest,
         input,
+        ...(sellerAuthority === null || sellerAuthority === undefined ? {} : { sellerAuthority }),
       }, job.jobId)
     },
     async poll(jobId: string) {

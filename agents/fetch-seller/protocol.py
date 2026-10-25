@@ -19,6 +19,8 @@ class StartRequest(Model):
     inputDigest: str
     input: Dict[str, Any]
     providerAuthToken: Optional[str] = None
+    # Merchant-private final price authority (SellerFinalAuthority); final role only.
+    sellerAuthority: Optional[Dict[str, Any]] = None
 
 
 class PollRequest(Model):
@@ -51,6 +53,7 @@ class SellerMessage(Model):
     inputDigest: str
     inputJson: str
     providerAuthToken: str
+    authorityJson: str = ""
 
 
 class MailboxResponse(Model):
