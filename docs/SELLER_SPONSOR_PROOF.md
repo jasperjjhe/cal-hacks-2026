@@ -33,6 +33,7 @@ This file is a submission artifact ledger. Code paths and deterministic tests do
 - Through the Mana-hosted HTTPS gateway (`server-prod.mana.space` ingress, service `converge-fetch-gateway`): start → `pending`; same-digest replay → `pending`; poll → `pending` then `completed` with a schema-valid `propose` (DemoBook Air P3, 99,000 cents); reconcile → `completed`; changed-digest replay → `REPLAY_REJECTED`; cancel after completion → terminal `completed`; unknown job → `PROVIDER_NOT_FOUND`; wrong gateway token → HTTP 401. Provider run IDs `fetch-seller:mana-live-*`. Inputs were the disclosed synthetic fixtures from `test_seller_logic.py`.
 - v2 council role live: `seller_advocacy` job completed with phase `advocacy` and one scoped challenge on `fact_rival_1`.
 - Measured round trips 2–17 s per call.
+- Revision 6 (code digest `610ba348…`): jobs complete on the start call. Live through the gateway: three `seller_initial` starts completed with `propose` in 2.5 s, 14.4 s and 2.1 s; `seller_advocacy` completed in 2.6 s; `seller_final` completed in 14.4 s; replay and poll returned the stored `completed` result; a changed digest returned `REPLAY_REJECTED`; a wrong gateway token returned HTTP 401. Each seller job is now one round trip inside the 30 s seller bound.
 - Still pending for a prize claim: Convex `FETCH_SELLER_*` configuration on the demo deployment and one buyer journey whose seller jobs show provider `fetch`.
 
 ## Deployment handoff

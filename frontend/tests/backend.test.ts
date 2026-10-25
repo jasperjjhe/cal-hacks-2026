@@ -1512,6 +1512,39 @@ test("operator provisioning verifies an existing account before granting access"
   expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(1);
 });
 
+test("configured Fetch worker that completes on the start call never needs a poll", async () => {
+  for (const [key, value] of Object.entries({
+    START_URL: 'https://seller-test.example/seller/jobs',
+    POLL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/poll',
+    RECONCILE_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/reconcile',
+    CANCEL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/cancel',
+    ALLOWED_HOSTS: 'seller-test.example', REQUEST_TIMEOUT_MS: '25000',
+    CONFIG_REVISION: 'local-worker-e2e', AGENT_TOKEN: 'local-test-token'
+  })) vi.stubEnv(`FETCH_SELLER_${key}`, value);
+  const roles = new Set<string>();
+  const nonStart: string[] = [];
+  const workerDir = fileURLToPath(new URL('../../agents/fetch-seller/', import.meta.url));
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    expect(new URL(String(url)).hostname).toBe('seller-test.example');
+    const body = JSON.parse(String(options?.body));
+    if (!String(url).endsWith('/jobs')) { nonStart.push(String(url)); return new Response('{}', { status: 500 }); }
+    roles.add(body.role);
+    const output = JSON.parse(execFileSync('python3', ['-c',
+      'import sys,json;sys.path.insert(0,sys.argv[1]);from seller_logic import build_decision;r=json.load(sys.stdin);print(json.dumps(build_decision(r["input"],r["role"])))', workerDir
+    ], { input: JSON.stringify(body), encoding: 'utf8' }));
+    return new Response(JSON.stringify({ status: 'completed', providerRunId: body.jobId, output, model: 'local-python-policy-worker' }));
+  }));
+  try {
+    const state = await resultRun(undefined, 1000);
+    expect(state.view.stage).toBe('results');
+    expect(state.view.offers.length).toBeGreaterThan(0);
+    expect(roles.has('seller_initial')).toBe(true);
+    expect(roles.has('seller_advocacy')).toBe(true);
+    expect(roles.has('seller_final')).toBe(true);
+    expect(nonStart).toEqual([]);
+  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+}, 30000);
+
 test("configured Fetch worker runs through council and a persisted simulated purchase", async () => {
   for (const [key, value] of Object.entries({
     START_URL: 'https://seller-test.example/seller/jobs',

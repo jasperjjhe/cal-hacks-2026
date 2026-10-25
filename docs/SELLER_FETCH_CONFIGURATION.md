@@ -89,7 +89,7 @@ FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/re
 
 The host must be an exact HTTPS hostname allowlisted for the Mana gateway. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The Fetch adapter uses POST for poll, reconcile and cancel and includes the application `jobId` in the typed body. It sends the gateway token as a bearer header and body; the gateway replaces that body token with the separately stored Agentverse shared secret for the typed uAgents query. Neither token is logged or persisted.
 
-The agent returns JSON with a bounded `providerRunId` and one of `pending`, `completed`, `failed` or `cancelled`; completed responses include the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`. A job starts pending, remains pending through the first poll, and becomes terminal on the next poll. Repeated starts with the same `jobId` and input digest replay the stored response; a different digest is rejected.
+The agent returns JSON with a bounded `providerRunId` and one of `pending`, `completed`, `failed` or `cancelled`; completed responses include the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`. A job completes on the start call: the seller decision is deterministic, and the spec bounds seller council and final jobs at 30 seconds while the buyer polls every 15 seconds. `pending` remains a valid response (Convex polls it), and records left pending by older revisions finish on the next poll. Repeated starts with the same `jobId` and input digest replay the stored response; a different digest is rejected.
 
 ## Agentverse setup
 

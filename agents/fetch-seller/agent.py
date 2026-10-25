@@ -166,15 +166,19 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
         # caller. Convex treats this as a non-retryable protocol failure.
         return _failed(provider_run_id, "PROVIDER_PROTOCOL")
 
+    # The decision is deterministic and already computed, so the job completes
+    # on the start call. The spec bounds seller council/final jobs at 30 s and
+    # the buyer polls every 15 s; an artificial pending step cannot fit.
+    # Pending records written by older revisions still finish via _poll_record.
     record = {
         "inputDigest": request.inputDigest,
         "providerRunId": provider_run_id,
         "pollCount": 0,
         "decision": decision,
-        "response": _stored_response("pending", provider_run_id),
+        "response": _stored_response("completed", provider_run_id, decision),
     }
     _store_record(ctx, job_id, record)
-    return ProviderResponse(status="pending", providerRunId=provider_run_id, model=MODEL_NAME)
+    return ProviderResponse(status="completed", providerRunId=provider_run_id, output=decision, model=MODEL_NAME)
 
 
 def _poll_seller_job(ctx: Context, request: PollRequest) -> ProviderResponse:

@@ -17,7 +17,10 @@ references; the worker cannot adjudicate or publish buyer results.
   for the same session.
 - Agentverse's edge rejects urllib's default User-Agent (Cloudflare 1010), so the
   gateway sends its own.
-- Hosted round trips measured 2–17 s; keep `FETCH_SELLER_REQUEST_TIMEOUT_MS` at
+- Seller jobs complete on the start call (one round trip). The spec bounds seller
+  council and final jobs at 30 s and the buyer polls every 15 s, so an extra pending
+  step would always miss the window. Replays, polls and cancels return the stored result.
+- Hosted round trips measured 2–20 s; keep `FETCH_SELLER_REQUEST_TIMEOUT_MS` at
   25000 in Convex.
 - Hosted modules can lack `__file__`; `seller_schema_data.py` (generated) carries
   the same schema as `seller.schema.json`.
