@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:buyerunion:contracts:1",
+  "$id": "urn:converge:contracts:1",
   "$comment": "Generated from index.ts. DRAFT pending Dev S review. Server semantic checks are additional.",
   "$defs": {
     "Ref": {

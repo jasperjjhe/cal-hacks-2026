@@ -189,7 +189,7 @@ export default function SellerOperator() {
     <div className="operator-app">
       <header className="operator-header">
         <div>
-          <p className="eyebrow">BUYERUNION / SELLER OPS</p>
+          <p className="eyebrow">CONVERGE / SELLER OPS</p>
           <h1>Merchant control plane</h1>
           <p className="lede">Keep your catalog accurate, your pricing guardrails explicit, and your seller agent ready for the next qualified request.</p>
         </div>
@@ -275,7 +275,7 @@ export default function SellerOperator() {
         <section className="panel readiness-panel"><p className="section-kicker">Agent readiness</p><h2>Ready for qualified demand</h2><p className="muted">Your seller agent receives only the confirmed public brief and this merchant’s own catalog. The server recomputes fit, stock, floors, contribution and terms before an offer is accepted.</p><div className="readiness-checks"><span>✓ Catalog facts present</span><span>✓ Policy guardrails active</span><span>✓ Provider mode: fixture</span></div><button className="secondary-button full-button" type="button" onClick={() => setNotice('Live Fetch configuration is intentionally outside this fixture preview.')}>Review agent handoff</button></section>
       </section>
 
-      <footer className="operator-footer"><span>BuyerUnion seller workspace</span><span>Fixture preview · Convex/Auth connection pending</span></footer>
+      <footer className="operator-footer"><span>Converge seller workspace</span><span>Fixture preview · Convex/Auth connection pending</span></footer>
     </div>
   )
 }

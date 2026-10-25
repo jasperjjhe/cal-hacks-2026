@@ -25,7 +25,7 @@ import {
 import type { MockOffer, MockState } from "./buyer/mock.ts";
 import "./App.css";
 
-const storageKey = "buyerunion.mock.v1";
+const storageKey = "converge.mock.v1";
 const example =
   "I need a laptop for Figma, school, and some video editing. My budget is $1,000, delivered to San Francisco. I’m open to refurbished.";
 const examples = [
@@ -45,7 +45,7 @@ const progressMessages = [
     "An authorized price revision is ready. Delivery and warranty terms are unchanged.",
   ],
   [
-    "BuyerUnion",
+    "Converge",
     "Comparing final sample offers. Owner evidence is unavailable; no reviews have been invented.",
   ],
 ];
@@ -404,7 +404,7 @@ export default function App() {
         <button className="brand" onClick={() => go("home")}>
           <span className="brand-mark">✦</span>
           <span>
-            <strong>BuyerUnion</strong>
+            <strong>Converge</strong>
             <small>buyer workspace</small>
           </span>
           <span className="brand-chevron">⌄</span>
@@ -585,7 +585,7 @@ export default function App() {
             <div className="split-layout">
               <section className="panel chat-panel">
                 <div className="panel-top">
-                  <strong>✦ BuyerUnion assistant</strong>
+                  <strong>✦ Converge assistant</strong>
                   <span className="pill neutral">Private conversation</span>
                 </div>
                 <div
@@ -1178,7 +1178,7 @@ export default function App() {
           </>
         ) : null}
         <footer className="workspace-footer">
-          <span>✦ BuyerUnion</span>Fictional merchants & inventory · scripted
+          <span>✦ Converge</span>Fictional merchants & inventory · scripted
           agents · no real purchases
         </footer>
         {compared.length > 0 && ["home", "results", "saved"].includes(page) ? (

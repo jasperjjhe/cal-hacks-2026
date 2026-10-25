@@ -6,9 +6,9 @@ for runtime behavior, seller handoff and remaining live acceptance.
 
 ## Configure exactly two saved CREAO agents
 
-1. At agent.creao.ai, create/save **BuyerUnion Intake** using the
+1. At agent.creao.ai, create/save **Converge Intake** using the
    [intake definition](creao/BUYER_INTAKE_AGENT.md).
-2. Create/save **BuyerUnion Council** using the
+2. Create/save **Converge Council** using the
    [council definition](creao/BUYER_COUNCIL_AGENT.md).
 3. Give each saved agent one required text input named `prompt`. No connectors,
    browser tools or payment permissions are needed. The backend supplies each

@@ -57,7 +57,7 @@ jobs:
 
       - name: Generate a CycloneDX SBOM for the build record
         working-directory: frontend
-        run: npm sbom --sbom-format=cyclonedx > "$RUNNER_TEMP/buyerunion-sbom.json"
+        run: npm sbom --sbom-format=cyclonedx > "$RUNNER_TEMP/converge-sbom.json"
 
       - name: Lint
         working-directory: frontend

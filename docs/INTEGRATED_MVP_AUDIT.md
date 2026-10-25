@@ -8,7 +8,7 @@ using the actual Python worker and mocked gateway transport. The planned **XM5
 journey with live CREAO + Fetch + Apify is not yet a working integrated demo**:
 headphone profiles/catalog and live provider activation remain incomplete.
 
-What this repo does: BuyerUnion clarifies a private shopping request, collects
+What this repo does: Converge clarifies a private shopping request, collects
 merchant offers, runs a bounded public council and sealed finals, attaches
 independent evidence, then reserves stock and persists an explicitly simulated
 order. This audit assumes one hackathon demo buyer and three merchants, not

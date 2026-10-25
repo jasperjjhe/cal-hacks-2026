@@ -1,11 +1,11 @@
-# BuyerUnion
+# Converge
 
 A buyer confirms a private shopping brief, compares policy-checked demo merchant
 offers, and explicitly approves an exact simulated order. The buyer interface is
 backed by Convex persistence, Convex Auth and durable Workflow orchestration.
 
 Start with [frontend/README.md](frontend/README.md). Product requirements and the
-owner split are in [BUYERUNION_IMPLEMENTATION.md](BUYERUNION_IMPLEMENTATION.md).
+owner split are in [CONVERGE_IMPLEMENTATION.md](CONVERGE_IMPLEMENTATION.md).
 The [buyer handoff](docs/BUYER_BACKEND_HANDOFF.md) describes APIs, seller integration
 and the remaining external adapter configuration.
 
@@ -24,7 +24,7 @@ remaining headphone-demo blockers and the deployment checklist.
 
 ## Agreed competition revision — unified code, live provider acceptance pending
 
-[PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md) now requires independent
+[PRD/technical spec v5.3](CONVERGE_IMPLEMENTATION.md) now requires independent
 opening bids, a frozen public comparison, merchant peer challenges and grouped
 replies, checked outcomes, then one sealed final invitation per eligible candidate.
 The council explains supported tradeoffs; deterministic rules rank valid offers

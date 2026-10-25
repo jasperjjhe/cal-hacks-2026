@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const schema = JSON.parse(await readFile(resolve(root, 'convex', 'lib', 'seller.schema.json'), 'utf8'))
 
 test('seller worker schema is strict and excludes private buyer/seller fields from provider input', () => {
-  assert.equal(schema.$id, 'https://buyerunion.local/contracts/seller.v1.schema.json')
+  assert.equal(schema.$id, 'https://converge.local/contracts/seller.v1.schema.json')
   assert.deepEqual([...schema.$defs.SellerBrief.required].sort(), [
     'schemaVersion', 'request', 'runId', 'currency', 'deliveryRegion', 'deliveryDeadline', 'lines', 'sharedTarget',
   ].sort())

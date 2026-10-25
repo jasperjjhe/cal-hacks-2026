@@ -65,7 +65,7 @@ export async function stripePayment(claim: PaymentClaim): Promise<PaymentOutcome
       mode: "payment",
       "line_items[0][price_data][currency]": "usd",
       "line_items[0][price_data][unit_amount]": String(claim.quote.totalCents),
-      "line_items[0][price_data][product_data][name]": "BuyerUnion demo bundle (test purchase)",
+      "line_items[0][price_data][product_data][name]": "Converge demo bundle (test purchase)",
       "line_items[0][quantity]": "1",
       client_reference_id: claim.executionId,
       success_url: returnUrl.href,

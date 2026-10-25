@@ -1,6 +1,6 @@
 # Buyer/seller integration notes
 
-This note records the boundary observed while cross-referencing `origin/geoff/buyer` with the seller branch. It is a merge aid, not a second product specification; `BUYERUNION_IMPLEMENTATION.md` remains authoritative.
+This note records the boundary observed while cross-referencing `origin/geoff/buyer` with the seller branch. It is a merge aid, not a second product specification; `CONVERGE_IMPLEMENTATION.md` remains authoritative.
 
 ## Latest compatibility audit
 

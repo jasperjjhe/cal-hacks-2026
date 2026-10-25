@@ -6,7 +6,7 @@ const target = new URL('../src/contracts/schema.json', import.meta.url)
 const workerTarget = new URL('../../agents/fetch-seller/seller.schema.json', import.meta.url)
 const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'urn:buyerunion:contracts:1',
+  $id: 'urn:converge:contracts:1',
   $comment: 'Generated from index.ts. DRAFT pending Dev S review. Server semantic checks are additional.',
   $defs: Object.fromEntries(Object.entries(contracts).map(([name, contract]) => {
     const { $schema: dialect, ...definition } = z.toJSONSchema(contract, { target: 'draft-2020-12' })
@@ -16,7 +16,7 @@ const schema = {
 }
 const sellerSchema = {
   $schema: schema.$schema,
-  $id: 'https://buyerunion.local/contracts/seller.v1.schema.json',
+  $id: 'https://converge.local/contracts/seller.v1.schema.json',
   $comment: 'Request envelopes remain v1; council and final decision envelopes are v2. Generated from the canonical registry.',
   oneOf: ['SellerBrief', 'SellerDecision', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => ({ $ref: `#/$defs/${name}` })),
   $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => [name, schema.$defs[name]])),

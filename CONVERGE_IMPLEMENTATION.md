@@ -1,10 +1,10 @@
-# BuyerUnion: PRD and two-developer backend handoff
+# Converge: PRD and two-developer backend handoff
 
 Version 5.3 | October 24, 2026 | Working product and implementation specification
 
 **Outcome:** a buyer confirms one shopping request; isolated seller agents prepare policy-valid offers; the platform checks requirements and evidence; the buyer chooses and explicitly approves exact terms; the prototype records a truthful simulated order.
 
-This document replaces v4's implementation direction. The complete original is preserved in `buyerunion-prd-v4-source.md`; the PDFs remain unchanged. Everything needed to build the backend is specified here. The archive is history, not a second active specification.
+This document replaces v4's implementation direction. The complete original is preserved in `converge-prd-v4-source.md`; the PDFs remain unchanged. Everything needed to build the backend is specified here. The archive is history, not a second active specification.
 
 ## 1. Confirmed changes and decisions left to the team
 
@@ -30,7 +30,7 @@ This document replaces v4's implementation direction. The complete original is p
 
 ## 2. Product requirements and scope
 
-BuyerUnion is like asking several stores for a suitable offer without repeating the same requirements at every counter. The buyer describes an outcome; seller agents search their own catalogs and may make permitted concessions; the platform explains the differences and keeps the buyer in control.
+Converge is like asking several stores for a suitable offer without repeating the same requirements at every counter. The buyer describes an outcome; seller agents search their own catalogs and may make permitted concessions; the platform explains the differences and keeps the buyer in control.
 
 ### Buyer capabilities
 
@@ -854,7 +854,7 @@ The backend team provides the following capabilities and fixtures. The UI team d
 
 ### Figma reconciliation for buyer and merchant screens
 
-Use the [current BuyerUnion design file](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026) as a changing UI reference, not a source of commerce authority. The inspected frames are buyer chat/debate/compare/approval and seller add-products/policy/analytics. UI team owns layouts; B and S confirm any new action before it becomes a backend promise.
+Use the [current Converge design file](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026) as a changing UI reference, not a source of commerce authority. The inspected frames are buyer chat/debate/compare/approval and seller add-products/policy/analytics. UI team owns layouts; B and S confirm any new action before it becomes a backend promise.
 
 | Design control or claim | Required behavior / owner |
 |---|---|
@@ -1044,7 +1044,7 @@ Visa remains the primary product story. Record actual Fetch/CREAO role use, sour
 
 ## 18. Sources and verification boundaries
 
-Design inputs: original 29-page PRD, complete archived Markdown, later product brief, supplied two-developer split, the user's October 24 changes and UI ownership correction, and the current [BuyerUnion Figma design](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026). The broad product boundary is retained; recommendations in the earlier brief were not blanket approval to delete categories. Figma frames were inspected for buyer chat, comparison and approval plus merchant catalog setup, policy and analytics; visual copy is not verified product data or an approved backend requirement.
+Design inputs: original 29-page PRD, complete archived Markdown, later product brief, supplied two-developer split, the user's October 24 changes and UI ownership correction, and the current [Converge Figma design](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf/Calhacks-2026). The broad product boundary is retained; recommendations in the earlier brief were not blanket approval to delete categories. Figma frames were inspected for buyer chat, comparison and approval plus merchant catalog setup, policy and analytics; visual copy is not verified product data or an approved backend requirement.
 
 Technical reference checks:
 
@@ -1096,7 +1096,7 @@ The stack should maximize credible track coverage along one buyer journey, not a
 
 This table records possible sponsor proof, not a mandate to run every integration. The core remains the prompt-to-bid-to-approved-simulation path in §§2–16. Use at least one real Fetch.ai or CREAO agent role; use both only if each performs distinct, necessary work. Coinbase remains optional after G2, as §17 and the ownership plan specify. The agent bidding path takes priority over sponsor additions.
 
-| Technology / track | Concrete role in BuyerUnion | Required proof and security boundary |
+| Technology / track | Concrete role in Converge | Required proof and security boundary |
 |---|---|---|
 | Convex | Authoritative reactive database, typed functions, Auth, durable Workflows and live run progress. | A reloadable run survives retries/restarts; reservations are atomic; every query/mutation checks authenticated ownership; no second authoritative database. |
 | Fetch.ai | A real merchant/supplier agent (or agent network) produces a scoped proposal using the SellerBrief and returns provider provenance. | A reachable agent, actual request/response, job identity, bounded tools and a failure/retry demo. The official Fetch prize page currently lists a different prize breakdown than the supplied table; confirm with organizers before submission. |
@@ -1109,7 +1109,7 @@ This table records possible sponsor proof, not a mandate to run every integratio
 
 These are candidate ideas, not prototype requirements. Current exclusions in §2 remain authoritative: no credit scoring, voice input or extra merchant approval workflow in the demo. Adding any of those needs a separate product decision and work estimate. Figma design evidence may proceed in parallel; optional runtime integrations wait until G2.
 
-1. **Apify / Best Actor (future extension, not the current demo).** The demo now uses the maintained RAG Web Browser for automated discovery. A future submission could promote the evidence service to a first-party `BuyerUnion Evidence Actor`: accept only server-issued product identity and approved source IDs, enforce URL/redirect/SSRF controls, normalize source evidence and return an input digest. This is already aligned with §10 and can support both the general Apify track and the Best Actor prize without inventing a second crawler architecture.
+1. **Apify / Best Actor (future extension, not the current demo).** The demo now uses the maintained RAG Web Browser for automated discovery. A future submission could promote the evidence service to a first-party `Converge Evidence Actor`: accept only server-issued product identity and approved source IDs, enforce URL/redirect/SSRF controls, normalize source evidence and return an input digest. This is already aligned with §10 and can support both the general Apify track and the Best Actor prize without inventing a second crawler architecture.
 2. **CRS Credit API (separate scope decision).** A sandbox-only trust/fraud check would require explicit consent, test identities, a defined decision role and privacy review. The current demo excludes credit scoring and does not depend on this feature.
 3. **Cartesia plus Moss (separate scope decision).** A real voice flow would need to drive intake, clarification and status through the same guarded contracts. The current demo stays prompt-first text; voice input remains excluded.
 4. **Factory Droid SDK (separate scope decision).** A merchant operations assistant could audit listings and propose changes for review. The current merchant demo stays simple and has no agent-driven listing-edit or exception approval workflow.

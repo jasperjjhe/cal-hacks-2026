@@ -6,7 +6,7 @@ document remains the normative format and acceptance handoff, not live-provider
 proof. It was originally published to `dev` from `geoff/buyer` so both
 developers could consume the agreed format without merging buyer implementation.
 The active product/technical authority is
-[implementation spec v5.3](../BUYERUNION_IMPLEMENTATION.md), sections 5.7 and 9.
+[implementation spec v5.3](../CONVERGE_IMPLEMENTATION.md), sections 5.7 and 9.
 Historical review/test results do not establish acceptance of this new protocol.
 Implementation paths and baseline behavior below describe the feature branches,
 not code delivered by this documentation-only commit to `dev`.

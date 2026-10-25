@@ -1,4 +1,4 @@
-# BuyerUnion buyer workspace
+# Converge buyer workspace
 
 The default React application uses an authenticated Convex backend. Requests,
 immutable confirmed versions, agent jobs, durable runs, evidence, quotes, stock
@@ -7,7 +7,7 @@ The historical browser-only prototype is available explicitly at `/mock`.
 
 ## Council format: current implementation versus agreed revision
 
-[Spec v5.3](../BUYERUNION_IMPLEMENTATION.md) and the
+[Spec v5.3](../CONVERGE_IMPLEMENTATION.md) and the
 [seller council handoff](../docs/SELLER_COUNCIL_HANDOFF.md) now require public
 competitive snapshots, merchant peer challenges/grouped replies, checked public
 exchanges and one sealed final invitation for every eligible candidate. The
