@@ -47,6 +47,23 @@ describe("seller inventory storage", () => {
     expect((await loadInventory()).needsSave).toBe(false);
   });
 
+  it("recovers browser-mode edits when the file route comes back after a failed load", async () => {
+    stubStorage();
+    const original = withActivity(initialInventory(), "seeded");
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("network down");
+    });
+    const first = await loadInventory();
+    expect(first.mode).toBe("browser");
+    const edited = { ...withActivity(original, "edited"), savedAt: (original.savedAt ?? 0) + 1 };
+    expect(await saveInventory(edited, "browser")).toBe("saved");
+
+    stubServer(original, { writable: true });
+    const reloaded = await loadInventory();
+    expect(reloaded).toMatchObject({ mode: "file", needsSave: true });
+    expect(reloaded.state).toEqual(edited);
+  });
+
   it("reports unsaved instead of success when browser storage fails", async () => {
     stubStorage({ broken: true });
     const state = withActivity(initialInventory(), "edited");

@@ -10,7 +10,8 @@ export type SaveResult = "saved" | "backup" | "unsaved";
 
 const route = "/api/seller-inventory";
 const browserKey = "buyerunion.seller.inventory.v1";
-// Set when the browser copy is newer than the file (a file save failed); holds that copy's savedAt.
+// Set when the browser copy may be newer than the file (a file save failed, or the file route was
+// unreachable and edits went to the browser); holds that copy's savedAt.
 const unsyncedKey = "buyerunion.seller.inventory.unsynced.v1";
 export const inventoryFilePath = "frontend/data/seller-inventory.json";
 
@@ -52,7 +53,7 @@ function setUnsynced(revision: number | null): boolean {
   }
 }
 
-// A browser copy left behind by a failed file save, if it's still at least as new as the file.
+// A browser copy left behind while the file was unavailable, if it's still at least as new as the file.
 function recoverUnsynced(file: InventoryState | null): InventoryState | null {
   if (unsyncedRevision() === null) return null;
   const copy = readBrowser();
@@ -88,7 +89,9 @@ let queue: Promise<unknown> = Promise.resolve();
 // Saves are chained so an older snapshot can never land after a newer one.
 export function saveInventory(state: InventoryState, mode: StorageMode): Promise<SaveResult> {
   if (mode === "browser") {
-    return Promise.resolve(saveToBrowser(state) ? "saved" : "unsaved");
+    // Browser mode may only mean the file route was briefly down, so mark the copy for recovery
+    // in case the file comes back on a later load.
+    return Promise.resolve(saveToBrowser(state) && setUnsynced(state.savedAt ?? 0) ? "saved" : "unsaved");
   }
   const next = queue.then(async (): Promise<SaveResult> => {
     try {
