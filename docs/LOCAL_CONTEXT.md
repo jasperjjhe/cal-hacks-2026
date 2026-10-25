@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current pushed commit: `c1e788c` (`docs: sync seller plan with council v5.3`).
+Current pushed commit: `f6af203` (`feat: add seller final service policy authority`).
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`.
 
@@ -300,9 +300,10 @@ specific proof criteria.
   step.
 - The local and remote seller branches contain merge commit `84db50c`, which
   brings in the latest documentation-only `origin/dev` council v5.3 revision,
-  followed by pushed documentation checkpoint `c1e788c`.
+  followed by pushed documentation checkpoints `c1e788c` and `fe9b70a`, then
+  the tested seller service-authority checkpoint `f6af203`.
 - `origin/dev` is the merge base's current remote line; the seller branch is
-  20 commits ahead and has no commits missing from `origin/dev` at this check.
+  22 commits ahead and has no commits missing from `origin/dev` at this check.
 - `origin/geoff/buyer` and the seller feature branch have diverged (7 commits
   unique to buyer, 21 unique to seller at this check). Integrate through the
   documented internal seam rather than copying duplicate implementations.
@@ -339,9 +340,10 @@ specific proof criteria.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime baseline implemented; v5.3
-council specification synced from `dev`; council contract migration, hosted
-deployment, live route verification and buyer integration pending.**
+Status at this context update: **seller runtime baseline and v5.3
+final-service policy authority groundwork implemented; council contract
+migration, final parent/basket economics, hosted deployment, live route
+verification and buyer integration pending.**
 
 Completed:
 
@@ -360,6 +362,11 @@ Completed:
 - Fetch configuration, sponsor proof, seller implementation plan, and buyer/
   seller integration notes updated; the v5.3 seller council handoff is now
   merged from `dev` and seller-branch docs record the migration gap honestly.
+- Versioned seller policies now persist bounded `finalServiceOptions` with
+  private nonnegative incremental bundle costs; `resolveFinalServiceTerms`
+  rejects unapproved IDs and provides baseline terms for `null`; accepted
+  offer versions record `serviceOptionId`. The v1 provider wire contract is
+  intentionally unchanged until the buyer-owned canonical v2 envelopes land.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -382,8 +389,10 @@ Pending:
 - Review and consume the buyer-owned canonical v5.3 contract revision when it
   lands. Migrate seller worker/parser/fixtures to advocacy, grouped reply and
   parent-bound final roles without adding a duplicate council schema.
-- Add immutable `finalServiceOptions` policy support and seller-side validation
-  before claiming service concessions in final offers.
+- Consume the buyer-owned v2 final envelope, then add parent-bound frozen
+  basket, monotonic delivered-total/term and bundle-contribution validation;
+  policy allowlist groundwork is complete but service concessions remain
+  unadvertised/unclaimed until those checks exist.
 - Finish a seller-only operator/demo surface and buyer-to-seller integration
   tests.
 - Merge with the buyer branch only after contract regeneration and duplicate
@@ -399,24 +408,28 @@ Pending:
 2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
    snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the
    change dependency-free and test deterministic privacy/parent-scope gates.
-3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
+3. Implement the seller final validator against the resolved v2 envelope:
+   parent candidate, frozen goods/configuration/condition/quantity, policy
+   option authority, incremental contribution, no weaker terms and no higher
+   delivered total. Add golden fixtures before enabling the role.
+4. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
    agent, then configure `gateway.py` on Mana with a separate gateway token and
    the fixed Agentverse address. Do not paste either secret into chat.
-4. Verify the four gateway routes and typed Agentverse query, then record the
+5. Verify the four gateway routes and typed Agentverse query, then record the
    exact public HTTPS host, agent address, runtime version, and non-secret test
    run IDs.
-5. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
+6. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
    the protected `frontend/` shell.
-6. Run the live seller acceptance matrix: valid proposal, no-match abstain,
+7. Run the live seller acceptance matrix: valid proposal, no-match abstain,
    replay with same digest, replay with changed digest, pending-to-completed
    polling, ambiguous-start reconciliation, cancellation, malformed output,
    timeout, auth rejection, and one v5.3 council-role run after migration.
-7. Append the evidence to `docs/SELLER_SPONSOR_PROOF.md`, then build the
+8. Append the evidence to `docs/SELLER_SPONSOR_PROOF.md`, then build the
    seller-only operator/demo flow and its integration tests.
-8. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
+9. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
    integrate through `prepareSellerJob`/`attachSellerBrief`/`dispatch`, and
    verify there is exactly one provider call per seller job.
-9. After the core seller/buyer demo works, implement buyer-owned CREAO,
+10. After the core seller/buyer demo works, implement buyer-owned CREAO,
    Apify, Visa, Coinbase/x402, and Mana proof in separate small checkpoints.
 
 ## Required status wording for future turns
