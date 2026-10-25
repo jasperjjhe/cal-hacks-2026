@@ -1,3 +1,5 @@
+import { activeCouncilJob, completeCouncilOutput, councilFor } from "./buyerRoles.ts";
+import { fixtureCouncil, publiclyEligible, publicOffer, sameRef } from "./buyer/council.ts";
 import { merchantEligible } from "./buyer/eligibility";
 import {
   internalAction,
@@ -7,7 +9,11 @@ import {
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { z } from "zod";
-import { contracts } from "../src/contracts/index.ts";
+import { contracts, type Contract } from "../src/contracts/index.ts";
+type ContractOffer = Contract<"OfferVersion">;
+function canonicalFinalBinding(value: Record<string, unknown>) {
+  return JSON.stringify([value.schemaVersion, value.jobId, value.roundId, value.councilId, value.snapshot, value.snapshotDigest, value.outcomeVersion, value.candidateId]);
+}
 import { buildSellerBrief } from "../src/backend/buyer/requests.ts";
 import {
   currentRun,
@@ -16,7 +22,9 @@ import {
   digest,
   fail,
   emit,
+  arrivalAt,
 } from "./buyer/core.ts";
+import { snapshotCreaoConfig } from "./integrations/creaoBuyer.ts";
 import { fixtureIntake } from "./buyer/intake.ts";
 import { loadSnapshots, getPolicy, toPolicy } from "./sellerInternal.ts";
 import { assessLine, minimumUnitCents } from "./lib/sellerValidation.ts";
@@ -60,7 +68,11 @@ export const prepareIntake = internalMutation({
         "LIMIT_REACHED",
         "Review the editable brief after three clarification turns.",
       );
-    const inputData = { draft };
+    const profiles = (await ctx.db.query("categoryProfiles").take(100)).map(r => contracts.CategoryProfile.parse({
+      profile: { id: r.profileId, version: r.version }, category: r.category, allowedConditions: r.allowedConditions,
+      fields: r.fields, variantKeyFields: r.variantKeyFields, compatibilityRuleId: r.compatibilityRuleId, evidenceRuleId: r.evidenceRuleId,
+    }));
+    const inputData = { draft, profiles };
     return String(
       await ctx.db.insert("buyerJobs", {
         runId: null,
@@ -75,6 +87,7 @@ export const prepareIntake = internalMutation({
         input: inputData,
         inputDigest: await digest(inputData),
         provider: process.env.BUYER_AGENT_MODE === "live" ? "creao" : "fixture",
+        providerConfig: snapshotCreaoConfig("intake"),
         providerRunId: null,
         outputDigest: null,
         output: null,
@@ -172,7 +185,7 @@ export const preparePhase = internalMutation({
             providerConfigRevision: run.config.revision,
             inputDigest,
             inputRef,
-            deadlineAt: Math.min(run.deadlineAt, run.startedAt + 75000),
+            deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + 35000),
           });
           ids.push(
             String(
@@ -192,7 +205,7 @@ export const preparePhase = internalMutation({
                 providerRunId: null,
                 outputDigest: null,
                 output: null,
-                deadlineAt: Math.min(run.deadlineAt, run.startedAt + 75000),
+                deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + 35000),
                 createdAt: now,
                 completedAt: null,
               }),
@@ -200,31 +213,18 @@ export const preparePhase = internalMutation({
           );
         }
       }
-    } else if (args.phase === "council" || args.phase === "negotiating") {
+    } else if (args.phase === "negotiating") {
       const rows = await ctx.db
         .query("buyerOffers")
         .withIndex("by_run_effective", (q) =>
           q.eq("runId", args.runId).eq("effective", true),
         )
         .take(6);
-      const moderator = await ctx.db
-        .query("buyerJobs")
-        .withIndex("by_run_phase", (q) =>
-          q.eq("runId", args.runId).eq("phase", "council"),
-        )
-        .filter((q) => q.eq(q.field("role"), "moderator"))
-        .first();
-      const plan = moderator?.output as
-        | import("../src/contracts/index.ts").Contract<"ChallengePlan">
-        | null;
-      const challenged = rows.filter(row => plan?.challenges?.some(c =>
-        c.offer.id === row.data.offer.id && c.offer.version === row.data.offer.version,
-      ));
-      const selected = args.phase === "council"
-        ? challenged.filter((row, index, all) => all.findIndex(r => r.merchantId === row.merchantId) === index)
-        : rows;
+      const council = await councilFor(ctx, args.runId);
+      const invitations = await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", args.runId)).take(6);
+      const selected = council ? rows.filter(row => invitations.some(i => i.candidateId === row.candidateId && sameRef(i.openingOffer, row.data.offer))) : rows;
       for (const row of selected) {
-        if (!(await merchantEligible(ctx, row.merchantId, row.data.policy))) continue;
+        if (!(await publiclyEligible(ctx, row, request))) continue;
         const roundId = args.roundId ? ctx.db.normalizeId("buyerRounds", args.roundId) : null;
         const round = roundId ? await ctx.db.get(roundId) : null;
         if (args.phase === "negotiating" && (!round || round.runId !== args.runId || round.data.status !== "open" || round.data.deadlineAt <= now || !round.data.participants.some((p: { candidateId: string }) => p.candidateId === row.candidateId))) continue;
@@ -238,10 +238,10 @@ export const preparePhase = internalMutation({
         if (!jobs) continue;
         const deadlineAt = Math.min(
           run.deadlineAt,
-          args.phase === "negotiating" ? round!.data.deadlineAt : run.startedAt + 75000,
+          round!.data.deadlineAt,
         );
         await ctx.db.patch(jobs._id, {
-          role: args.phase === "council" ? "seller_response" : "seller_final",
+          role: "seller_final",
           phaseId: args.phase,
           deadlineAt,
           status: "created",
@@ -267,15 +267,26 @@ export const preparePhase = internalMutation({
             returnDays: row.data.returnDays,
           },
           roundId: args.roundId ?? null,
-          challenge:
-            args.phase === "council"
-              ? plan?.challenges.find((c) => c.offer.id === row.data.offer.id)
-              : null,
-          feedback:
-            args.phase === "negotiating"
-              ? "A final permitted improvement may help this offer; no rival confidential data is shared."
-              : null,
+          competition: council?.snapshot ?? null,
+          comparisons: council?.comparisons.filter((c: {merchantId:string}) => c.merchantId === row.merchantId) ?? [],
+          checkedOutcomes: council?.outcomes ?? [],
+          finalBinding: { schemaVersion: 2, jobId: sellerJobId, roundId: args.roundId!,
+            councilId: council ? String(council._id) : null, snapshot: council?.snapshot.snapshot ?? null,
+            snapshotDigest: council?.snapshotDigest ?? null, outcomeVersion: council?.outcomeVersion ?? 0,
+            candidateId: row.candidateId },
+          feedback: "Use the frozen public comparison and checked outcomes. Hold, abstain, or improve within the existing policy; never substitute goods or weaken terms.",
         };
+        const sellerInput = contracts.SellerFinalJobInput.parse({ ...payload.finalBinding,
+          merchantId: row.merchantId, policy: row.data.policy, request: request.request, runId: args.runId,
+          deadlineAt, brief: council?.snapshot.brief ?? {
+            schemaVersion: brief.schemaVersion, request: brief.request, currency: brief.currency, deliveryRegion: brief.deliveryRegion,
+            deliveryDeadline: brief.deliveryDeadline, lines: brief.lines, sharedTarget: brief.sharedTarget,
+          }, ownOffer: await publicOffer(ctx, row, request),
+          competition: council?.snapshot ?? null, facts: council?.facts ?? [],
+          comparisons: council?.comparisons.find((c: {merchantId:string}) => c.merchantId === row.merchantId)?.points ?? [],
+          outcomes: council?.outcomes ?? [] });
+        // Only this canonical projection may cross the future seller provider port.
+        const finalPayload = { ...payload, sellerInput };
         ids.push(
           String(
             await ctx.db.insert("buyerJobs", {
@@ -283,14 +294,13 @@ export const preparePhase = internalMutation({
               requestId: run.requestId,
               version: run.version,
               phase: args.phase,
-              role:
-                args.phase === "council" ? "seller_response" : "seller_final",
+              role: "seller_final",
               merchantId: row.merchantId,
               candidateId: row.candidateId,
               sellerJobId,
               state: "queued",
-              input: payload,
-              inputDigest: await digest(payload),
+              input: finalPayload,
+              inputDigest: await digest(finalPayload),
               provider: "fixture", // Seller live dispatch is connected during branch consolidation.
               providerRunId: null,
               outputDigest: null,
@@ -301,15 +311,8 @@ export const preparePhase = internalMutation({
             }),
           ),
         );
-        if (args.phase === "council")
-          await emit(
-            ctx,
-            args.runId,
-            "challenge",
-            "An exact-configuration requirement/condition check was requested.",
-            row.merchantId,
-            row.data.offer,
-          );
+        const invitation = invitations.find(i => i.candidateId === row.candidateId);
+        if (invitation) await ctx.db.patch(invitation._id, { jobId: ids[ids.length - 1], status: "invited" });
       }
     }
     return ids;
@@ -323,7 +326,11 @@ export const claimJob = internalMutation({
     if (!job) return null;
     if (job.runId && !(await currentRun(ctx, job.runId, job.phase)))
       return null;
-    if (!args.poll && job.merchantId && !(await merchantEligible(ctx, job.merchantId, job.input.policy.policy))) {
+    if (!(await activeCouncilJob(ctx, job))) {
+      await ctx.db.patch(job._id, { state: "stale", completedAt: Date.now() });
+      return null;
+    }
+    if (!args.poll && job.merchantId && job.phase !== "council" && !(await merchantEligible(ctx, job.merchantId, job.input.policy.policy))) {
       await ctx.db.patch(job._id, { state: "cancelled", completedAt: Date.now() });
       return null;
     }
@@ -407,13 +414,13 @@ export const dispatch = internalAction({
           providerRunId: `fixture:${args.jobId}`,
           model: "deterministic-fixture-v1",
           output:
-            job.role === "intake"
+            job.phase === "council" && job.input.schemaVersion === 2
+              ? fixtureCouncil(job.input)
+              : job.role === "intake"
               ? fixtureIntake(contracts.DraftView.parse(job.input.draft))
-              : job.role === "moderator"
-                ? fixtureModerator(job.input)
-                : job.role === "evidence_summary"
+              : job.role === "evidence_summary"
                   ? fixtureSummary(job.input)
-                  : fixtureSeller(job.input, job.phase),
+                  : fixtureSellerResult(job.input, job.phase),
         };
       else
         result = await (args.poll ? pollCreao : invokeCreao)({
@@ -422,6 +429,7 @@ export const dispatch = internalAction({
           input: job.input,
           providerRunId: job.providerRunId,
           deadlineAt: job.deadlineAt,
+          config: job.providerConfig ?? null,
         });
     } catch {
       await ctx.runMutation(internal.buyerJobs.markAmbiguous, { jobId: args.jobId });
@@ -564,26 +572,8 @@ export const completeJob = internalMutation({
         updatedAt: Date.now(),
       });
       await ctx.db.patch(req._id, { draft: next, updatedAt: Date.now() });
-    } else if (job.role === "moderator") {
-      const plan = contracts.ChallengePlan.parse(result.output);
-      const merchants = new Set<string>();
-      for (const challenge of plan.challenges) {
-        const offer = job.input.offers.find(
-          (o: { offer: { id: string; version: number } }) =>
-            o.offer.id === challenge.offer.id &&
-            o.offer.version === challenge.offer.version,
-        );
-        if (
-          !offer ||
-          merchants.has(offer.merchantId) ||
-          !offer.claims.some(
-            (c: { id: string }) => c.id === challenge.claimId,
-          ) ||
-          challenge.sourceIds.some((id) => !job.input.sourceIds.includes(id))
-        )
-          fail("INVALID_INPUT", "Invalid challenge scope.");
-        merchants.add(offer.merchantId);
-      }
+    } else if (job.phase === "council" && job.input.schemaVersion === 2) {
+      await completeCouncilOutput(ctx, job, result.output);
     } else if (job.role === "evidence_summary" && job.runId) {
       const summary = contracts.EvidenceSummary.parse(result.output);
       if (
@@ -617,7 +607,32 @@ export const completeJob = internalMutation({
           });
     } else if (job.runId) {
       const request = await versionFor(ctx, job.requestId, job.version);
-      const decision = result.output as SellerDecision;
+      let decision = result.output as SellerDecision;
+      if (job.phase === "negotiating") {
+        const openings = await ctx.db.query("buyerOffers").withIndex("by_run_candidate", q => q.eq("runId", job.runId!).eq("candidateId", job.candidateId!)).take(20);
+        const opening = openings.find(row => row.effective && sameRef(row.data.offer, job.input.parentOffer.offer));
+        if (!opening || !(await publiclyEligible(ctx, opening, request))) fail("POLICY_REJECTED", "Frozen opening offer is no longer eligible.");
+        const final = contracts.SellerFinalDecision.parse(result.output);
+        if (canonicalFinalBinding(final) !== canonicalFinalBinding(job.input.finalBinding))
+          fail("STALE_VERSION", "Final submission binding mismatch.");
+        if (final.decision.kind === "propose") {
+          if (final.decision.proposal.serviceOptionId !== null) fail("POLICY_REJECTED", "Service-option authority awaits seller integration; pricing-only finals are supported.");
+          const proposal = final.decision.proposal;
+          const parent = job.input.parentOffer as ContractOffer;
+          if (!proposal.parentOffer || !sameRef(proposal.parentOffer, parent.offer) ||
+              proposal.candidateId !== job.candidateId || proposal.jobId !== job.sellerJobId ||
+              proposal.lines.length !== parent.lines.length || proposal.lines.some(line => !parent.lines.some(p =>
+                p.requestLineId === line.requestLineId && sameRef(p.listing, line.listing) && p.quantity === line.quantity)))
+            fail("POLICY_REJECTED", "Final goods, quantities and parent must remain frozen.");
+          decision = { kind: "propose", proposal: { schemaVersion: 1, jobId: proposal.jobId, candidateId: proposal.candidateId,
+            parentOffer: proposal.parentOffer, policy: proposal.policy, lines: proposal.lines, claims: proposal.claims,
+            fitArgument: proposal.fitArgument, privatePriceRationale: proposal.privatePriceRationale } };
+        } else {
+          decision = final.decision;
+          if (decision.jobId !== job.sellerJobId || (decision.kind === "hold" && !sameRef(decision.offer, job.input.parentOffer.offer)))
+            fail("POLICY_REJECTED", "Final hold/abstention identity mismatch.");
+        }
+      }
       // Only the seller validator may accept prices, stock or product fit.
       const accepted = await ctx.runMutation(
         internal.sellerInternal.validateAndStoreProposal,
@@ -661,6 +676,8 @@ export const completeJob = internalMutation({
               (b) =>
                 b.effective &&
                 (raw.totalCents > b.data.totalCents ||
+                  raw.shippingCents > b.data.shippingCents ||
+                  arrivalAt(raw.createdAt, raw.arrivalCalendarDays) > b.data.arrivalAt ||
                   raw.warrantyMonths < b.data.warrantyMonths ||
                   raw.returnDays < b.data.returnDays ||
                   raw.arrivalCalendarDays > b.snapshot.arrivalCalendarDays),
@@ -779,11 +796,15 @@ export const completeJob = internalMutation({
         );
       }
     }
+    if (job.phase === "negotiating" && job.runId) {
+      const invitation = await ctx.db.query("buyerFinalInvitations").withIndex("by_round_candidate", q => q.eq("roundId", job.input.roundId).eq("candidateId", job.candidateId!)).unique();
+      if (invitation) await ctx.db.patch(invitation._id, { status: "received" });
+    }
     await ctx.db.patch(job._id, {
       state: "completed",
       providerRunId: result.providerRunId,
       outputDigest: hash,
-      output: ["intake", "moderator", "evidence_summary"].includes(job.role)
+      output: (["intake", "evidence_summary"].includes(job.role) || job.phase === "council")
         ? result.output
         : null,
       completedAt: Date.now(),
@@ -798,6 +819,12 @@ export const getJob = internalQuery({
     return id ? ctx.db.get(id) : null;
   },
 });
+function fixtureSellerResult(input: Record<string, unknown>, phase: string) {
+  const decision = fixtureSeller(input, phase);
+  if (phase !== "negotiating") return decision;
+  return { ...(input.finalBinding as object), decision: decision.kind === "propose"
+    ? { kind: "propose", proposal: { ...decision.proposal, schemaVersion: 2, serviceOptionId: null } } : decision };
+}
 function fixtureSeller(
   input: Record<string, unknown>,
   phase: string,
@@ -923,32 +950,6 @@ export const phaseJobs = internalQuery({
   },
 });
 
-function fixtureModerator(input: Record<string, unknown>) {
-  const offers = input.offers as {
-    offer: { id: string; version: number };
-    merchantId: string;
-    claims: { id: string }[];
-  }[];
-  const seen = new Set<string>();
-  return {
-    challenges: offers
-      .filter(
-        (o) =>
-          o.claims.length &&
-          !seen.has(o.merchantId) &&
-          !!seen.add(o.merchantId),
-      )
-      .map((o) => ({
-        offer: o.offer,
-        claimId: o.claims[0].id,
-        question:
-          "Please substantiate this material claim for the exact product configuration.",
-        sourceIds: [],
-      }))
-      .slice(0, 3),
-    summary: "Only explicit, material seller claims receive a challenge.",
-  };
-}
 function fixtureSummary(input: Record<string, unknown>) {
   const evidence =
     input.evidence as import("../src/contracts/index.ts").Contract<"Evidence">[];
@@ -993,6 +994,7 @@ export const cancelProvider = internalAction({
           input: job.input,
           providerRunId: job.providerRunId,
           deadlineAt: job.deadlineAt,
+          config: job.providerConfig ?? null,
         });
       } catch {
         /* Best effort; stale guards remain authoritative. */
@@ -1034,6 +1036,7 @@ export const createRepair = internalMutation({
       input,
       inputDigest: await digest(input),
       provider: job.provider,
+      providerConfig: job.providerConfig ?? null,
       providerRunId: null,
       outputDigest: null,
       output: null,
@@ -1041,6 +1044,10 @@ export const createRepair = internalMutation({
       createdAt: Date.now(),
       completedAt: null,
     });
+    if (job.phase === "council" && input.schemaVersion === 2) {
+      const repairedInput = { ...input, jobId: String(child) };
+      await ctx.db.patch(child, { input: repairedInput, inputDigest: await digest(repairedInput) });
+    }
     await ctx.db.patch(job._id, {
       state: "repairing",
       output: { repairJobId: String(child) },

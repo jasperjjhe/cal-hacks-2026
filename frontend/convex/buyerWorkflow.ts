@@ -11,8 +11,8 @@ import { internal, components } from "./_generated/api";
 import { v } from "convex/values";
 import { contracts } from "../src/contracts/index.ts";
 import { currentRun, versionFor, emit } from "./buyer/core.ts";
-import { loadSnapshots, getPolicy, toPolicy } from "./sellerInternal.ts";
-import { minimumUnitCents } from "./lib/sellerValidation.ts";
+import { councilFor } from "./buyerRoles.ts";
+import { publiclyEligible, sameRef, councilPhases } from "./buyer/council.ts";
 const workflow = new WorkflowManager(components.workflow);
 export const runBuyer = workflow
   .define({ args: { runId: v.string() }, returns: v.null() })
@@ -53,29 +53,22 @@ export const runBuyer = workflow
       runId,
     });
     if (stage === "council") {
-      const moderator = await step.runMutation(
-        internal.buyerRoles.prepareModerator,
-        { runId },
-      );
-      if (moderator) {
-        let status = await step.runAction(
-          internal.buyerJobs.dispatch,
-          { jobId: moderator },
-          { retry: false },
-        );
-        for (let i = 0; status.pending && i < 6; i++) {
-          await step.sleep(5000);
-          status = await step.runAction(
-            internal.buyerJobs.dispatch,
-            { jobId: moderator, poll: true },
-            { retry: false },
-          );
+      const councilId = await step.runMutation(internal.buyerRoles.freezeCompetition, { runId });
+      if (councilId) {
+        for (const councilPhase of councilPhases) {
+          await step.runMutation(internal.buyerRoles.prepareCouncilJobs, { runId, phase: councilPhase });
+          const jobs = await step.runQuery(internal.buyerRoles.councilJobs, { runId, phase: councilPhase });
+          await Promise.all(jobs.map(async job => {
+            let status = await step.runAction(internal.buyerJobs.dispatch, { jobId: job.id }, { retry: false });
+            for (let i = 0; status.pending && i < 40; i++) {
+              await step.sleep(i === 0 ? 2000 : 5000);
+              status = await step.runAction(internal.buyerJobs.dispatch, { jobId: job.id, poll: true }, { retry: false });
+            }
+          }));
+          await step.runMutation(internal.buyerRoles.closeCouncilPhase, { runId, phase: councilPhase });
         }
       }
-      await phase("council");
-      stage = await step.runMutation(internal.buyerWorkflow.afterCouncil, {
-        runId,
-      });
+      stage = "negotiating";
     }
     if (stage === "negotiating") {
       const roundId = await step.runMutation(
@@ -200,18 +193,6 @@ export const closeBidding = internalMutation({
     return stage;
   },
 });
-export const afterCouncil = internalMutation({
-  args: { runId: v.string() },
-  handler: async (ctx, { runId }) => {
-    const run = await currentRun(ctx, runId, "council");
-    if (!run) return "closed";
-    await ctx.db.patch(run._id, {
-      stage: "negotiating",
-      updatedAt: Date.now(),
-    });
-    return "negotiating";
-  },
-});
 export const openPriceRound = internalMutation({
   args: { runId: v.string() },
   handler: async (ctx, { runId }): Promise<string | null> => {
@@ -223,87 +204,21 @@ export const openPriceRound = internalMutation({
       .first();
     if (prior) return String(prior._id);
     const request = await versionFor(ctx, run.requestId, run.version);
-    const candidates = (
-      await ctx.db
-        .query("buyerOffers")
-        .withIndex("by_run_effective", (q) =>
-          q.eq("runId", runId).eq("effective", true),
-        )
-        .take(6)
-    ).filter((o) => o.data.policyValid && o.data.requirementsValidExceptBudget);
-    const eligibility = await Promise.all(candidates.map((o) => merchantEligible(ctx, o.merchantId, o.data.policy)));
-    const offers = candidates.filter((_, i) => eligibility[i]);
-    const merchantCount = new Set(offers.map((o) => o.merchantId)).size;
-    let useful = false;
-    for (const row of offers) {
-      const policy = toPolicy(await getPolicy(ctx, row.data.policy));
-      const snapshots = await loadSnapshots(ctx, row.merchantId);
-      let minimum = policy.shippingCents;
-      for (const line of row.data
-        .lines as import("../src/contracts/index.ts").Contract<"OfferVersion">["lines"]) {
-        const s = snapshots.find(
-          (s) => s.listing.listing.id === line.listing.id,
-        );
-        if (!s) {
-          minimum = Number.MAX_SAFE_INTEGER;
-          break;
-        }
-        minimum +=
-          line.quantity *
-          minimumUnitCents({
-            referenceUnitCents: s.listing.referenceUnitCents,
-            operatorFloorCents: s.listing.operatorFloorCents,
-            maxDiscountBps: policy.maxDiscountBps,
-            unitCostCents: policy.unitCostByListing[line.listing.id],
-            minimumContributionCents:
-              policy.minimumContributionByListing[line.listing.id],
-          });
-      }
-      const comparable = offers.filter(
-        (o) =>
-          o.merchantId !== row.merchantId &&
-          JSON.stringify(
-            o.card.products.map(
-              (p: { variantId: string; condition: string }) => [
-                p.variantId,
-                p.condition,
-              ],
-            ),
-          ) ===
-            JSON.stringify(
-              row.card.products.map(
-                (p: { variantId: string; condition: string }) => [
-                  p.variantId,
-                  p.condition,
-                ],
-              ),
-            ),
-      );
-      if (
-        minimum < row.data.totalCents &&
-        (request.brief.sharedTarget !== null ||
-          (minimum <= request.privateMaximumCents && !row.data.affordable) ||
-          comparable.some((o) => minimum < o.data.totalCents))
-      )
-        useful = true;
+    const council = await councilFor(ctx, runId);
+    if (council && council.phase !== "closed") return null;
+    const candidates = await ctx.db.query("buyerOffers")
+      .withIndex("by_run_effective", q => q.eq("runId", runId).eq("effective", true)).take(6);
+    const invitations = await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", runId)).take(6);
+    const offers = [];
+    for (const row of candidates) {
+      if (council && !invitations.some(i => i.candidateId === row.candidateId && sameRef(i.openingOffer, row.data.offer))) continue;
+      if (await publiclyEligible(ctx, row, request)) offers.push(row);
     }
-    if (
-      !useful ||
-      (merchantCount < 2 && !request.brief.sharedTarget) ||
-      Date.now() + 1000 >= run.deadlineAt
-    ) {
-      await ctx.db.patch(run._id, {
-        stage: "researching",
-        updatedAt: Date.now(),
-      });
-      await emit(
-        ctx,
-        runId,
-        "price_round_skipped",
-        merchantCount < 2
-          ? "No genuine competing merchant; a competitive price round was skipped."
-          : "No permitted revision would materially improve the comparison.",
-      );
+    const merchantCount = new Set(offers.map(o => o.merchantId)).size;
+    if (!offers.length || (!council && merchantCount < 2 && !request.brief.sharedTarget) || Date.now() + 1000 >= run.deadlineAt) {
+      for (const invitation of invitations) await ctx.db.patch(invitation._id, { status: "unavailable" });
+      await ctx.db.patch(run._id, { stage: "researching", partial: run.partial || !!council, updatedAt: Date.now() });
+      await emit(ctx, runId, "price_round_skipped", "No eligible competitive or explicitly consented single-seller final work remains; prior valid offers are retained.");
       return null;
     }
     const id = await ctx.db.insert("buyerRounds", { runId, data: null });
@@ -311,7 +226,11 @@ export const openPriceRound = internalMutation({
       id: String(id),
       request: request.request,
       runId,
-      mode: merchantCount >= 2 ? "competitive" : "single_seller_target",
+      councilId: council ? String(council._id) : null,
+      snapshot: council?.snapshot.snapshot ?? null,
+      snapshotDigest: council?.snapshotDigest ?? null,
+      outcomeVersion: council?.outcomeVersion ?? 0,
+      mode: council || merchantCount >= 2 ? "competitive" : "single_seller_target",
       participants: offers.map((o) => ({
         merchantId: o.merchantId,
         candidateId: o.candidateId,
@@ -323,6 +242,17 @@ export const openPriceRound = internalMutation({
       closeReason: null,
     });
     await ctx.db.patch(id, { data: round });
+    for (const offer of offers) {
+      const invitation = invitations.find(i => i.candidateId === offer.candidateId);
+      if (invitation) await ctx.db.patch(invitation._id, { roundId: String(id), outcomeVersion: round.outcomeVersion, deadlineAt: round.deadlineAt, status: "invited" });
+      else await ctx.db.insert("buyerFinalInvitations", { runId, councilId: round.councilId, roundId: String(id),
+        candidateId: offer.candidateId, merchantId: offer.merchantId, openingOffer: offer.data.offer,
+        snapshot: round.snapshot, snapshotDigest: round.snapshotDigest, outcomeVersion: round.outcomeVersion,
+        deadlineAt: round.deadlineAt, status: "invited", jobId: null });
+      await emit(ctx, runId, "final_invitation", "One sealed final decision invited; holding or abstaining is valid. Service concessions await seller authority integration.", offer.merchantId);
+    }
+    for (const invitation of invitations) if (!offers.some(o => o.candidateId === invitation.candidateId)) await ctx.db.patch(invitation._id, { status: "unavailable" });
+    if (council && merchantCount < 2) await emit(ctx, runId, "council_phase_closed", "Participation changed after the shared snapshot; surviving candidates retain their final invitations, with no continuing two-merchant competition claim.");
     await emit(
       ctx,
       runId,
@@ -364,6 +294,8 @@ export const closePriceRound = internalMutation({
       const offerId = ctx.db.normalizeId("buyerOffers", submission.offerId);
       const offer = offerId ? await ctx.db.get(offerId) : null;
       if (!offer || offer.stagedRoundId !== args.roundId || offer.data.acceptedAt >= row.data.deadlineAt || !row.data.participants.some((p: { candidateId: string; merchantId: string }) => p.candidateId === offer.candidateId && p.merchantId === offer.merchantId) || !(await merchantEligible(ctx, offer.merchantId, offer.data.policy))) continue;
+      const request = await versionFor(ctx, run.requestId, run.version);
+      if (!(await publiclyEligible(ctx, offer, request))) continue;
       const before = await ctx.db
         .query("buyerOffers")
         .withIndex("by_run_candidate", (q) =>
@@ -395,6 +327,17 @@ export const closePriceRound = internalMutation({
         offer.data.offer,
       );
     }
+    const invitations = await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", args.runId)).take(6);
+    let missing = 0;
+    for (const invitation of invitations) {
+      const submission = submissions.find(s => s.candidateId === invitation.candidateId);
+      const validRevision = submission?.offerId ? await ctx.db.get(ctx.db.normalizeId("buyerOffers", submission.offerId)!) : null;
+      const received = !!submission && (submission.decision !== "revise" || validRevision?.effective);
+      if (!received) missing++;
+      await ctx.db.patch(invitation._id, { status: received ? "received" : "unavailable" });
+    }
+    if (missing) await ctx.db.patch(run._id, { partial: true });
+    await emit(ctx, args.runId, "final_round_closed", `Sealed final round closed; ${invitations.length - missing}/${invitations.length} valid decisions received. Missing/invalid finals retain only eligible earlier offers.`);
     await ctx.db.patch(row._id, {
       data: {
         ...row.data,
@@ -458,7 +401,7 @@ export const publishResults = internalMutation({
     }
     await ctx.db.patch(run._id, {
       stage: selectable ? "results" : "no_match",
-      partial: rows.some((o) =>
+      partial: run.partial || rows.some((o) =>
         ["unavailable", "partial", "pending"].includes(o.card.evidenceStatus),
       ),
       updatedAt: Date.now(),
@@ -489,6 +432,8 @@ export const workflowFinished = internalMutation({
         q.eq("runId", String(run._id)).eq("effective", true),
       )
       .take(6);
+    for (const invitation of await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", String(run._id))).take(6))
+      if (invitation.status !== "received") await ctx.db.patch(invitation._id, { status: "unavailable" });
     if (offers.length) {
       await ctx.db.patch(run._id, { stage: "researching", partial: true });
       await ctx.runMutation(internal.buyerWorkflow.publishResults, {
@@ -531,6 +476,8 @@ export const timeout = internalMutation({
           jobId: String(job._id),
         });
       }
+    for (const invitation of await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", runId)).take(6))
+      if (invitation.status !== "received") await ctx.db.patch(invitation._id, { status: "unavailable" });
     const rows = await ctx.db
       .query("buyerOffers")
       .withIndex("by_run_effective", (q) =>

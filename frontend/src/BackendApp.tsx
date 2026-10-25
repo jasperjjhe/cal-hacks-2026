@@ -584,7 +584,7 @@ function Workspace() {
                       <div className="section-header">
                         <div>
                           <span className="eyebrow">
-                            {run.stage.replaceAll("_", " ")}
+                            {run.councilPhase ? `council · ${run.councilPhase}` : run.stage.replaceAll("_", " ")}
                           </span>
                           <h2>
                             {run.stage === "results"
@@ -607,6 +607,12 @@ function Workspace() {
                           {run.modes.agents} agents
                         </span>
                       </div>
+                      {run.councilStatus.length > 0 && <ul aria-label="Council phase progress">
+                        {run.councilStatus.map(status => <li key={status.phase}>
+                          {status.phase}: {status.completed}/{status.expected} checked{status.closed ? ` · ${status.missing} unavailable` : ""}
+                        </li>)}
+                      </ul>}
+                      {run.finalStatus.invited > 0 && <p>{run.finalStatus.received}/{run.finalStatus.invited} final decisions received · {run.finalStatus.unavailable} unavailable. Prices stay sealed until closure.</p>}
                       {run.error && <p role="alert">{run.error.message}</p>}
                       <details>
                         <summary>

@@ -1,7 +1,8 @@
 # Seller council v5.3 — agreed format and implementation handoff
 
-Status: user-confirmed specification, October 24, 2026. **Not implemented.**
-This revision changes Markdown only in the current `geoff/buyer` checkout.
+Status: user-confirmed specification, October 24, 2026. **Buyer migration implemented with fixture sellers; seller/live integration pending.**
+See [buyer migration status and exact seller seam](BUYER_COUNCIL_MIGRATION.md).
+The original agreement was documentation-only; the current `geoff/buyer` checkout now implements the buyer-owned migration.
 It does not edit `feature/seller-side`, merge branches, regenerate schemas or
 change provider agents. The active product/technical authority is
 [implementation spec v5.3](../BUYERUNION_IMPLEMENTATION.md), sections 5.7 and 9.
@@ -57,10 +58,12 @@ offer per eligible candidate → independent research → deterministic comparis
 | Buyer events/UI | Earlier safe progress and summary | Publish only checked short public exchanges and real phase counts; preserve sealed prices and privacy |
 | Service revisions | Terms derived from baseline policy | Versioned permitted service options, private incremental cost/contribution checks and exact offer/quote/order snapshots |
 
-The buyer branch currently keeps seller roles as fixtures while CREAO can serve
-buyer roles. Do not enable new role names against the current adapter or treat
-its legacy moderator prompt as this council. Provider code/configuration and
-live runs must be upgraded after the canonical contracts are implemented.
+The buyer branch keeps seller roles as fixtures while CREAO can serve intake,
+moderator_brief, moderator_adjudication and evidence_summary. Its new two-agent
+definitions and council-v2 configuration replace the legacy moderator prompt.
+The table above records the pre-migration baseline; see the linked buyer migration
+status for implemented B work and the exact remaining S boundary. Live combined
+acceptance remains pending.
 
 ## Ownership and integration sequence
 

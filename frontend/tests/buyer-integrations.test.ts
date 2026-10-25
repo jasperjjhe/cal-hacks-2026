@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { invokeCreao, pollCreao, cancelCreao } from '../convex/integrations/creaoBuyer';
 import { startEvidence, pollEvidence } from '../convex/integrations/apifyBuyer';
+import { snapshotCreaoConfig } from '../convex/integrations/creaoBuyer';
+import { smokeInputs, checkSmokeResult } from '../scripts/smoke-creao.mjs';
+import { fixtureCouncil } from '../convex/buyer/council';
 import type { EvidenceInput, ToolJob } from '../convex/integrations/buyerTools';
 
-const job: ToolJob = { id: 'job-12345678', role: 'moderator', input: { offers: [] }, providerRunId: null, deadlineAt: Date.now() + 60000 };
+const job: ToolJob = { id: 'job-12345678', role: 'moderator_brief', input: { offers: [] }, providerRunId: null, deadlineAt: Date.now() + 60000 };
 const input: EvidenceInput = {
   variantId: 'real-product', syntheticProduct: false, inputDigest: 'digest',
   actorId: 'actor1', build: 'build1', buildNumber: '0.1.1',
@@ -14,7 +17,8 @@ const run = { id: 'run1', actId: 'actor1', buildId: 'build1', status: 'RUNNING',
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 beforeEach(() => {
   vi.stubEnv('CREAO_API_KEY', 'test-secret');
-  vi.stubEnv('CREAO_BUYER_AGENT_IDS', JSON.stringify({ moderator: 'agent1' }));
+  vi.stubEnv('CREAO_BUYER_CONFIG_REVISION', 'council-v2');
+  vi.stubEnv('CREAO_BUYER_AGENT_IDS', JSON.stringify({ moderator_brief: 'agent1' }));
   vi.stubEnv('CREAO_BUYER_MODEL_ID', 'configured-non-default-model');
   vi.stubEnv('APIFY_TOKEN', 'test-apify-secret');
 });
@@ -22,7 +26,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 test('CREAO starts once and polls a strict role result without conversation reuse', async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ id: 'run1', status: 'pending', appId: 'agent1' }))
-    .mockResolvedValueOnce(json({ runId: 'run1', status: 'completed', result: { text: JSON.stringify({ challenges: [], summary: 'No material challenge.' }) } }));
+    .mockResolvedValueOnce(json({ runId: 'run1', status: 'completed', result: { text: JSON.stringify({ schemaVersion: 2, jobId: job.id, councilId: 'c1', request: {id:'req1',version:1}, runId:'r1', snapshot:{id:'s1',version:1}, snapshotDigest:'digest', phase:'brief', deadlineAt:job.deadlineAt, participants: [] }) } }));
   vi.stubGlobal('fetch', fetch);
   expect(await invokeCreao(job)).toEqual({ status: 'pending', providerRunId: 'run1' });
   const body = JSON.parse(fetch.mock.calls[0][1].body);
@@ -58,6 +62,40 @@ test('expired CREAO job makes no call; cancellation uses only its known run', as
   expect(fetch).not.toHaveBeenCalled();
   await cancelCreao({ ...job, providerRunId: 'run1' });
   expect(fetch.mock.calls[0][0]).toBe('https://agent.creao.ai/api/v1/runs/run1/cancel');
+});
+test('two configured agents route intake separately and isolate the three council roles', async () => {
+  vi.stubEnv('CREAO_INTAKE_AGENT_ID', 'intake-agent');
+  vi.stubEnv('CREAO_COUNCIL_AGENT_ID', 'council-agent');
+  const fetch = vi.fn().mockImplementation(async () => json({ id: 'run1', status: 'pending' }));
+  vi.stubGlobal('fetch', fetch);
+  for (const role of ['intake', 'moderator_brief', 'moderator_adjudication', 'evidence_summary']) await invokeCreao({ ...job, id: `${job.id}-${role}`, role });
+  const bodies = fetch.mock.calls.map(call => JSON.parse(call[1].body));
+  expect(bodies.map(b => b.appId)).toEqual(['intake-agent', 'council-agent', 'council-agent', 'council-agent']);
+  expect(bodies.every(b => b.threadId === undefined)).toBe(true);
+});
+test('omitting the model override uses the CREAO default without claiming a model identity', async () => {
+  vi.stubEnv('CREAO_BUYER_MODEL_ID', '');
+  const fetch = vi.fn().mockResolvedValue(json({ id: 'run1', status: 'pending' }));
+  vi.stubGlobal('fetch', fetch);
+  expect(snapshotCreaoConfig(job.role)?.model).toBeNull();
+  expect((await invokeCreao(job)).status).toBe('pending');
+  expect(JSON.parse(fetch.mock.calls[0][1].body).chatModelId).toBeUndefined();
+});
+test('provider configuration is pinned across an ambiguous start and environment changes', async () => {
+  const pinned = { ...job, config: snapshotCreaoConfig(job.role) };
+  const fetch = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(json({ id: 'run1', status: 'pending' }));
+  vi.stubGlobal('fetch', fetch);
+  await expect(invokeCreao(pinned)).rejects.toThrow('timeout');
+  vi.stubEnv('CREAO_COUNCIL_AGENT_ID', 'changed-agent');
+  vi.stubEnv('CREAO_BUYER_MODEL_ID', 'changed-model');
+  await pollCreao(pinned);
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(JSON.parse(fetch.mock.calls[1][1].body));
+});
+test('copy-ready smoke inputs use canonical envelopes and verify real output semantics', () => {
+  const inputs = smokeInputs(Date.now());
+  checkSmokeResult('moderator_brief', inputs.moderator_brief, fixtureCouncil(inputs.moderator_brief));
+  checkSmokeResult('moderator_adjudication', inputs.moderator_adjudication, fixtureCouncil(inputs.moderator_adjudication));
+  expect(() => checkSmokeResult('evidence_summary', inputs.evidence_summary, { variantId: 'demo-product', positives: [{ text: 'fake review', evidenceIds: ['invented'] }], concerns: [], gaps: [] })).toThrow();
 });
 test('Apify pins actor/build and reads only a successful run dataset', async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ data: run }))

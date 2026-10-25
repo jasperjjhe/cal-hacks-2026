@@ -3,6 +3,17 @@ import { v } from "convex/values";
 const nullableString = v.union(v.string(), v.null());
 const payload = v.any(); // Payload writes/reads validate against the frozen runtime contract registry.
 export const buyerTables = {
+  buyerCouncils: defineTable({
+    runId: v.string(), snapshot: payload, snapshotDigest: v.string(), facts: payload,
+    phase: v.string(), statuses: payload, comparisons: payload, challenges: payload,
+    defenses: payload, replies: payload, outcomes: payload, outcomeVersion: v.number(),
+  }).index("by_run", ["runId"]),
+  buyerFinalInvitations: defineTable({
+    runId: v.string(), councilId: nullableString, roundId: nullableString,
+    candidateId: v.string(), merchantId: v.string(), openingOffer: payload,
+    snapshot: payload, snapshotDigest: nullableString, outcomeVersion: v.number(),
+    deadlineAt: v.number(), status: v.string(), jobId: nullableString,
+  }).index("by_run", ["runId"]).index("by_round_candidate", ["roundId", "candidateId"]),
   buyerRequests: defineTable({
     ownerId: v.string(),
     version: v.number(),
@@ -53,6 +64,7 @@ export const buyerTables = {
     input: payload,
     inputDigest: v.string(),
     provider: v.string(),
+    providerConfig: v.optional(payload),
     providerRunId: nullableString,
     outputDigest: nullableString,
     output: payload,

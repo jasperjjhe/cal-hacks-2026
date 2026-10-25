@@ -5,6 +5,7 @@ import workflow from "@convex-dev/workflow/test";
 import schema from "../convex/schema";
 import * as buyerTools from "../convex/integrations/buyerTools";
 import { contracts } from "../src/contracts";
+import { fixtureCouncil, envelope } from "../convex/buyer/council";
 import { makeValidProposal } from "../convex/lib/sellerFixtures";
 import { api, internal } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
@@ -83,11 +84,11 @@ test("live buyer mode keeps seller payloads local and labels the run mixed", asy
   const base = await setup();
   await base.t.mutation(internal.buyerAdmin.configureDemo, { agents: "live" });
   const invoke = vi.spyOn(buyerTools, "invokeCreao").mockImplementation(async (job) => {
-    expect(job.role).toBe("moderator");
+    expect(["moderator_brief", "moderator_adjudication"]).toContain(job.role);
     expect(JSON.stringify(job.input)).not.toContain("operatorFloorCents");
     expect(JSON.stringify(job.input)).not.toContain("privateMaximumCents");
     return { status: "completed", providerRunId: "live-moderator-test", model: null,
-      output: { challenges: [], summary: "No material challenge." } };
+      output: fixtureCouncil(job.input as import("../src/contracts").Contract<"CouncilJobInput">) };
   });
   const state = await resultRun(base);
   expect(state.view.stage).toBe("results");
@@ -1033,41 +1034,42 @@ test("seller listing publication creates a clean current version and rejects sta
   expect(versions.filter(v => v.enabled)).toHaveLength(1);
   expect(versions.find(v => v.version === 2)!.referenceUnitCents).toBe(98000);
 });
-test("moderator repair output remains usable by the council", async () => {
+test("moderator repair output remains usable by the v2 council", async () => {
   const state = await biddingReady();
   await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "council" }));
-  const jobId = (await state.t.mutation(internal.buyerRoles.prepareModerator, { runId: state.runId }))!;
+  await state.t.mutation(internal.buyerRoles.freezeCompetition, { runId: state.runId });
+  const [jobId] = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "brief" });
   const child = (await state.t.mutation(internal.buyerJobs.createRepair, { jobId }))!;
   await state.t.action(internal.buyerJobs.dispatch, { jobId: child });
   await state.t.mutation(internal.buyerJobs.finishRepair, { jobId });
   const parent = await state.t.query(internal.buyerJobs.getJob, { jobId });
-  expect(contracts.ChallengePlan.safeParse(parent!.output).success).toBe(true);
-  await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "council" });
+  expect(contracts.ModeratorBrief.safeParse(parent!.output).success).toBe(true);
+  await state.t.mutation(internal.buyerRoles.closeCouncilPhase, { runId: state.runId, phase: "brief" });
+  expect((await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "advocacy" })).length).toBeGreaterThan(1);
 });
-test("a council challenge targeting the second candidate is dispatched", async () => {
+test("a peer challenge targeting the second candidate reaches the target's grouped reply", async () => {
   const state = await biddingReady(true);
   await state.t.run(ctx => ctx.db.patch(ctx.db.normalizeId("buyerRuns", state.runId)!, { stage: "council" }));
-  const jobId = (await state.t.mutation(internal.buyerRoles.prepareModerator, { runId: state.runId }))!;
-  const target = await state.t.run(async (ctx) => {
-    const offers = await ctx.db.query("buyerOffers").withIndex("by_run_effective", q => q.eq("runId", state.runId).eq("effective", true)).collect();
-    const byMerchant = offers.filter(o => o.merchantId === offers[0].merchantId);
-    expect(byMerchant.length).toBeGreaterThan(1);
-    const row = byMerchant[1];
-    // A validated moderator plan may refer to either candidate for a merchant.
-    await ctx.db.patch(ctx.db.normalizeId("buyerJobs", jobId)!, {
-      state: "completed", output: {
-        challenges: [
-          {
-            offer: row.data.offer, claimId: "claim", question: "Check fit", sourceIds: []
-          }
-        ], summary: "Check selected candidate"
-      }
-    });
-    return row.candidateId;
-  });
-  const responses = await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "council" });
-  expect(responses).toHaveLength(1);
-  expect((await state.t.query(internal.buyerJobs.getJob, { jobId: responses[0] }))!.candidateId).toBe(target);
+  await state.t.mutation(internal.buyerRoles.freezeCompetition, { runId: state.runId });
+  await councilPhase(state, "brief");
+  const advocacy = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "advocacy" });
+  const job = (await state.t.query(internal.buyerJobs.getJob, { jobId: advocacy[0] }))!;
+  const input = contracts.CouncilJobInput.parse(job.input);
+  const rival = input.competition.offers.find(o => o.merchantId !== job.merchantId)!;
+  const targets = input.competition.offers.filter(o => o.merchantId === rival.merchantId);
+  expect(targets.length).toBeGreaterThan(1);
+  const target = targets[1];
+  const fact = input.facts.find(f => f.offer.id === target.offer.id)!;
+  await state.t.mutation(internal.buyerJobs.claimJob, { jobId: advocacy[0], poll: false });
+  await state.t.mutation(internal.buyerJobs.completeJob, { jobId: advocacy[0], result: { status: "completed", providerRunId: "test", model: null,
+    output: { ...envelope(input), phase: "advocacy", defenses: [], challenge: { targetOffer: target.offer, claimId: null, factId: fact.id, question: "Check this fact", sourceIds: [] } } } });
+  for (const id of advocacy.slice(1)) await state.t.action(internal.buyerJobs.dispatch, { jobId: id });
+  await state.t.mutation(internal.buyerRoles.closeCouncilPhase, { runId: state.runId, phase: "advocacy" });
+  const replies = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "reply" });
+  const jobs = await Promise.all(replies.map(jobId => state.t.query(internal.buyerJobs.getJob, { jobId })));
+  const reply = jobs.find(j => j!.merchantId === rival.merchantId)!;
+  expect(reply.input.challenges.some((c: {challenge: {targetOffer: {id:string}}}) => c.challenge.targetOffer.id === target.offer.id)).toBe(true);
+  expect(jobs.filter(j => j!.merchantId === rival.merchantId)).toHaveLength(1);
 });
 test("final jobs share the round deadline and late responses never replace earlier offers", async () => {
   const state = await biddingReady();
@@ -1270,4 +1272,106 @@ test("round deadline remains authoritative even when a worker record has a later
   expect((await state.t.query(internal.buyerJobs.getJob, { jobId }))!.state).toBe("stale");
   const submissions = await state.t.run(ctx => ctx.db.query("buyerSubmissions").withIndex("by_round_candidate", q => q.eq("roundId", roundId)).collect());
   expect(submissions).toHaveLength(0);
+});
+
+async function councilPhase(state: Awaited<ReturnType<typeof biddingReady>>, phase: import("../src/contracts").Contract<"CouncilPhase">) {
+  const jobs = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase });
+  for (const jobId of jobs) await state.t.action(internal.buyerJobs.dispatch, { jobId });
+  await state.t.mutation(internal.buyerRoles.closeCouncilPhase, { runId: state.runId, phase });
+  return jobs;
+}
+
+async function frozenCouncil() {
+  const state = await biddingReady();
+  await state.t.mutation(internal.buyerWorkflow.closeBidding, { runId: state.runId });
+  const councilId = (await state.t.mutation(internal.buyerRoles.freezeCompetition, { runId: state.runId }))!;
+  const council = (await state.t.run(ctx => ctx.db.get(ctx.db.normalizeId("buyerCouncils", councilId)!)))!;
+  return { ...state, councilId, council };
+}
+async function finishCouncil(state: Awaited<ReturnType<typeof frozenCouncil>>) {
+  for (const phase of ["brief", "advocacy", "reply", "adjudication"] as const) await councilPhase(state, phase);
+}
+test("frozen public snapshot and all eligible final invitations ignore the private ceiling", async () => {
+  const state = await frozenCouncil();
+  const wire = JSON.stringify(state.council.snapshot);
+  for (const key of ["affordable", "selectable", "privateMaximumCents", "rawMessages", "origins", "operatorFloorCents", "unitCost", "privatePriceRationale"])
+    expect(wire).not.toContain(key);
+  const snapshot = structuredClone(state.council.snapshot);
+  await state.t.run(async ctx => {
+    const version = (await ctx.db.query("buyerRequestVersions").collect())[0];
+    await ctx.db.patch(version._id, { data: { ...version.data, privateMaximumCents: 1 } });
+    for (const row of await ctx.db.query("buyerOffers").collect())
+      await ctx.db.patch(row._id, { data: { ...row.data, affordable: false } });
+  });
+  await finishCouncil(state);
+  const roundId = (await state.t.mutation(internal.buyerWorkflow.openPriceRound, { runId: state.runId }))!;
+  const round = (await state.t.run(ctx => ctx.db.get(ctx.db.normalizeId("buyerRounds", roundId)!)))!;
+  expect(round.data.participants).toHaveLength(snapshot.offers.length);
+  expect((await state.t.run(ctx => ctx.db.get(ctx.db.normalizeId("buyerCouncils", state.councilId)!)))!.snapshot).toEqual(snapshot);
+});
+
+
+
+test("missing grouped replies and moderator accusations cannot invalidate eligible offers", async () => {
+  const state = await frozenCouncil();
+  await councilPhase(state, "brief"); await councilPhase(state, "advocacy");
+  const replyIds = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "reply" });
+  for (const jobId of replyIds) await state.t.mutation(internal.buyerJobs.failJob, { jobId });
+  await state.t.mutation(internal.buyerRoles.closeCouncilPhase, { runId: state.runId, phase: "reply" });
+  const [jobId] = await state.t.mutation(internal.buyerRoles.prepareCouncilJobs, { runId: state.runId, phase: "adjudication" });
+  const job = (await state.t.query(internal.buyerJobs.getJob, { jobId }))!;
+  const output = fixtureCouncil(job.input) as import("../src/contracts").Contract<"ModeratorAdjudication">;
+  output.outcomes.forEach(o => { o.finding = "contradicted"; o.summary = "Reject this rival!"; });
+  await state.t.mutation(internal.buyerJobs.claimJob, { jobId, poll: false });
+  await state.t.mutation(internal.buyerJobs.completeJob, { jobId, result: { status: "completed", providerRunId: "test", model: null, output } });
+  await state.t.mutation(internal.buyerRoles.closeCouncilPhase, { runId: state.runId, phase: "adjudication" });
+  const council = (await state.t.run(ctx => ctx.db.get(ctx.db.normalizeId("buyerCouncils", state.councilId)!)))!;
+  expect(council.outcomes.every((o: {finding:string}) => o.finding === "unknown")).toBe(true);
+  const offers = await state.t.run(ctx => ctx.db.query("buyerOffers").collect());
+  expect(offers.filter(o => o.effective).every(o => o.data.requirementsValidExceptBudget)).toBe(true);
+  expect((await state.buyer.query(api.buyer.getBuyerRun, { requestId: state.ref.id })).partial).toBe(true);
+});
+
+
+test("all sealed revisions stay private until the final round closes", async () => {
+  const state = await frozenCouncil(); await finishCouncil(state);
+  const roundId = (await state.t.mutation(internal.buyerWorkflow.openPriceRound, { runId: state.runId }))!;
+  const ids = await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "negotiating", roundId });
+  for (const jobId of ids) {
+    const job = (await state.t.query(internal.buyerJobs.getJob, { jobId }))!;
+    expect(contracts.SellerFinalJobInput.safeParse(job.input.sellerInput).success).toBe(true);
+    for (const key of ["affordable", "privateMaximumCents", "operatorFloorCents", "unitCostByListing"])
+      expect(JSON.stringify(job.input.sellerInput)).not.toContain(key);
+  }
+  const before = await state.t.run(ctx => ctx.db.query("buyerOffers").filter(q => q.eq(q.field("effective"), true)).collect());
+  await state.t.action(internal.buyerJobs.dispatch, { jobId: ids[0] });
+  const during = await state.t.run(ctx => ctx.db.query("buyerOffers").filter(q => q.eq(q.field("effective"), true)).collect());
+  expect(during.map(o => o.data.totalCents)).toEqual(before.map(o => o.data.totalCents));
+  const events = await state.buyer.query(api.buyer.getRunEvents, { requestId: state.ref.id, cursor: null });
+  expect(events.events.some(e => e.kind === "final_bid")).toBe(false);
+  for (const jobId of ids.slice(1)) await state.t.action(internal.buyerJobs.dispatch, { jobId });
+  await state.t.mutation(internal.buyerWorkflow.closePriceRound, { runId: state.runId, roundId });
+  const after = await state.t.run(ctx => ctx.db.query("buyerOffers").filter(q => q.eq(q.field("effective"), true)).collect());
+  expect(after.some(o => o.data.totalCents < before.find(b => b.candidateId === o.candidateId)!.data.totalCents)).toBe(true);
+  const view = await state.buyer.query(api.buyer.getBuyerRun, { requestId: state.ref.id });
+  expect(view.finalStatus.received).toBe(ids.length);
+});
+
+test("final revisions reject changed quantities, substituted listings and ungranted service upgrades", async () => {
+  const state = await frozenCouncil(); await finishCouncil(state);
+  const roundId = (await state.t.mutation(internal.buyerWorkflow.openPriceRound, { runId: state.runId }))!;
+  const [jobId] = await state.t.mutation(internal.buyerJobs.preparePhase, { runId: state.runId, phase: "negotiating", roundId });
+  const job = (await state.t.query(internal.buyerJobs.getJob, { jobId }))!;
+  const parent = job.input.parentOffer;
+  const proposal = { schemaVersion: 2, jobId: job.sellerJobId, candidateId: job.candidateId, parentOffer: parent.offer,
+    policy: parent.policy, lines: parent.lines, claims: [], fitArgument: "Improved offer", privatePriceRationale: "test", serviceOptionId: null };
+  await state.t.mutation(internal.buyerJobs.claimJob, { jobId, poll: false });
+  for (const patched of [
+    { ...proposal, lines: proposal.lines.map((l: {quantity:number}) => ({ ...l, quantity: l.quantity + 1 })) },
+    { ...proposal, lines: proposal.lines.map((l: object) => ({ ...l, listing: { id: "another-listing", version: 1 } })) },
+    { ...proposal, serviceOptionId: "not-granted" },
+    { ...proposal, parentOffer: { id: "foreign-parent", version: 1 } },
+  ]) await expect(state.t.mutation(internal.buyerJobs.completeJob, { jobId, result: { status: "completed", providerRunId: "test", model: null,
+    output: { ...job.input.finalBinding, decision: { kind: "propose", proposal: patched } } } })).rejects.toThrow();
+  expect(await state.t.run(ctx => ctx.db.query("buyerSubmissions").collect())).toHaveLength(0);
 });

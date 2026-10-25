@@ -16,8 +16,9 @@ const schema = {
 const sellerSchema = {
   $schema: schema.$schema,
   $id: 'https://buyerunion.local/contracts/seller.v1.schema.json',
-  oneOf: [{ $ref: '#/$defs/SellerBrief' }, { $ref: '#/$defs/SellerDecision' }],
-  $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal'].map(name => [name, schema.$defs[name]])),
+  $comment: 'Request envelopes remain v1; council and final decision envelopes are v2. Generated from the canonical registry.',
+  oneOf: ['SellerBrief', 'SellerDecision', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => ({ $ref: `#/$defs/${name}` })),
+  $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => [name, schema.$defs[name]])),
 }
 for (const [file, value] of [[target, schema], [new URL('../convex/lib/seller.schema.json', import.meta.url), sellerSchema]]) {
   const content = `${JSON.stringify(value, null, 2)}\n`

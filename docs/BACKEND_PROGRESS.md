@@ -1,3 +1,14 @@
+## Buyer council v2 migration
+
+Implemented canonical v2 council and final envelopes; immutable shared public
+snapshots; brief/advocacy/grouped-reply/adjudication phases; checked public events;
+unconditional competitive final invitations; fixed-basket pricing-only finals;
+private budget isolation; persisted progress/caps/recovery/retention. Seller roles
+remain fixtures for the other developer's Fetch integration. CREAO supports two
+saved agents with immutable per-job configuration and a guarded live smoke command.
+See [migration status](BUYER_COUNCIL_MIGRATION.md) and [setup](BUYER_INTEGRATIONS.md).
+No live account, deployed schema, browser or combined seller acceptance is claimed.
+
 > Council format update (October 24, 2026): [spec v5.3](../BUYERUNION_IMPLEMENTATION.md)
 > and [seller council handoff](SELLER_COUNCIL_HANDOFF.md) supersede older council
 > descriptions. Public snapshot → merchant defense/challenge → grouped reply →

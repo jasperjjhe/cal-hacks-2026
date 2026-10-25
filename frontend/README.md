@@ -11,8 +11,9 @@ The historical browser-only prototype is available explicitly at `/mock`.
 [seller council handoff](../docs/SELLER_COUNCIL_HANDOFF.md) now require public
 competitive snapshots, merchant peer challenges/grouped replies, checked public
 exchanges and one sealed final invitation for every eligible candidate. The
-current code still uses the earlier moderator-led council and usefulness-gated
-repricing. This documentation update implements no new council behavior.
+buyer now implements those phases, canonical v2 envelopes and validation with
+fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md)
+for the exact seller boundary. Live seller work and service authority are pending.
 Products stay fixed in the proposed round; above-budget hard-valid offers may
 compete privately with respect to affordability, while only affordable offers
 are selectable. Future latency must be measured within the 210-second ceiling;

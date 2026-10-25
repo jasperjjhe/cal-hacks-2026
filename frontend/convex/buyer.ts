@@ -1,3 +1,4 @@
+import { councilFor } from "./buyerRoles.ts";
 import { query, action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -99,6 +100,8 @@ export const getBuyerRun = query({
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .take(40);
     const confirmed = await versionFor(ctx, args.requestId, run.version);
+    const council = await councilFor(ctx, runId);
+    const invitations = await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", runId)).take(6);
     const cards = await Promise.all(
       rows.map(async (row) => {
         const card = contracts.OfferCard.parse(row.card);
@@ -133,6 +136,12 @@ export const getBuyerRun = query({
       request: confirmed.request,
       runId: runId,
       stage: run.stage,
+      councilPhase: run.stage === "council" && council?.phase !== "closed" ? council?.phase ?? null : null,
+      councilStatus: council?.statuses.map((status: import("../src/contracts/index.ts").Contract<"BuyerRunView">["councilStatus"][number]) => {
+        const phaseJobs = jobs.filter(j => j.input?.schemaVersion === 2 && j.input.phase === status.phase && !j.input.repairAttempt);
+        return { ...status, completed: phaseJobs.filter(j => j.state === "completed").length };
+      }) ?? [],
+      finalStatus: { invited: invitations.length, received: invitations.filter(i => i.status === "received").length, unavailable: invitations.filter(i => i.status === "unavailable").length },
       purchaseStage: run.purchaseStage,
       startedAt: run.startedAt,
       updatedAt: run.updatedAt,

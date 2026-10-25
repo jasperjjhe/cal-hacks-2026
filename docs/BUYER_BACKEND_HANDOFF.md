@@ -1,3 +1,8 @@
+> Current buyer council migration: [implementation and seller boundary](BUYER_COUNCIL_MIGRATION.md).
+> Buyer v2 contracts/coordinator now run with seller fixtures; the older
+> implementation-gap descriptions below are historical. Seller/live acceptance
+> and service authority remain pending. Use the two new CREAO agent definitions.
+
 # Dev B buyer backend handoff
 
 ## v5.3 council revision — specified, not implemented

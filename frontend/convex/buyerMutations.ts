@@ -232,7 +232,8 @@ export const startRun = internalMutation({
         process.env.BUYER_AGENT_MODE ?? "fixture",
       ),
       paymentScenario: await setting(ctx, "paymentScenario", "success"),
-      revision: "buyer-v1",
+      revision: "buyer-council-v2",
+      councilSchedule: { bidding: now + 35000, brief: now + 45000, advocacy: now + 55000, reply: now + 65000, adjudication: now + 75000 },
       maxCalls: 28,
       maxTools: 40,
     };
@@ -420,6 +421,8 @@ async function invalidateRun(
   if (run.purchaseStage === "executing" || run.purchaseStage === "unknown")
     fail("EXECUTION_UNKNOWN", "Purchase is still being resolved.");
   await ctx.db.patch(run._id, { stage: "cancelled", updatedAt: Date.now() });
+  for (const invitation of await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", String(run._id))).take(6))
+    if (invitation.status !== "received") await ctx.db.patch(invitation._id, { status: "unavailable" });
   const jobs = await ctx.db
     .query("buyerJobs")
     .withIndex("by_run", (q) => q.eq("runId", id))

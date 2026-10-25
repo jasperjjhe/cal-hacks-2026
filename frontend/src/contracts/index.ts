@@ -79,7 +79,9 @@ const apiError = z.strictObject({
 const event = z.strictObject({
   id, request: ref, runId: id, sequence: z.int().nonnegative(), createdAt: ms,
   kind: z.enum(['started', 'proposal', 'rejected', 'challenge', 'response', 'revision',
-    'price_round_opened', 'final_bid', 'abstained', 'price_round_skipped', 'research_updated', 'closed']),
+    'price_round_opened', 'final_bid', 'abstained', 'price_round_skipped', 'research_updated', 'closed',
+    'snapshot_published', 'comparative_brief', 'council_advocacy', 'council_reply', 'council_outcome',
+    'council_phase_closed', 'final_invitation', 'final_round_closed']),
   merchantId: id.nullable(), offer: ref.nullable(), summary: text,
 })
 const intake = z.strictObject({
@@ -98,6 +100,57 @@ const sellerProposal = z.strictObject({
     privatePriceRationale: text,
   })
 
+const councilPhase = z.enum(['brief', 'advocacy', 'reply', 'adjudication'])
+const councilRole = z.enum(['moderator_brief', 'seller_advocacy', 'seller_reply', 'moderator_adjudication'])
+const dimension = z.enum(['price', 'delivery', 'warranty', 'returns', 'fit'])
+const publicOffer = z.strictObject({
+  merchantId: id, candidateId: id, offer: ref,
+  lines: z.array(z.strictObject({ requestLineId: id, listing: ref, variantId: id,
+    condition, quantity, configuration: z.record(id, value.nullable()),
+  })).min(1).max(3),
+  totalCents: cents, shippingCents: cents, arrivalAt: ms,
+  warrantyMonths: z.int().nonnegative().max(1200), returnDays: z.int().nonnegative().max(3650),
+  checks: z.array(check).max(300), claims: z.array(claim).max(100),
+})
+const competition = z.strictObject({
+  schemaVersion: z.literal(2), snapshot: ref, councilId: id, request: ref, runId: id,
+  createdAt: ms, brief, offers: z.array(publicOffer).min(1).max(6),
+  approvedFactIds: z.array(id).max(2000), approvedSourceIds: z.array(id).max(2000),
+})
+const councilFact = z.strictObject({
+  id, offer: ref, dimension, fieldId: id, value: value.nullable(), unit: id.nullable(),
+  requirementId: id.nullable(), status: z.enum(['matched', 'unmet', 'unknown']).nullable(),
+  provenance: z.enum(['validated_terms', 'validated_requirement', 'manufacturer', 'real_report', 'synthetic_demo']),
+  sourceIds: z.array(id).max(40),
+})
+const comparativePoint = z.strictObject({ ownOffer: ref, rivalOffer: ref, dimension,
+  factIds: z.array(id).max(40), sourceIds: z.array(id).max(40), summary: text,
+})
+const challengeBase = z.strictObject({ targetOffer: ref,
+  question: text.min(1), sourceIds: z.array(id).max(40),
+})
+const peerChallenge = z.union([
+  challengeBase.extend({ claimId: id, factId: z.null() }),
+  challengeBase.extend({ claimId: z.null(), factId: id }),
+])
+const admittedChallenge = z.strictObject({ id, authorMerchantId: id, targetMerchantId: id, challenge: peerChallenge })
+const councilEnvelope = z.strictObject({
+  schemaVersion: z.literal(2), jobId: id, councilId: id, request: ref, runId: id,
+  snapshot: ref, snapshotDigest: id, phase: councilPhase, deadlineAt: ms,
+})
+const defense = z.strictObject({ ownOffer: ref, text, factIds: z.array(id).max(40), sourceIds: z.array(id).max(40) })
+const answer = z.strictObject({ challengeId: id, disposition: z.enum(['defend', 'correct', 'unknown']),
+  text, factIds: z.array(id).max(40), sourceIds: z.array(id).max(40),
+})
+const finding = z.enum(['supported', 'contradicted', 'unknown'])
+const outcome = z.strictObject({ id, snapshot: ref, challengeId: id, targetOffer: ref, finding,
+  factIds: z.array(id).max(40), sourceIds: z.array(id).max(40), summary: text,
+})
+const councilStatus = z.strictObject({ phase: councilPhase, expected: z.int().min(0).max(3),
+  completed: z.int().min(0).max(3), missing: z.int().min(0).max(3), closed: z.boolean(), deadlineAt: ms,
+})
+const finalProposal = sellerProposal.extend({ schemaVersion: z.literal(2), serviceOptionId: id.nullable() })
+
 export const contracts = {
   Ref: ref,
   CategoryProfile: z.strictObject({
@@ -114,6 +167,47 @@ export const contracts = {
   RequestLine: line,
   ConfirmedBrief: brief,
   SellerBrief: brief.extend({ runId: id }),
+  CouncilPhase: councilPhase,
+  CouncilRole: councilRole,
+  PublicCompetitionOffer: publicOffer,
+  CompetitionSnapshot: competition,
+  CouncilFact: councilFact,
+  ComparativePoint: comparativePoint,
+  PeerChallenge: peerChallenge,
+  AdmittedChallenge: admittedChallenge,
+  CouncilEnvelope: councilEnvelope,
+  ModeratorBrief: councilEnvelope.extend({ phase: z.literal('brief'),
+    participants: z.array(z.strictObject({ merchantId: id, points: z.array(comparativePoint).max(10) })).max(3),
+  }),
+  SellerAdvocacy: councilEnvelope.extend({ phase: z.literal('advocacy'), defenses: z.array(defense).max(2), challenge: peerChallenge.nullable() }),
+  SellerReply: councilEnvelope.extend({ phase: z.literal('reply'), answers: z.array(answer).min(1).max(2) }),
+  ModeratorAdjudication: councilEnvelope.extend({ phase: z.literal('adjudication'),
+    outcomes: z.array(z.strictObject({ challengeId: id, finding, factIds: z.array(id).max(40), sourceIds: z.array(id).max(40), summary: text })).max(3),
+  }),
+  CheckedCouncilOutcome: outcome,
+  CouncilJobInput: councilEnvelope.extend({ role: councilRole, merchantId: id.nullable(),
+    competition, facts: z.array(councilFact).max(2000), ownOffers: z.array(ref).max(2),
+    comparisons: z.array(z.strictObject({ merchantId: id, points: z.array(comparativePoint).max(10) })).max(3),
+    challenges: z.array(admittedChallenge).max(3),
+    defenses: z.array(z.strictObject({ merchantId: id, defenses: z.array(defense).max(2) })).max(3),
+    replies: z.array(z.strictObject({ merchantId: id, answers: z.array(answer).max(2) })).max(3),
+  }),
+  SellerFinalDecision: z.strictObject({ schemaVersion: z.literal(2), jobId: id, roundId: id,
+    councilId: id.nullable(), snapshot: ref.nullable(), snapshotDigest: id.nullable(), outcomeVersion: z.int().nonnegative(),
+    candidateId: id, decision: z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('propose'), proposal: finalProposal }),
+      z.strictObject({ kind: z.literal('hold'), jobId: id, offer: ref }),
+      z.strictObject({ kind: z.literal('abstain'), jobId: id, reasonCode: text }),
+    ]),
+  }),
+  SellerFinalJobInput: z.strictObject({
+    schemaVersion: z.literal(2), jobId: id, roundId: id, councilId: id.nullable(),
+    snapshot: ref.nullable(), snapshotDigest: id.nullable(), outcomeVersion: z.int().nonnegative(),
+    candidateId: id, merchantId: id, policy: ref, request: ref, runId: id, deadlineAt: ms,
+    brief, ownOffer: publicOffer, competition: competition.nullable(),
+    facts: z.array(councilFact).max(2000), comparisons: z.array(comparativePoint).max(10),
+    outcomes: z.array(outcome).max(3),
+  }),
   RequestVersion: request,
   FitAssessment: fit,
   OfferVersion: offer,
@@ -128,6 +222,9 @@ export const contracts = {
   RunEvent: event,
   BuyerRunView: z.strictObject({
     request: ref, runId: id,
+    councilPhase: councilPhase.nullable().default(null),
+    councilStatus: z.array(councilStatus).max(4).default([]),
+    finalStatus: z.strictObject({ invited: z.int().min(0).max(6), received: z.int().min(0).max(6), unavailable: z.int().min(0).max(6) }).default({ invited: 0, received: 0, unavailable: 0 }),
     stage: z.enum(['bidding', 'council', 'negotiating', 'researching', 'results', 'no_match', 'cancelled', 'failed']),
     purchaseStage: z.enum(['none', 'reserved', 'executing', 'unknown', 'complete', 'declined']),
     startedAt: ms, updatedAt: ms, serverNow: ms,
@@ -169,7 +266,7 @@ export const contracts = {
   }),
   ChallengePlan: z.strictObject({ challenges: z.array(z.strictObject({offer:ref,claimId:id,question:text,sourceIds:z.array(id).max(40)})).max(3), summary:text }),
   EvidenceSummary: z.strictObject({variantId:id,positives:z.array(z.strictObject({text,evidenceIds:z.array(id).max(40)})).max(20),concerns:z.array(z.strictObject({text,evidenceIds:z.array(id).max(40)})).max(20),gaps:z.array(text).max(40)}),
-  PriceRound: z.strictObject({id,request:ref,runId:id,mode:z.enum(['competitive','single_seller_target']),participants:z.array(z.strictObject({merchantId:id,candidateId:id,initialOffer:ref})).min(1).max(6),openedAt:ms,deadlineAt:ms,status:z.enum(['open','closed']),closeReason:z.enum(['all_responded','deadline','cancelled']).nullable()}),
+  PriceRound: z.strictObject({id,request:ref,runId:id,councilId:id.nullable().default(null),snapshot:ref.nullable().default(null),snapshotDigest:id.nullable().default(null),outcomeVersion:z.int().nonnegative().default(0),mode:z.enum(['competitive','single_seller_target']),participants:z.array(z.strictObject({merchantId:id,candidateId:id,initialOffer:ref})).min(1).max(6),openedAt:ms,deadlineAt:ms,status:z.enum(['open','closed']),closeReason:z.enum(['all_responded','deadline','cancelled']).nullable()}),
   FinalSubmission: z.strictObject({roundId:id,candidateId:id,jobId:id,payloadDigest:id,receivedAt:ms,decision:z.enum(['revise','hold','abstain']),validatedOffer:ref.nullable()}),
   Reservation: z.strictObject({id,request:ref,quoteId:id,ownerId:id,createdAt:ms,expiresAt:ms,state:z.enum(['active','execution_locked','released','sold']),executionId:id.nullable()}),
   Allocation: z.strictObject({id,reservationId:id,listingId:id,quantity}),

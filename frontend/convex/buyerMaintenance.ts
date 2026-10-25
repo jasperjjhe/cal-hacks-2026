@@ -75,6 +75,8 @@ export const retain = internalMutation({
             await ctx.db.delete(row._id);
           await ctx.db.delete(round._id);
         }
+        for (const council of await ctx.db.query("buyerCouncils").withIndex("by_run", q => q.eq("runId", runId)).take(1)) await ctx.db.delete(council._id);
+        for (const invitation of await ctx.db.query("buyerFinalInvitations").withIndex("by_run", q => q.eq("runId", runId)).take(6)) await ctx.db.delete(invitation._id);
         if (run.workflowId)
           await ctx.scheduler.runAfter(
             0,

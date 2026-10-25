@@ -14,13 +14,14 @@ imports seller source from `feature/seller-side` at `37d7ea5`, with the integrat
 changes listed in the handoff. No public deployment is configured. All inventory,
 merchant prices and checkout are disclosed demo behavior; no payment is taken.
 
-## Agreed competition revision — not yet implemented
+## Agreed competition revision — buyer implemented, seller integration pending
 
 [PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md) now requires independent
 opening bids, a frozen public comparison, merchant peer challenges and grouped
 replies, checked outcomes, then one sealed final invitation per eligible candidate.
 The council explains supported tradeoffs; deterministic rules rank valid offers
 and the buyer chooses. See [seller council handoff](docs/SELLER_COUNCIL_HANDOFF.md)
-for contract, worker, workflow, privacy and acceptance work. Current code still
-uses the earlier moderator-led council/usefulness gate. Only Markdown was updated;
-no seller branch changes, merge or live competition verification are claimed.
+for contract, worker, workflow, privacy and acceptance work. Buyer v2 contracts and the coordinator now execute the agreed phases with seller
+fixtures. See [buyer migration status](docs/BUYER_COUNCIL_MIGRATION.md) and
+[two-agent CREAO setup](docs/BUYER_INTEGRATIONS.md). Seller worker/service authority
+and combined live acceptance remain pending; no seller branch was changed.

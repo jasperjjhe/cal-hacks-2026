@@ -50,6 +50,7 @@ export interface ToolJob {
   input: unknown;
   providerRunId: string | null;
   deadlineAt: number;
+  config?: { appId: string; model: string | null; revision: string } | null;
 }
 export type ToolResult =
   | { status: "pending"; providerRunId: string }
