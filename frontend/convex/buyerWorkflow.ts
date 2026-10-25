@@ -1,3 +1,4 @@
+import { buyerTiming } from "./buyer/timing.ts";
 import { merchantEligible } from "./buyer/eligibility";
 import {
   cancel,
@@ -61,7 +62,7 @@ export const runBuyer = workflow
           await Promise.all(jobs.map(async job => {
             let status = await step.runAction(internal.buyerJobs.dispatch, { jobId: job.id }, { retry: false });
             for (let i = 0; status.pending && i < 40; i++) {
-              await step.sleep(i === 0 ? 2000 : 5000);
+              await step.sleep(buyerTiming.pollMs);
               status = await step.runAction(internal.buyerJobs.dispatch, { jobId: job.id, poll: true }, { retry: false });
             }
           }));
@@ -134,8 +135,8 @@ export const runBuyer = workflow
           { jobId },
           { retry: false },
         );
-        for (let i = 0; status.pending && i < 3; i++) {
-          await step.sleep(5000);
+        for (let i = 0; status.pending && i < 6; i++) {
+          await step.sleep(buyerTiming.pollMs);
           status = await step.runAction(
             internal.buyerJobs.dispatch,
             { jobId, poll: true },

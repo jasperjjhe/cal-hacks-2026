@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { contracts } from '../../src/contracts/index.ts';
-import { providerJson } from './buyerHttp.ts';
+import { providerJson, readProviderJson } from './buyerHttp.ts';
 import type { ToolJob, ToolResult } from './buyerTools.ts';
 
 const outputs = {
@@ -47,26 +47,45 @@ function request(job: ToolJob, appId: string, model: string | null) {
     // No threadId: every application job has an isolated conversation.
   };
 }
-function result(value: unknown, job: ToolJob): ToolResult {
+async function result(value: unknown, job: ToolJob): Promise<ToolResult> {
   const response = z.object({
     id: ids.optional(), runId: ids.optional(), appId: ids.optional(),
     status: z.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
-    result: z.object({ text: z.string().max(200000).optional(), chatText: z.string().max(200000).optional() }).nullable().optional(),
+    result: z.object({
+      text: z.string().max(200000).optional(), chatText: z.string().max(200000).optional(),
+      artifacts: z.array(z.object({ id: z.string().max(4096), url: z.url().max(8192), type: z.string().max(100) })).max(10).optional(),
+    }).nullable().optional(),
   }).parse(value);
   const id = response.id ?? response.runId;
   if (!id || (job.providerRunId && job.providerRunId !== id)) throw new Error('CREAO run identity mismatch.');
-  const { role, appId } = config(job);
+  const { role, appId, token } = config(job);
   if (response.appId && response.appId !== appId) throw new Error('CREAO agent identity mismatch.');
   if (response.status === 'pending' || response.status === 'running') return { status: 'pending', providerRunId: id };
   if (response.status !== 'completed') return { status: 'failed', providerRunId: id };
-  const text = response.result?.text ?? response.result?.chatText;
-  if (!text) return { status: 'failed', providerRunId: id };
-  try {
-    return { status: 'completed', providerRunId: id, output: outputs[role].parse(JSON.parse(text)), model: null };
-  } catch {
-    // A terminal invalid result is a definite failure, not an ambiguous start.
-    return { status: 'failed', providerRunId: id };
+  for (const text of [response.result?.text, response.result?.chatText]) {
+    if (!text) continue;
+    try {
+      const output = outputs[role].parse(JSON.parse(text));
+      return { status: 'completed', providerRunId: id, output, model: null };
+    } catch { /* CREAO may put summary fields here and the actual JSON in an artifact. */ }
   }
+  for (const artifact of (response.result?.artifacts ?? []).filter(a => a.type === 'application/json').slice(0, 3)) {
+    const url = new URL(artifact.url);
+    // Credentials stay on the authenticated run's exact CREAO download endpoint.
+    if (url.origin !== 'https://agent.creao.ai' || url.username || url.password || url.hash ||
+        url.pathname !== `/api/v1/runs/${id}/artifacts/download`) continue;
+    let download = await fetch(url.href, { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    if ([301, 302, 303, 307, 308].includes(download.status)) {
+      const location = new URL(download.headers.get('location') ?? '', url);
+      // CREAO's authenticated download redirects to its signed storage bucket.
+      if (location.origin !== 'https://storage-bucket-creao-user-upload-production.s3.us-west-2.amazonaws.com' ||
+          location.username || location.password || location.hash) continue;
+      download = await fetch(location.href, { redirect: 'error', signal: AbortSignal.timeout(10000) });
+    }
+    const parsed = outputs[role].safeParse(await readProviderJson(download));
+    if (parsed.success) return { status: 'completed', providerRunId: id, output: parsed.data, model: null };
+  }
+  return { status: 'failed', providerRunId: id };
 }
 export async function invokeCreao(job: ToolJob): Promise<ToolResult> {
   const { appId, token, model } = config(job);

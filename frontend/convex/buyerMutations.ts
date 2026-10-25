@@ -1,3 +1,4 @@
+import { buyerTiming } from "./buyer/timing.ts";
 import { internalMutation } from "./_generated/server";
 import { internal, components } from "./_generated/api";
 import { start, cancel, type WorkflowId } from "@convex-dev/workflow";
@@ -233,7 +234,7 @@ export const startRun = internalMutation({
       ),
       paymentScenario: await setting(ctx, "paymentScenario", "success"),
       revision: "buyer-council-v2",
-      councilSchedule: { bidding: now + 35000, brief: now + 45000, advocacy: now + 55000, reply: now + 65000, adjudication: now + 75000 },
+      councilSchedule: Object.fromEntries(Object.entries(buyerTiming.councilEndMs).map(([phase, offset]) => [phase, now + offset])),
       maxCalls: 28,
       maxTools: 40,
     };
@@ -247,7 +248,7 @@ export const startRun = internalMutation({
       config,
       startedAt: now,
       updatedAt: now,
-      deadlineAt: now + 210000,
+      deadlineAt: now + buyerTiming.runMs,
       sequence: 0,
       partial: false,
       error: null,
@@ -266,7 +267,7 @@ export const startRun = internalMutation({
       },
     );
     await ctx.db.patch(id, { workflowId });
-    await ctx.scheduler.runAt(now + 210000, internal.buyerWorkflow.timeout, {
+    await ctx.scheduler.runAt(now + buyerTiming.runMs, internal.buyerWorkflow.timeout, {
       runId: String(id),
     });
     await emit(

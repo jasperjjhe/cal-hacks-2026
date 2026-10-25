@@ -1,3 +1,4 @@
+import { buyerTiming } from "./buyer/timing.ts";
 import { activeCouncilJob, completeCouncilOutput, councilFor } from "./buyerRoles.ts";
 import { fixtureCouncil, publiclyEligible, publicOffer, sameRef } from "./buyer/council.ts";
 import { merchantEligible } from "./buyer/eligibility";
@@ -91,7 +92,7 @@ export const prepareIntake = internalMutation({
         providerRunId: null,
         outputDigest: null,
         output: null,
-        deadlineAt: Date.now() + 30000,
+        deadlineAt: Date.now() + buyerTiming.creaoMs,
         createdAt: Date.now(),
         completedAt: null,
       }),
@@ -185,7 +186,7 @@ export const preparePhase = internalMutation({
             providerConfigRevision: run.config.revision,
             inputDigest,
             inputRef,
-            deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + 35000),
+            deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + buyerTiming.councilEndMs.bidding),
           });
           ids.push(
             String(
@@ -205,7 +206,7 @@ export const preparePhase = internalMutation({
                 providerRunId: null,
                 outputDigest: null,
                 output: null,
-                deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + 35000),
+                deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + buyerTiming.councilEndMs.bidding),
                 createdAt: now,
                 completedAt: null,
               }),
@@ -335,6 +336,7 @@ export const claimJob = internalMutation({
       return null;
     }
     if (Date.now() >= job.deadlineAt) {
+      if (job.provider === "creao" && job.providerRunId) await ctx.scheduler.runAfter(0, internal.buyerJobs.cancelProvider, { jobId: args.jobId });
       await ctx.db.patch(job._id, { state: "failed" });
       return null;
     }
@@ -979,7 +981,7 @@ export const pollIntake = internalAction({
       poll: true,
     });
     if (result.pending)
-      await ctx.scheduler.runAfter(5000, internal.buyerJobs.pollIntake, args);
+      await ctx.scheduler.runAfter(buyerTiming.pollMs, internal.buyerJobs.pollIntake, args);
   },
 });
 export const cancelProvider = internalAction({

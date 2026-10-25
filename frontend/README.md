@@ -16,7 +16,7 @@ fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md
 for the exact seller boundary. Live seller work and service authority are pending.
 Products stay fixed in the proposed round; above-budget hard-valid offers may
 compete privately with respect to affordability, while only affordable offers
-are selectable. Future latency must be measured within the 210-second ceiling;
+are selectable. User-approved MVP waits allow 90 seconds per CREAO role and eight minutes overall;
 there is no 45-second complete-comparison promise.
 
 ## Local setup

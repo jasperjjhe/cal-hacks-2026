@@ -10,6 +10,9 @@ export async function providerJson(url: string, token: string, body?: unknown) {
     redirect: 'error',
     signal: AbortSignal.timeout(10000),
   });
+  return readProviderJson(response);
+}
+export async function readProviderJson(response: Response) {
   if (!response.ok) throw new Error(`Provider HTTP ${response.status}.`);
   if (response.status === 204) return null;
   const reader = response.body?.getReader();

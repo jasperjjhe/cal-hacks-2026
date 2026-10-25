@@ -1,3 +1,4 @@
+import { buyerTiming } from '../convex/buyer/timing.ts';
 import assert from 'node:assert/strict';
 import { contracts } from '../src/contracts/index.ts';
 import { confirmedRequest, laptopCard } from '../src/contracts/fixtures.ts';
@@ -19,7 +20,7 @@ export function smokeInputs(now = Date.now()) {
   function input(role, phase) {
     return contracts.CouncilJobInput.parse({ schemaVersion: 2, jobId: `smoke-${role}-${now}`, councilId: competition.councilId,
       request: competition.request, runId: competition.runId, snapshot: competition.snapshot, snapshotDigest: 'demo-digest',
-      phase, deadlineAt: now + 10000, role, merchantId: null, competition, facts, ownOffers: [], comparisons: [],
+      phase, deadlineAt: now + buyerTiming.creaoMs, role, merchantId: null, competition, facts, ownOffers: [], comparisons: [],
       challenges: [], defenses: [], replies: [] });
   }
   const brief = input('moderator_brief', 'brief');
@@ -75,11 +76,11 @@ async function main() {
     const now = Date.now();
     const input = smokeInputs(now)[role];
     const job = { id: role === 'moderator_brief' || role === 'moderator_adjudication' ? input.jobId : `smoke-${role}-${now}`,
-      role, input, providerRunId: null, deadlineAt: now + (role === 'intake' ? 30000 : role === 'evidence_summary' ? 15000 : 10000),
+      role, input, providerRunId: null, deadlineAt: now + buyerTiming.creaoMs,
       config: snapshotCreaoConfig(role) };
     let result = await invokeCreao(job);
-    while (result.status === 'pending' && Date.now() + 2000 < job.deadlineAt) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    while (result.status === 'pending' && Date.now() + 1000 < job.deadlineAt) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(buyerTiming.pollMs, job.deadlineAt - Date.now() - 1000)));
       job.providerRunId = result.providerRunId;
       result = await pollCreao(job);
     }

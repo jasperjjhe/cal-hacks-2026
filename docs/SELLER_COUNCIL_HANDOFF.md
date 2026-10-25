@@ -42,7 +42,7 @@ offer per eligible candidate → independent research → deterministic comparis
 - Buyers see short checked exchanges as available, plus a final change/uncertainty
   summary. Up to three useful highlights are recommendations, not debate winners;
   the remaining qualified shortlist is accessible. Buyer authority is unchanged.
-- Preserve 210 seconds total, 28 model calls, 40 tools and phase deadlines;
+- Use the user-approved MVP ceiling of 480 seconds total, 28 model calls, 40 tools and phase deadlines;
   finish early or return usable partial results. The former 45-second complete
   comparison target is withdrawn pending real cold/warm measurements.
 

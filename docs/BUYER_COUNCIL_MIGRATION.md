@@ -78,9 +78,10 @@ No policy prose grants an upgrade.
 
 ## Timing, failure and compatibility
 
-New runs persist absolute end times: opening +35s, brief +45s, advocacy +55s,
-reply +65s and adjudication +75s. Roles close early when responses finish. Finals
-allow up to 30s, research up to 60s, summaries up to 15s, all inside the 210s run,
+User-approved MVP waits now persist absolute end times: opening +30s, brief +120s,
+advocacy +150s, reply +180s and adjudication +270s. Each CREAO moderator role and
+intake/summary call allows up to 90s; phases close early on completion. Finals
+allow up to 30s, research up to 60s, all inside an eight-minute (480s) run,
 28 provider starts and 40 tool/poll calls. Repairs consume the same budget and
 deadline. Polling cannot authorize a late result. Exhaustion yields checked
 partial offers and unavailable invitation/phase counts, never a fabricated reply.
@@ -120,8 +121,35 @@ performs four potentially billable role calls on disclosed demo data. It checks
 strict output plus scope/uncertainty behavior and records non-secret run IDs and
 timing. It does not write a buyer request or certify hosted execution provenance.
 
-Live CREAO smoke, deployed schema/auth, browser acceptance and combined Fetch
-acceptance still require configured accounts/deployment. CREAO documents that
-runs can take minutes; the agreed budgets are unchanged. The user permits the CREAO default model; its identity remains unverified when
+Live CREAO role checks now pass as recorded below. Deployed schema/auth, browser
+acceptance and combined Fetch acceptance remain pending. CREAO documents that
+runs can take minutes; the user approved the longer MVP waits after live timing checks. The user permits the CREAO default model; its identity remains unverified when
 unreported. An account-supported non-Gemini override is optional. Measure cold/warm latency. Do not claim live acceptance from
 the deterministic suite or raise timeouts silently.
+
+## Live CREAO check — October 24, 2026
+
+Connected to the user-selected Convex dev deployment little-dove-539. Corrected
+CREAO_BUYER_CONFIG_REVISION from coucil-v2 to council-v2. Agent IDs/key were read
+into process memory only; no provider secret was printed or committed.
+
+Default model selection is supported by omitting chatModelId. The provider did
+not report its model identity. Two diagnostic runs completed in about 47s/57s:
+intake `63534a33-dd93-4cf5-807f-3f6214194dfb` and comparative brief
+`3a65b490-9d0e-4ead-bb1e-97141c116c05`. Both actual outputs passed strict schemas
+and smoke semantic checks after the adapter was corrected to read JSON artifacts.
+CREAO's result.text contained summary counters and chatText contained narration;
+the JSON lived in an application/json artifact. Downloads are restricted to the
+same run's authenticated CREAO endpoint and one observed CREAO storage bucket
+redirect, with no API-key forwarding to storage. Bodies remain bounded.
+
+The former 30s/10s checks timed out and those runs were confirmed cancelled.
+The user approved longer MVP waits; this does not certify combined deployed
+buyer/seller behavior. Updated code still requires deployment to the intended
+buyer backend; no shared deployment functions or commerce records were overwritten.
+
+With the revised waits and artifact reader, the remaining roles also passed live
+schema/semantic validation: adjudication `b34f418b-2504-4eb5-bb68-357ebed3cf50`
+in about 31s, and evidence summary `4ebb6fdc-0a6e-422c-83b1-dd93b8c7150f`
+in about 46s. All four buyer roles have real default-model output proof on demo
+inputs. This is provider integration proof, not a deployed browser/order test.

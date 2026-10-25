@@ -81,6 +81,22 @@ test('omitting the model override uses the CREAO default without claiming a mode
   expect((await invokeCreao(job)).status).toBe('pending');
   expect(JSON.parse(fetch.mock.calls[0][1].body).chatModelId).toBeUndefined();
 });
+test('CREAO JSON artifacts are validated and downloaded only from the same authenticated run', async () => {
+  const output = { schemaVersion: 2, jobId: job.id, councilId: 'c1', request: {id:'req1',version:1}, runId:'r1', snapshot:{id:'s1',version:1}, snapshotDigest:'digest', phase:'brief', deadlineAt:job.deadlineAt, participants: [] };
+  const fetch = vi.fn().mockResolvedValueOnce(json({ id: 'run1', status: 'completed', result: {
+    text: '{"pointCount":10}', artifacts: [
+      { id: 'bad', type: 'application/json', url: 'https://evil.example/result.json' },
+      { id: 'good', type: 'application/json', url: 'https://agent.creao.ai/api/v1/runs/run1/artifacts/download?path=output.json' },
+    ],
+  } })).mockResolvedValueOnce(new Response(null, { status: 302, headers: {
+    location: 'https://storage-bucket-creao-user-upload-production.s3.us-west-2.amazonaws.com/output.json?signature=demo',
+  } })).mockResolvedValueOnce(json(output));
+  vi.stubGlobal('fetch', fetch);
+  expect((await invokeCreao(job)).status).toBe('completed');
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch.mock.calls[1][0]).toContain('/runs/run1/artifacts/download');
+  expect(fetch.mock.calls[2][1].headers).toBeUndefined();
+});
 test('provider configuration is pinned across an ambiguous start and environment changes', async () => {
   const pinned = { ...job, config: snapshotCreaoConfig(job.role) };
   const fetch = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(json({ id: 'run1', status: 'pending' }));

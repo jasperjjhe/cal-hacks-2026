@@ -68,10 +68,15 @@ only a new empty catalog as described in the frontend README, and complete the
 browser path: chat → explicit confirmation → council → checked offers → approval
 → simulated order → reload. Do not reset an existing catalog or auth keys.
 Record each role's non-secret run ID, pending/terminal status and cold/warm timing.
-The agreed 75-second opening/council and 210-second overall budgets remain; CREAO
-documents that runs may take minutes, so timing acceptance is unverified until
-these calls pass. Requested model selection is not proof of the model actually
+The user approved 90-second CREAO role waits and an eight-minute overall MVP
+cap after live calls completed in about 47–57 seconds. Polling uses 15-second
+intervals, while model/tool caps stay unchanged. New runs use the revised schedule. Requested model selection is not proof of the model actually
 used; the adapter leaves unreported model provenance null.
+
+CREAO may return the actual JSON in an artifact while text/chatText contain
+summaries. The adapter validates inline JSON or downloads application/json artifacts
+from that authenticated run only. One signed redirect to CREAO’s observed storage
+bucket is allowed without forwarding the API key; other redirects are rejected.
 
 The adapter uses the fixed CREAO API Trigger host, start/poll/cancel endpoints and
 documented idempotencyKey. Agent ID/model/revision are pinned per job. Accepted

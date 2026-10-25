@@ -1,3 +1,4 @@
+import { buyerTiming } from "./buyer/timing.ts";
 import { snapshotCreaoConfig } from "./integrations/creaoBuyer.ts";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -41,7 +42,7 @@ export const freezeCompetition = internalMutation({
       ])] });
     // SellerBrief carries runId; ConfirmedBrief intentionally does not.
     const snapshotDigest = await digest(snapshot);
-    const schedule = run.config.councilSchedule ?? { brief: run.startedAt + 45000, advocacy: run.startedAt + 55000, reply: run.startedAt + 65000, adjudication: run.startedAt + 75000 };
+    const schedule = run.config.councilSchedule ?? Object.fromEntries(Object.entries(buyerTiming.councilEndMs).map(([phase, offset]) => [phase, run.startedAt + offset]));
     const statuses = councilPhases.map(phase => ({ phase, expected: 0, completed: 0, missing: 0, closed: false,
       deadlineAt: Math.min(schedule[phase], run.deadlineAt) }));
     await ctx.db.patch(id, { snapshot, snapshotDigest, statuses });
@@ -67,7 +68,7 @@ export const prepareCouncilJobs = internalMutation({
     const challenges = contracts.AdmittedChallenge.array().parse(council.challenges);
     const merchants: (string | null)[] = phase === "brief" ? [null] : phase === "adjudication" ? (challenges.length ? [null] : [])
       : phase === "advocacy" ? [...new Set(snapshot.offers.map(o => o.merchantId))] : [...new Set(challenges.map(c => c.targetMerchantId))];
-    const deadlineAt = (council.statuses as Contract<"BuyerRunView">["councilStatus"]).find(s => s.phase === phase)!.deadlineAt;
+    const deadlineAt = Math.min((council.statuses as Contract<"BuyerRunView">["councilStatus"]).find(s => s.phase === phase)!.deadlineAt, Date.now() + (phase === "brief" || phase === "adjudication" ? buyerTiming.creaoMs : 30000));
     const ids: string[] = [];
     for (const merchantId of merchants) {
       const id = await ctx.db.insert("buyerJobs", { runId, requestId: run.requestId, version: run.version, phase: "council", role,
@@ -259,7 +260,7 @@ export const prepareSummaries = internalMutation({
             providerRunId: null,
             outputDigest: null,
             output: null,
-            deadlineAt: Math.min(run.deadlineAt, Date.now() + 15000),
+            deadlineAt: Math.min(run.deadlineAt, Date.now() + buyerTiming.creaoMs),
             createdAt: Date.now(),
             completedAt: null,
           }),
