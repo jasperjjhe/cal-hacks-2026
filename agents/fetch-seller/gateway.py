@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, Optional
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, Optional
 
 try:  # uagents >= 0.20 moved the envelope model into uagents-core.
     from uagents_core.envelope import Envelope
@@ -115,14 +117,59 @@ def _agent_endpoint() -> str:
     return os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip() or DEFAULT_AGENT_ENDPOINT
 
 
-def _gateway_identity() -> Identity:
-    """The gateway's own agent identity. Agentverse returns hosted sync replies
-    to agent-prefixed senders; uagents.query's throwaway user identities get a
-    500 from the hosted submit endpoint."""
+def _gateway_identity(index: int = 0) -> Identity:
+    """One of the gateway's own agent identities. Agentverse returns hosted sync
+    replies to agent-prefixed senders; uagents.query's throwaway user identities
+    get a 500 from the hosted submit endpoint. Index 0 is the original identity."""
     seed = os.getenv("FETCH_SELLER_GATEWAY_SEED", "").strip()
     if not seed:
         raise RuntimeError("FETCH_SELLER_GATEWAY_SEED is not configured")
-    return Identity.from_seed(seed, 0)
+    return Identity.from_seed(seed, index)
+
+
+DEFAULT_IDENTITY_POOL = 16
+
+
+def _identity_pool_size() -> int:
+    try:
+        size = int(os.getenv("FETCH_SELLER_GATEWAY_IDENTITIES", str(DEFAULT_IDENTITY_POOL)))
+    except ValueError:
+        size = DEFAULT_IDENTITY_POOL
+    return max(1, min(size, 64))
+
+
+class _IdentityPool:
+    """Agentverse's hosted submit endpoint fails overlapping sync queries from one
+    sender (500s and timeouts once two are in flight), while queries from distinct
+    senders run in parallel. Each in-flight query therefore leases its own derived
+    identity (same seed, distinct index) and returns it when the reply arrives."""
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition()
+        self._busy: set = set()
+
+    @contextmanager
+    def lease(self, size: int, timeout: float) -> Iterator[int]:
+        deadline = time.monotonic() + timeout
+        with self._cond:
+            while True:
+                index = next((i for i in range(size) if i not in self._busy), None)
+                if index is not None:
+                    self._busy.add(index)
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("no free gateway identity")
+                self._cond.wait(remaining)
+        try:
+            yield index
+        finally:
+            with self._cond:
+                self._busy.discard(index)
+                self._cond.notify()
+
+
+_IDENTITIES = _IdentityPool()
 
 
 def _post_envelope(endpoint: str, body: bytes, timeout: float) -> bytes:
@@ -216,7 +263,11 @@ def _query_agent(message: SellerMessage) -> ProviderResponse:
     if not address:
         raise RuntimeError("FETCH_SELLER_AGENT_ADDRESS is not configured")
     timeout = float(os.getenv("FETCH_SELLER_QUERY_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
-    identity = _gateway_identity()
+    with _IDENTITIES.lease(_identity_pool_size(), timeout) as index:
+        return _query_agent_as(_gateway_identity(index), address, message, timeout)
+
+
+def _query_agent_as(identity: Identity, address: str, message: SellerMessage, timeout: float) -> ProviderResponse:
     payload = message.model_dump_json() if hasattr(message, "model_dump_json") else message.json()
     envelope = Envelope(
         version=1,
