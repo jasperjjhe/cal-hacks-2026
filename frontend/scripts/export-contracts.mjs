@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { contracts } from '../src/contracts/index.ts'
 
 const target = new URL('../src/contracts/schema.json', import.meta.url)
+const workerTarget = new URL('../../agents/fetch-seller/seller.schema.json', import.meta.url)
 const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'urn:buyerunion:contracts:1',
@@ -20,7 +21,11 @@ const sellerSchema = {
   oneOf: ['SellerBrief', 'SellerDecision', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => ({ $ref: `#/$defs/${name}` })),
   $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => [name, schema.$defs[name]])),
 }
-for (const [file, value] of [[target, schema], [new URL('../convex/lib/seller.schema.json', import.meta.url), sellerSchema]]) {
+for (const [file, value] of [
+  [target, schema],
+  [new URL('../convex/lib/seller.schema.json', import.meta.url), sellerSchema],
+  [workerTarget, sellerSchema],
+]) {
   const content = `${JSON.stringify(value, null, 2)}\n`
   if (process.argv.includes('--check')) {
     if (await readFile(file, 'utf8') !== content) throw new Error('Contract export is stale; run npm run contracts:export')

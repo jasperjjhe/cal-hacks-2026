@@ -6,10 +6,11 @@ export type FetchAgentConfig = Omit<HttpAgentPortConfig, 'provider'> & {
 }
 
 /**
- * Fetch.ai remains endpoint/configuration driven until the team supplies the
- * real agent address, transport and authentication. No endpoint or agent ID
- * is invented here, and the adapter cannot be constructed without an HTTPS
- * allowlist.
+ * Fetch.ai is the seller-side provider. The adapter deliberately contains no
+ * agent address or credential: the Convex deployment supplies exact HTTPS
+ * routes and an allowlisted host at runtime. The checked-in Agentverse
+ * implementation lives under `agents/fetch-seller/` and speaks this port's
+ * bounded start/poll/reconcile/cancel contract.
  */
 export function createFetchAgentPort(
   config: FetchAgentConfig,

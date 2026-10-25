@@ -14,12 +14,15 @@ scrape review sources for genuine offered products. No per-product review links
 are required. Optional dedicated Reddit comment discovery adds cited owner anecdotes.
 See [configuration and limitations](docs/BUYER_INTEGRATIONS.md#apify-automatic-review-discovery-with-rag-web-browser).
 
-Dev B works on `geoff/buyer`; Dev S works independently. The current buyer implementation
-imports seller source from `feature/seller-side` at `37d7ea5`, with the integration
-changes listed in the handoff. No public deployment is configured. All inventory,
-merchant prices and checkout are disclosed demo behavior; no payment is taken.
+The buyer branch now integrates seller v2 Fetch code from `dev` (`59f7de4`),
+plus automatic editorial/Reddit evidence discovery. Fixture sellers remain the
+explicit fallback until the Fetch gateway is configured. Inventory, prices and
+checkout remain disclosed demo behavior; no real payment is taken.
 
-## Agreed competition revision — buyer implemented, seller integration pending
+See [the integrated MVP audit](docs/INTEGRATED_MVP_AUDIT.md) for verified journeys,
+remaining headphone-demo blockers and the deployment checklist.
+
+## Agreed competition revision — unified code, live provider acceptance pending
 
 [PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md) now requires independent
 opening bids, a frozen public comparison, merchant peer challenges and grouped
@@ -29,4 +32,5 @@ and the buyer chooses. See [seller council handoff](docs/SELLER_COUNCIL_HANDOFF.
 for contract, worker, workflow, privacy and acceptance work. Buyer v2 contracts and the coordinator now execute the agreed phases with seller
 fixtures. See [buyer migration status](docs/BUYER_COUNCIL_MIGRATION.md) and
 [two-agent CREAO setup](docs/BUYER_INTEGRATIONS.md). Seller worker/service authority
-and combined live acceptance remain pending; no seller branch was changed.
+and combined live acceptance remain pending. Seller-side code is integrated;
+service-option concessions still have a buyer-side restriction recorded in the audit.

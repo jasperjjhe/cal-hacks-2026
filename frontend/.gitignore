@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Convex CLI's optional local AI helper bundle; not application runtime code
+.agents
+.claude
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+convex/_generated/ai
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

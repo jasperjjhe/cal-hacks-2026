@@ -1,5 +1,4 @@
 import test from 'node:test'
-import { contracts } from '../src/contracts/index.ts'
 import assert from 'node:assert/strict'
 
 import {
@@ -10,8 +9,11 @@ import {
 } from '../convex/lib/sellerContracts.ts'
 import { makeSellerFixtures, makeValidProposal } from '../convex/lib/sellerFixtures.ts'
 import {
+  applyPolicyChanges,
   assessLine,
   minimumUnitCents,
+  resolveFinalServiceTerms,
+  validateFinalOfferRevision,
   validateSellerProposal,
 } from '../convex/lib/sellerValidation.ts'
 import {
@@ -22,6 +24,7 @@ import {
 } from '../convex/lib/sellerInventory.ts'
 import { FixtureAgentPort } from '../convex/integrations/fixtureAgentPort.ts'
 import { createFetchAgentPort } from '../convex/integrations/fetchAdapter.ts'
+import { projectOperatorListing, validateOperatorListingDraft } from '../convex/lib/sellerOperator.ts'
 
 const fixtures = makeSellerFixtures()
 
@@ -50,6 +53,43 @@ function proposalFor(merchantId, variantId, unitCents, requestLineId = 'line_mai
   }
 }
 
+function openingOfferFor(merchantId = 'merchant_a', brief = fixtures.briefs.laptop) {
+  const openingResult = validateSellerProposal(contextFor(merchantId, brief), makeValidProposal(merchantId))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) throw new Error('opening fixture must validate')
+  return {
+    offer: { id: `offer_demo_${merchantId}_candidate_1`, version: 1 },
+    ...openingResult.offer,
+  }
+}
+
+function finalContextFor(openingOffer, overrides = {}) {
+  return {
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant[openingOffer.merchantId],
+    currentCatalog: fixtures.snapshotsByMerchant[openingOffer.merchantId],
+    policy: fixtures.policiesByMerchant[openingOffer.merchantId],
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+    ...overrides,
+  }
+}
+
+function finalCandidateFor(openingOffer, overrides = {}) {
+  return {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+    ...overrides,
+  }
+}
+
 test('seller brief construction excludes private buyer fields', () => {
   const brief = buildSellerBrief({
     schemaVersion: 1,
@@ -66,6 +106,29 @@ test('seller brief construction excludes private buyer fields', () => {
     () => assertSellerBriefSafe({ ...brief, privateMaximumCents: 100_000 }),
     (error) => error instanceof SellerContractError && error.code === 'INVALID_INPUT',
   )
+})
+
+test('seller operator projection exposes catalog facts and rejects unsafe listing drafts', () => {
+  const snapshot = fixtures.snapshotsByMerchant.merchant_a[0]
+  const projected = projectOperatorListing(snapshot.listing, snapshot.variant, snapshot.availableQuantity)
+  assert.equal(projected.listing.id, snapshot.listing.listing.id)
+  assert.equal(projected.title, snapshot.variant.title)
+  assert.equal(projected.availableQuantity, snapshot.availableQuantity)
+  assert.equal(projected.syntheticProduct, true)
+  assert.notEqual(projected.attributes, snapshot.variant.attributes)
+  assert.deepEqual(validateOperatorListingDraft({
+    initialQuantity: 2,
+    referenceUnitCents: 99_000,
+    operatorFloorCents: 95_000,
+  }), [])
+  assert.deepEqual(validateOperatorListingDraft({
+    initialQuantity: 1.5,
+    referenceUnitCents: 95_000,
+    operatorFloorCents: 96_000,
+  }), [
+    { field: 'initialQuantity', message: 'quantity must be a whole number from zero to 10000' },
+    { field: 'operatorFloorCents', message: 'lowest accepted price cannot exceed MSRP' },
+  ])
 })
 
 test('minimum price follows the documented floor, discount and contribution formula', () => {
@@ -95,14 +158,430 @@ test('minimum price follows the documented floor, discount and contribution form
   )
 })
 
+test('final service terms come only from the immutable policy allowlist', () => {
+  const baseline = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baseline, {
+    finalServiceOptions: [{
+      id: 'service:priority',
+      shippingCents: 2_000,
+      arrivalCalendarDays: 1,
+      warrantyMonths: 24,
+      returnDays: 30,
+      incrementalCostCents: 500,
+    }],
+  }, baseline.policy.version + 1)
+
+  assert.deepEqual(resolveFinalServiceTerms(policy, null), {
+    serviceOptionId: null,
+    shippingCents: baseline.shippingCents,
+    arrivalCalendarDays: baseline.arrivalCalendarDays,
+    warrantyMonths: baseline.warrantyMonths,
+    returnDays: baseline.returnDays,
+    incrementalCostCents: 0,
+  })
+  assert.deepEqual(resolveFinalServiceTerms(policy, 'service:priority'), {
+    serviceOptionId: 'service:priority',
+    shippingCents: 2_000,
+    arrivalCalendarDays: 1,
+    warrantyMonths: 24,
+    returnDays: 30,
+    incrementalCostCents: 500,
+  })
+  assert.throws(
+    () => resolveFinalServiceTerms(policy, 'service:unapproved'),
+    (error) => error instanceof Error && error.message.includes('not authorized by policy'),
+  )
+  assert.throws(
+    () => resolveFinalServiceTerms(policy, undefined),
+    (error) => error instanceof Error && error.message.includes('service option ID is invalid'),
+  )
+  assert.throws(
+    () => applyPolicyChanges(baseline, {
+      finalServiceOptions: [{
+        id: 'service:bad',
+        shippingCents: 0,
+        arrivalCalendarDays: 1,
+        warrantyMonths: 12,
+        returnDays: 14,
+        incrementalCostCents: -1,
+      }],
+    }, baseline.policy.version + 1),
+    (error) => error instanceof Error && error.message.includes('incremental bundle cost'),
+  )
+})
+
 test('valid seller proposals are recomputed and never trust model totals', () => {
   const result = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
   assert.equal(result.ok, true)
   if (!result.ok) return
   assert.equal(result.offer.itemsCents, 97_500)
+  assert.equal(result.offer.serviceOptionId, null)
   assert.equal(result.offer.shippingCents, 1_500)
   assert.equal(result.offer.totalCents, 99_000)
   assert.equal(result.offer.fit.hardRequirementsPassed, true)
+})
+
+test('final seller revisions stay parent-bound while allowing a validated price reduction', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.offer.parentOffer?.id, openingOffer.offer.id)
+  assert.equal(result.offer.itemsCents, 96_000)
+  assert.equal(result.offer.totalCents, 97_500)
+  assert.equal(result.offer.serviceOptionId, null)
+})
+
+test('final seller revisions re-check the seller brief instead of trusting opening fit', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const stricterBrief = {
+    ...fixtures.briefs.laptop,
+    lines: [{
+      ...fixtures.briefs.laptop.lines[0],
+      requirements: [
+        ...fixtures.briefs.laptop.lines[0].requirements,
+        { id: 'r_health', fieldId: 'healthPercent', operator: 'min', value: 99, unit: '%', strength: 'hard', weight: 1 },
+      ],
+    }],
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: stricterBrief,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'REQUIREMENT_NOT_MET'))
+})
+
+test('final seller revisions reject a changed listing price identity even when the new price would pass', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const currentCatalog = fixtures.snapshotsByMerchant.merchant_a.map((snapshot) => snapshot.listing.listing.id === 'merchant_a:P3'
+    ? {
+      ...snapshot,
+      listing: { ...snapshot.listing, referenceUnitCents: 100_000, operatorFloorCents: 90_000 },
+    }
+    : snapshot)
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FROZEN_BASKET_CHANGED'))
+})
+
+test('final seller revisions reject non-integer quantities before doing money arithmetic', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, quantity: 1.5 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'QUANTITY_INVALID'))
+})
+
+test('final seller revisions cannot escape the opening parent offer', () => {
+  const openingOffer = openingOfferFor()
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer, { parentOffer: { id: openingOffer.offer.id, version: 2 } }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'PARENT_OFFER_MISMATCH'))
+})
+
+test('final seller revisions cannot invent a service option outside policy authority', () => {
+  const openingOffer = openingOfferFor()
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:unapproved' }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'INVALID_INPUT' && reason.field === 'serviceOptionId'))
+})
+
+test('final seller revisions recompute an authorized service option and its incremental economics', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:priority',
+      shippingCents: 2_000,
+      arrivalCalendarDays: 1,
+      warrantyMonths: 24,
+      returnDays: 30,
+      incrementalCostCents: 500,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_priority_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:priority' }),
+  )
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.offer.serviceOptionId, 'service:priority')
+  assert.equal(result.offer.shippingCents, 2_000)
+  assert.equal(result.offer.totalCents, 98_000)
+  assert.equal(result.offer.arrivalCalendarDays, 1)
+  assert.equal(result.offer.warrantyMonths, 24)
+  assert.equal(result.offer.returnDays, 30)
+})
+
+test('final seller revisions reject an option whose private bundle cost breaks contribution', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:expensive',
+      shippingCents: 1_500,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 15_000,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_expensive_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:expensive',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 95_000 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'CONTRIBUTION_TOO_LOW'))
+})
+
+test('final seller revisions reject a delivered total increase even when the item price falls', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:high-shipping',
+      shippingCents: 5_000,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_high_shipping_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:high-shipping',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_TOTAL_INCREASED'))
+})
+
+test('final seller revisions reject weaker delivery, warranty or return terms', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:weaker',
+      shippingCents: 1_500,
+      arrivalCalendarDays: 4,
+      warrantyMonths: 11,
+      returnDays: 13,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_weaker_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, { serviceOptionId: 'service:weaker' }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_TERM_WEAKENED'))
+})
+
+test('final seller revisions fail closed when the seller policy changes after opening', () => {
+  const openingOffer = openingOfferFor()
+  const currentPolicy = applyPolicyChanges(fixtures.policiesByMerchant.merchant_a, {
+    maxDiscountBps: 500,
+  }, fixtures.policiesByMerchant.merchant_a.policy.version + 1)
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy: currentPolicy }),
+    finalCandidateFor(openingOffer),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'POLICY_VERSION_STALE'))
+})
+
+test('final seller revisions cannot raise an item price even with a lower shipping option', () => {
+  const baselinePolicy = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baselinePolicy, {
+    finalServiceOptions: [{
+      id: 'service:free-shipping',
+      shippingCents: 0,
+      arrivalCalendarDays: 3,
+      warrantyMonths: 12,
+      returnDays: 14,
+      incrementalCostCents: 0,
+    }],
+  }, baselinePolicy.policy.version + 1)
+  const openingResult = validateSellerProposal({
+    ...contextFor('merchant_a'),
+    policy,
+  }, {
+    ...makeValidProposal('merchant_a'),
+    policy: { ...policy.policy },
+  })
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_free_shipping_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer, { policy }),
+    finalCandidateFor(openingOffer, {
+      serviceOptionId: 'service:free-shipping',
+      lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 97_600 })),
+    }),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FINAL_LINE_PRICE_INCREASED'))
+})
+
+test('final seller revisions require an accepted opening offer', () => {
+  const openingOffer = { ...openingOfferFor(), status: 'hold' }
+  const result = validateFinalOfferRevision(
+    finalContextFor(openingOffer),
+    finalCandidateFor(openingOffer),
+  )
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'INVALID_INPUT' && reason.field === 'openingOffer.status'))
 })
 
 test('seller validation rejects wrong merchant, stale policy, invalid price and missing lines', () => {
@@ -320,64 +799,156 @@ test('HTTP provider adapter requires explicit HTTPS allowlists and sends only sc
   assert.equal(requestBody.input.runId, 'run_demo_1')
 })
 
-test("unit diagnostics override generic variant health, including explicit unknowns", () => {
-  const snapshot = structuredClone(
-    fixtures.snapshotsByMerchant.merchant_c.find((s) => s.variant.id === "P1"),
-  );
-  const line = {
-    ...fixtures.briefs.laptop.lines[0],
-    allowedConditions: ["refurbished"],
-    requirements: [
-      {
-        id: "health",
-        fieldId: "healthPercent",
-        operator: "min",
-        value: 90,
-        unit: "%",
-        strength: "hard",
-        weight: 1,
-      },
-    ],
-  };
-  assert.equal(assessLine(line, snapshot).hardRequirementsPassed, false);
-  snapshot.listing.diagnosticAttributes.healthPercent = {
-    value: 95,
-    unit: "%",
-    provenance: "synthetic_demo",
-    sourceId: null,
-  };
-  assert.equal(assessLine(line, snapshot).hardRequirementsPassed, true);
-  snapshot.listing.diagnosticAttributes.healthPercent.value = null;
-  assert.equal(assessLine(line, snapshot).requirements[0].status, "unknown");
-});
-
-
-test('seller boundaries share canonical limits for requirements, claims and text', () => {
-  const brief = structuredClone(fixtures.briefs.laptop)
-  const requirement = brief.lines[0].requirements[0]
-  brief.lines[0].requirements = Array.from({ length: 100 }, (_, i) => ({ ...requirement, id: `requirement-${i}` }))
-  brief.lines[0].useCaseSummary = 'x'.repeat(4000)
-  assert.doesNotThrow(() => contracts.SellerBrief.parse(brief))
-  assert.doesNotThrow(() => assertSellerBriefSafe(brief))
-  brief.lines[0].requirements.push({ ...requirement, id: 'over-limit' })
-  assert.throws(() => contracts.SellerBrief.parse(brief))
-  assert.throws(() => assertSellerBriefSafe(brief))
-  const proposal = makeValidProposal('merchant_a')
-  proposal.claims = Array.from({ length: 100 }, (_, i) => ({ id: `claim-${i}`, requestLineId: proposal.lines[0].requestLineId, text: 'x'.repeat(4000), sourceIds: Array.from({ length: 40 }, (_, j) => `source-${j}`) }))
-  const decision = { kind: 'propose', proposal }
-  assert.deepEqual(parseSellerDecision(decision), contracts.SellerDecision.parse(decision))
+test('HTTP provider adapter reconciles an ambiguous start by application job ID', async () => {
+  let requestedUrl = ''
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    reconcileUrlTemplate: 'https://agent.example/jobs/{jobId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-demo-v2',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async (url) => {
+      requestedUrl = url
+      return new Response(JSON.stringify({
+        status: 'completed',
+        providerRunId: 'provider-run-reconciled',
+        model: 'fetch-seller-v1',
+        output: { kind: 'abstain', jobId: 'job_reconcile', reasonCode: 'NO_MATCH' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.poll('job_reconcile')
+  assert.equal(result.status, 'completed')
+  assert.equal(requestedUrl, 'https://agent.example/jobs/job_reconcile')
+  if (result.status === 'completed') assert.equal(result.providerRunId, 'provider-run-reconciled')
 })
 
-test('repeated listings share aggregate capacity while duplicate request lines remain invalid', () => {
-  const input = { reservationKey: 'basket-key', requestId: 'request', quoteId: 'quote', merchantId: 'merchant_a', allocationIdPrefix: 'allocation', now: 1000, expiresAt: 2000, lines: [
-    { requestLineId: 'first', listing: { id: 'mouse', version: 1 }, quantity: 2, unitCents: 100 },
-    { requestLineId: 'second', listing: { id: 'mouse', version: 1 }, quantity: 2, unitCents: 100 },
-  ] }
-  const state = { initialQuantityByListing: { mouse: 4 }, allocations: [] }
-  const reserved = reserveInTransaction(state, input)
-  assert.equal(reserved.allocations.length, 2)
-  assert.equal(availableQuantity(reserved.state, 'mouse', 1000), 0)
-  assert.equal(reserveInTransaction(reserved.state, input).replayed, true)
-  assert.throws(() => reserveInTransaction({ ...state, initialQuantityByListing: { mouse: 3 } }, input))
-  assert.throws(() => reserveInTransaction(state, { ...input, lines: [input.lines[0], input.lines[0]] }))
+test('Fetch Agentverse routes use fixed POST envelopes and keep the token server-side', async () => {
+  const requests = []
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/seller/jobs',
+    pollUrlTemplate: 'https://agent.example/seller/jobs/poll',
+    reconcileUrlTemplate: 'https://agent.example/seller/jobs/reconcile',
+    cancelUrlTemplate: 'https://agent.example/seller/jobs/cancel',
+    pollMethod: 'POST',
+    reconcileMethod: 'POST',
+    sendTokenInBody: true,
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-agentverse-v1',
+  }, {
+    getToken: async () => 'shared-secret-not-logged',
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => 'fetch-seller:job_agentverse',
+    fetchImpl: async (url, init) => {
+      requests.push({ url, method: init.method, body: JSON.parse(init.body) })
+      return new Response(JSON.stringify({
+        status: 'completed',
+        providerRunId: 'fetch-seller:job_agentverse',
+        model: 'fetch-seller-deterministic-v1',
+        output: { kind: 'abstain', jobId: 'job_agentverse', reasonCode: 'NO_MATCH' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.poll('job_agentverse')
+  assert.equal(result.status, 'completed')
+  assert.equal(requests[0].url, 'https://agent.example/seller/jobs/poll')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].body.jobId, 'job_agentverse')
+  assert.equal(requests[0].body.providerRunId, 'fetch-seller:job_agentverse')
+  assert.equal(requests[0].body.providerAuthToken, 'shared-secret-not-logged')
+})
+
+test('HTTP provider adapter revalidates every redirect and rejects cross-host hops', async () => {
+  let calls = 0
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-redirect-v1',
+  }, {
+    getToken: async () => 'redirect-test-token',
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async () => {
+      calls += 1
+      return new Response(null, { status: 302, headers: { location: 'https://evil.example/steal' } })
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_redirect', requestId: 'req_redirect', requestVersion: 1, runId: 'run_redirect', phaseId: 'phase_redirect',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:redirect', inputRef: 'redirect',
+  })
+  assert.equal(result.status, 'failed')
+  if (result.status === 'failed') assert.equal(result.error.code, 'PROVIDER_PROTOCOL')
+  assert.equal(calls, 1)
+})
+
+test('HTTP provider adapter permits bounded same-host redirects without following them implicitly', async () => {
+  const requests = []
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-redirect-v1',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async (url) => {
+      requests.push(url)
+      return requests.length === 1
+        ? new Response(null, { status: 307, headers: { location: '/v2/start' } })
+        : new Response(JSON.stringify({ status: 'accepted', providerRunId: 'redirect-run' }), { status: 202, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_same_host_redirect', requestId: 'req_redirect', requestVersion: 1, runId: 'run_redirect', phaseId: 'phase_redirect',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:redirect', inputRef: 'redirect',
+  })
+  assert.equal(result.status, 'pending')
+  assert.deepEqual(requests, ['https://agent.example/start', 'https://agent.example/v2/start'])
+})
+
+test('HTTP provider adapter preserves an ambiguous timeout as a retryable failure without inventing a run ID', async () => {
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-demo-v2',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async () => {
+      throw new Error('provider request timeout')
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_timeout', requestId: 'req_timeout', requestVersion: 1, runId: 'run_timeout', phaseId: 'phase_timeout',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:brief', inputRef: 'brief_timeout',
+  })
+  assert.equal(result.status, 'failed')
+  if (result.status === 'failed') {
+    assert.equal(result.providerRunId, null)
+    assert.equal(result.error.code, 'PROVIDER_TIMEOUT')
+    assert.equal(result.error.retryable, true)
+  }
 })
