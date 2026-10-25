@@ -2,6 +2,8 @@ import {
   type Attribute,
   type CatalogSnapshot,
   type Cents,
+  type FinalOfferCandidate,
+  type FinalOfferValidationContext,
   type FinalServiceTerms,
   type FitAssessment,
   type OfferLine,
@@ -348,12 +350,16 @@ export function assessLine(
   return { hardRequirementsPassed, coverage, requirements, reasons }
 }
 
-function findSnapshot(context: SellerValidationContext, line: OfferLine): CatalogSnapshot | null {
-  return context.catalog.find(
+function findSnapshotInCatalog(catalog: CatalogSnapshot[], line: OfferLine): CatalogSnapshot | null {
+  return catalog.find(
     (snapshot) =>
       snapshot.listing.listing.id === line.listing.id &&
       snapshot.listing.listing.version === line.listing.version,
   ) ?? null
+}
+
+function findSnapshot(context: SellerValidationContext, line: OfferLine): CatalogSnapshot | null {
+  return findSnapshotInCatalog(context.catalog, line)
 }
 
 function policyForListing(policy: PricingPolicy, listingId: string): { cost: Cents; contribution: Cents } | null {
@@ -461,6 +467,203 @@ export function validateSellerProposal(
       claims: proposal.claims.map((claim) => ({ ...claim, sourceIds: [...claim.sourceIds] })),
       status: 'accepted',
       mode: context.mode ?? 'fixture',
+      createdAt: context.now,
+    },
+  }
+}
+
+function canonicalComparable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalComparable)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, canonicalComparable(child)]),
+  )
+}
+
+function sameFrozenSnapshot(opening: CatalogSnapshot, current: CatalogSnapshot): boolean {
+  return opening.variant.id === current.variant.id
+    && opening.variant.productId === current.variant.productId
+    && opening.variant.title === current.variant.title
+    && opening.variant.category === current.variant.category
+    && opening.variant.profile.id === current.variant.profile.id
+    && opening.variant.profile.version === current.variant.profile.version
+    && opening.variant.manufacturerPartNumber === current.variant.manufacturerPartNumber
+    && opening.variant.syntheticProduct === current.variant.syntheticProduct
+    && opening.listing.merchantId === current.listing.merchantId
+    && opening.listing.listing.id === current.listing.listing.id
+    && opening.listing.listing.version === current.listing.listing.version
+    && opening.listing.variantId === current.listing.variantId
+    && opening.listing.condition === current.listing.condition
+    && opening.listing.unitId === current.listing.unitId
+    && opening.listing.referenceUnitCents === current.listing.referenceUnitCents
+    && opening.listing.operatorFloorCents === current.listing.operatorFloorCents
+    && JSON.stringify(canonicalComparable(opening.variant.attributes))
+      === JSON.stringify(canonicalComparable(current.variant.attributes))
+    && JSON.stringify(canonicalComparable(opening.listing.diagnosticAttributes))
+      === JSON.stringify(canonicalComparable(current.listing.diagnosticAttributes))
+}
+
+function mergeFit(left: FitAssessment, right: FitAssessment): FitAssessment {
+  return {
+    hardRequirementsPassed: left.hardRequirementsPassed && right.hardRequirementsPassed,
+    coverage: left.coverage === null || right.coverage === null
+      ? null
+      : Math.round((left.coverage + right.coverage) / 2),
+    requirements: [...left.requirements, ...right.requirements],
+    reasons: [...left.reasons, ...right.reasons],
+  }
+}
+
+export function validateFinalOfferRevision(
+  context: FinalOfferValidationContext,
+  candidate: FinalOfferCandidate,
+): SellerValidationResult {
+  const reasons: SafeReason[] = []
+  const opening = context.openingOffer
+  if (opening.jobId !== context.jobId || opening.merchantId !== context.merchantId) {
+    reasons.push(safeReason('WRONG_JOB_SCOPE', 'opening offer is outside the seller job scope', 'openingOffer'))
+  }
+  if (opening.candidateId !== context.candidateId || candidate.candidateId !== context.candidateId) {
+    reasons.push(safeReason('WRONG_JOB_SCOPE', 'final candidate is outside the seller job scope', 'candidateId'))
+  }
+  if (candidate.parentOffer.id !== opening.offer.id || candidate.parentOffer.version !== opening.offer.version) {
+    reasons.push(safeReason('PARENT_OFFER_MISMATCH', 'final revision must reference the frozen opening offer', 'parentOffer'))
+  }
+  if (
+    candidate.policy.id !== context.policy.policy.id ||
+    candidate.policy.version !== context.policy.policy.version ||
+    opening.policy.id !== context.policy.policy.id ||
+    opening.policy.version !== context.policy.policy.version
+  ) {
+    reasons.push(safeReason('POLICY_VERSION_STALE', 'final revision policy is not the current opening policy', 'policy'))
+  }
+  if (!context.policy.enabled) reasons.push(safeReason('POLICY_DISABLED', 'merchant policy is disabled', 'policy'))
+
+  let serviceTerms: FinalServiceTerms | null = null
+  try {
+    serviceTerms = resolveFinalServiceTerms(context.policy, candidate.serviceOptionId)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'service option is invalid'
+    reasons.push(safeReason('INVALID_INPUT', message, 'serviceOptionId'))
+  }
+
+  const openingLines = new Map<string, OfferLine>()
+  for (const line of opening.lines) openingLines.set(line.requestLineId, line)
+  const candidateLines = new Map<string, OfferLine>()
+  for (const line of candidate.lines) {
+    if (candidateLines.has(line.requestLineId)) {
+      reasons.push(safeReason('DUPLICATE_LINE', 'final revision repeats a request line', `lines.${line.requestLineId}`))
+    } else {
+      candidateLines.set(line.requestLineId, line)
+    }
+  }
+  if (candidate.lines.length !== opening.lines.length) {
+    reasons.push(safeReason('FROZEN_BASKET_CHANGED', 'final revision must keep the opening line set', 'lines'))
+  }
+
+  let itemsCents = 0
+  let baseCostCents = 0
+  let minimumContributionCents = 0
+  let finalFit: FitAssessment = {
+    hardRequirementsPassed: true,
+    coverage: null,
+    requirements: [],
+    reasons: [],
+  }
+  for (const openingLine of opening.lines) {
+    const line = candidateLines.get(openingLine.requestLineId)
+    if (!line) {
+      reasons.push(safeReason('FROZEN_BASKET_CHANGED', 'final revision is missing an opening line', `lines.${openingLine.requestLineId}`))
+      continue
+    }
+    if (
+      line.listing.id !== openingLine.listing.id ||
+      line.listing.version !== openingLine.listing.version ||
+      line.quantity !== openingLine.quantity
+    ) {
+      reasons.push(safeReason('FROZEN_BASKET_CHANGED', 'listing identity and quantity cannot change in a final revision', `lines.${line.requestLineId}`))
+    }
+    if (!isSafeCents(line.unitCents)) {
+      reasons.push(safeReason('INVALID_INPUT', 'final unit price must be non-negative integer cents', `lines.${line.requestLineId}.unitCents`))
+      continue
+    }
+    if (line.unitCents > openingLine.unitCents) {
+      reasons.push(safeReason('FINAL_LINE_PRICE_INCREASED', 'final unit price cannot increase', `lines.${line.requestLineId}.unitCents`))
+    }
+    const openingSnapshot = findSnapshotInCatalog(context.openingCatalog, openingLine)
+    const currentSnapshot = findSnapshotInCatalog(context.currentCatalog, line)
+    if (!openingSnapshot || !currentSnapshot || !sameFrozenSnapshot(openingSnapshot, currentSnapshot)) {
+      reasons.push(safeReason('FROZEN_BASKET_CHANGED', 'listing configuration or condition changed after the opening offer', `lines.${line.requestLineId}.listing`))
+      continue
+    }
+    const requestLine = context.brief.lines.find((candidateLine) => candidateLine.lineId === line.requestLineId)
+    if (!requestLine) {
+      reasons.push(safeReason('MISSING_LINE', 'final revision references a request line outside the seller brief', `lines.${line.requestLineId}`))
+      continue
+    }
+    finalFit = mergeFit(finalFit, assessLine(requestLine, currentSnapshot))
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > MAX_QUANTITY) {
+      reasons.push(safeReason('QUANTITY_INVALID', 'final quantity must be a safe integer from one to ten', `lines.${line.requestLineId}.quantity`))
+      continue
+    }
+    if (line.quantity > currentSnapshot.availableQuantity) {
+      reasons.push(safeReason('QUANTITY_UNAVAILABLE', 'final quantity is not available in the frozen listing', `lines.${line.requestLineId}.quantity`))
+    }
+    const economics = policyForListing(context.policy, line.listing.id)
+    if (!economics) {
+      reasons.push(safeReason('INVALID_INPUT', 'policy does not contain cost and contribution for the frozen listing', `policy.${line.listing.id}`))
+      continue
+    }
+    const minimum = minimumUnitCents({
+      referenceUnitCents: currentSnapshot.listing.referenceUnitCents,
+      operatorFloorCents: currentSnapshot.listing.operatorFloorCents,
+      maxDiscountBps: context.policy.maxDiscountBps,
+      unitCostCents: economics.cost,
+      minimumContributionCents: economics.contribution,
+    })
+    if (line.unitCents < minimum) reasons.push(safeReason('PRICE_BELOW_FLOOR', 'final unit price is below the server-calculated minimum', `lines.${line.requestLineId}.unitCents`))
+    if (line.unitCents > currentSnapshot.listing.referenceUnitCents) reasons.push(safeReason('PRICE_ABOVE_REFERENCE', 'final unit price exceeds the listing reference price', `lines.${line.requestLineId}.unitCents`))
+    itemsCents = checkedAdd(itemsCents, checkedMultiply(line.quantity, line.unitCents))
+    baseCostCents = checkedAdd(baseCostCents, checkedMultiply(line.quantity, economics.cost))
+    minimumContributionCents = checkedAdd(minimumContributionCents, checkedMultiply(line.quantity, economics.contribution))
+  }
+
+  if (!serviceTerms) return { ok: false, reasons: deduplicateReasons(reasons) }
+  const deliveredTotal = checkedAdd(itemsCents, serviceTerms.shippingCents)
+  const contributionCost = checkedAdd(baseCostCents, serviceTerms.incrementalCostCents, minimumContributionCents)
+  if (itemsCents < contributionCost) reasons.push(safeReason('CONTRIBUTION_TOO_LOW', 'final bundle contribution is below the policy minimum after service cost', 'serviceOptionId'))
+  if (deliveredTotal > opening.totalCents) reasons.push(safeReason('FINAL_TOTAL_INCREASED', 'final delivered total cannot exceed the opening offer', 'totalCents'))
+  if (serviceTerms.arrivalCalendarDays > opening.arrivalCalendarDays
+    || serviceTerms.warrantyMonths < opening.warrantyMonths
+    || serviceTerms.returnDays < opening.returnDays) {
+    reasons.push(safeReason('FINAL_TERM_WEAKENED', 'final service terms cannot weaken the opening offer', 'serviceOptionId'))
+  }
+  reasons.push(...finalFit.reasons)
+  if (!finalFit.hardRequirementsPassed) reasons.push(safeReason('REQUIREMENT_NOT_MET', 'one or more hard requirements failed', 'fit'))
+  if (reasons.length) return { ok: false, reasons: deduplicateReasons(reasons) }
+  return {
+    ok: true,
+    offer: {
+      schemaVersion: 1,
+      jobId: context.jobId,
+      candidateId: context.candidateId,
+      merchantId: context.merchantId,
+      parentOffer: { ...opening.offer },
+      policy: { ...context.policy.policy },
+      serviceOptionId: serviceTerms.serviceOptionId,
+      lines: candidate.lines.map((line) => ({ ...line, listing: { ...line.listing } })),
+      itemsCents,
+      shippingCents: serviceTerms.shippingCents,
+      totalCents: deliveredTotal,
+      arrivalCalendarDays: serviceTerms.arrivalCalendarDays,
+      warrantyMonths: serviceTerms.warrantyMonths,
+      returnDays: serviceTerms.returnDays,
+      fit: finalFit,
+      claims: opening.claims.map((claim) => ({ ...claim, sourceIds: [...claim.sourceIds] })),
+      status: 'accepted',
+      mode: context.mode ?? opening.mode,
       createdAt: context.now,
     },
   }

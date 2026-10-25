@@ -196,6 +196,11 @@ export type SellerSafeReasonCode =
   | 'PRICE_BELOW_FLOOR'
   | 'PRICE_ABOVE_REFERENCE'
   | 'CONTRIBUTION_TOO_LOW'
+  | 'PARENT_OFFER_MISMATCH'
+  | 'FROZEN_BASKET_CHANGED'
+  | 'FINAL_LINE_PRICE_INCREASED'
+  | 'FINAL_TOTAL_INCREASED'
+  | 'FINAL_TERM_WEAKENED'
   | 'QUANTITY_INVALID'
   | 'QUANTITY_UNAVAILABLE'
   | 'DUPLICATE_LINE'
@@ -262,6 +267,32 @@ export interface SellerValidationContext {
   policy: PricingPolicy
   candidates: Id[]
   catalog: CatalogSnapshot[]
+  now: Ms
+  mode?: OfferVersion['mode']
+}
+
+/**
+ * Seller-owned domain input for a sealed final revision. The buyer-owned v2
+ * council envelope is parsed upstream; this narrow input contains only the
+ * fields the seller validator is authoritative over.
+ */
+export interface FinalOfferCandidate {
+  candidateId: Id
+  parentOffer: Ref
+  policy: Ref
+  serviceOptionId: Id | null
+  lines: OfferLine[]
+}
+
+export interface FinalOfferValidationContext {
+  jobId: Id
+  merchantId: Id
+  candidateId: Id
+  brief: SellerBrief
+  openingOffer: OfferVersion
+  openingCatalog: CatalogSnapshot[]
+  currentCatalog: CatalogSnapshot[]
+  policy: PricingPolicy
   now: Ms
   mode?: OfferVersion['mode']
 }

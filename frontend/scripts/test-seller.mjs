@@ -13,6 +13,7 @@ import {
   assessLine,
   minimumUnitCents,
   resolveFinalServiceTerms,
+  validateFinalOfferRevision,
   validateSellerProposal,
 } from '../convex/lib/sellerValidation.ts'
 import {
@@ -157,6 +158,146 @@ test('valid seller proposals are recomputed and never trust model totals', () =>
   assert.equal(result.offer.shippingCents, 1_500)
   assert.equal(result.offer.totalCents, 99_000)
   assert.equal(result.offer.fit.hardRequirementsPassed, true)
+})
+
+test('final seller revisions stay parent-bound while allowing a validated price reduction', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, true)
+  if (!result.ok) return
+  assert.equal(result.offer.parentOffer?.id, openingOffer.offer.id)
+  assert.equal(result.offer.itemsCents, 96_000)
+  assert.equal(result.offer.totalCents, 97_500)
+  assert.equal(result.offer.serviceOptionId, null)
+})
+
+test('final seller revisions re-check the seller brief instead of trusting opening fit', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const stricterBrief = {
+    ...fixtures.briefs.laptop,
+    lines: [{
+      ...fixtures.briefs.laptop.lines[0],
+      requirements: [
+        ...fixtures.briefs.laptop.lines[0].requirements,
+        { id: 'r_health', fieldId: 'healthPercent', operator: 'min', value: 99, unit: '%', strength: 'hard', weight: 1 },
+      ],
+    }],
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: stricterBrief,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'REQUIREMENT_NOT_MET'))
+})
+
+test('final seller revisions reject a changed listing price identity even when the new price would pass', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const currentCatalog = fixtures.snapshotsByMerchant.merchant_a.map((snapshot) => snapshot.listing.listing.id === 'merchant_a:P3'
+    ? {
+      ...snapshot,
+      listing: { ...snapshot.listing, referenceUnitCents: 100_000, operatorFloorCents: 90_000 },
+    }
+    : snapshot)
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, unitCents: 96_000 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'FROZEN_BASKET_CHANGED'))
+})
+
+test('final seller revisions reject non-integer quantities before doing money arithmetic', () => {
+  const openingResult = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
+  assert.equal(openingResult.ok, true)
+  if (!openingResult.ok) return
+  const openingOffer = {
+    offer: { id: 'offer_demo_merchant_a_candidate_1', version: 1 },
+    ...openingResult.offer,
+  }
+  const result = validateFinalOfferRevision({
+    jobId: openingOffer.jobId,
+    merchantId: openingOffer.merchantId,
+    candidateId: openingOffer.candidateId,
+    brief: fixtures.briefs.laptop,
+    openingOffer,
+    openingCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    currentCatalog: fixtures.snapshotsByMerchant.merchant_a,
+    policy: fixtures.policiesByMerchant.merchant_a,
+    now: Date.parse('2026-10-24T12:00:00.000Z'),
+    mode: 'fixture',
+  }, {
+    candidateId: openingOffer.candidateId,
+    parentOffer: { ...openingOffer.offer },
+    policy: { ...openingOffer.policy },
+    serviceOptionId: null,
+    lines: openingOffer.lines.map((line) => ({ ...line, listing: { ...line.listing }, quantity: 1.5 })),
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.ok(result.reasons.some((reason) => reason.code === 'QUANTITY_INVALID'))
 })
 
 test('seller validation rejects wrong merchant, stale policy, invalid price and missing lines', () => {
