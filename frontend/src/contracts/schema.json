@@ -9541,7 +9541,8 @@
               "type": "string",
               "enum": [
                 "simulation",
-                "visa_sandbox"
+                "visa_sandbox",
+                "stripe_test"
               ]
             }
           },
@@ -10352,7 +10353,8 @@
           "type": "string",
           "enum": [
             "simulation",
-            "visa_sandbox"
+            "visa_sandbox",
+            "stripe_test"
           ]
         },
         "operation": {
@@ -10410,13 +10412,26 @@
           "type": "string",
           "enum": [
             "simulation",
-            "visa_sandbox"
+            "visa_sandbox",
+            "stripe_test"
           ]
         },
         "operation": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "checkoutUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2048,
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "providerReference": {
           "anyOf": [

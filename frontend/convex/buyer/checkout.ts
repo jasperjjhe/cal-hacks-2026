@@ -138,11 +138,14 @@ export const selectAndReserve = internalMutation({
         syntheticProduct: snapshot.variant.syntheticProduct,
       };
     });
-    if (process.env.PAYMENT_MODE && process.env.PAYMENT_MODE !== "simulation")
+    const paymentMode = process.env.PAYMENT_MODE || "simulation";
+    if (!["simulation", "stripe_test"].includes(paymentMode))
       fail(
         "PROVIDER_UNAVAILABLE",
         "External payment is not enabled until its adapter is configured.",
       );
+    if (paymentMode === "stripe_test" && !process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_"))
+      fail("PROVIDER_UNAVAILABLE", "Configure the Stripe test secret before checkout.");
     const now = Date.now();
     const id = await ctx.db.insert("buyerQuotes", {
       requestId: args.request.id,
@@ -169,8 +172,8 @@ export const selectAndReserve = internalMutation({
       warrantyMonths: policy.warrantyMonths,
       returnDays: policy.returnDays,
       expiresAt: now + 180000,
-      paymentMode: "simulation",
-      operation: "demo_order",
+      paymentMode,
+      operation: paymentMode === "stripe_test" ? "stripe_checkout" : "demo_order",
     };
     const quote = contracts.FirmQuote.parse({
       quoteId: String(id),
@@ -190,8 +193,8 @@ export const selectAndReserve = internalMutation({
       expiresAt: now + 180000,
       quoteHash: await digest(terms),
       reservationId,
-      paymentMode: "simulation",
-      operation: "demo_order",
+      paymentMode,
+      operation: paymentMode === "stripe_test" ? "stripe_checkout" : "demo_order",
     });
     await reserveStock(ctx, {
       allocationIdPrefix: reservationId,
@@ -336,7 +339,7 @@ export const approveAndExecute = internalMutation({
       operation: quote.operation,
       providerReference: null,
       orderId: null,
-      resultMessage: "Your approved simulation is processing.",
+      resultMessage: "Your approved purchase is processing.",
       nextAction: "wait",
     });
     await ctx.db.patch(executionId, { data: view });

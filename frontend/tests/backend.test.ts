@@ -1428,3 +1428,83 @@ test.each([false, true])('one failed evidence provider preserves the other provi
   expect(offer?.card.evidenceIds).toContain('retained-comment');
   expect(offer?.card.evidenceStatus).toBe('partial');
 });
+
+
+test("Stripe checkout resumes, settles once, and keeps its order after retention", async () => {
+  const state = await resultRun();
+  vi.stubEnv("PAYMENT_MODE", "stripe_test");
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fixture");
+  vi.stubEnv("SITE_URL", "http://localhost:5173");
+  try {
+    const quote = await state.buyer.mutation(internal.buyerMutations.selectAndReserve, {
+      input: { request: state.ref, runId: state.view.runId, offer: state.view.offers[0].offer, clientKey: "stripe-select" },
+    });
+    const input = { request: state.ref, quoteId: quote.quoteId, quoteHash: quote.quoteHash, clientKey: "stripe-approve" };
+    const execution = await state.buyer.mutation(internal.buyerMutations.approveAndExecute, { input });
+    let paid = false;
+    const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      if (options?.body) {
+        const fields = new URLSearchParams(String(options.body));
+        expect(fields.get("line_items[0][price_data][unit_amount]")).toBe(String(quote.totalCents));
+        expect(fields.get("success_url")).toContain(state.ref.id);
+        expect((options.headers as Record<string, string>)["Idempotency-Key"]).toBe(execution.executionId);
+      }
+      return Response.json({ id: "cs_test_checkout", client_reference_id: execution.executionId,
+        livemode: false, currency: "usd", amount_total: quote.totalCents,
+        status: paid ? "complete" : "open", payment_status: paid ? "paid" : "unpaid",
+        url: "https://checkout.stripe.com/c/pay/cs_test_checkout" });
+    });
+    await state.t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(1);
+    await state.t.finishInProgressScheduledFunctions();
+    const pending = await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id });
+    expect(pending.execution?.status).toBe("pending");
+    expect(pending.execution?.checkoutUrl).toContain("checkout.stripe.com");
+    const repeated = await state.buyer.mutation(internal.buyerMutations.approveAndExecute, { input });
+    expect(repeated.executionId).toBe(execution.executionId);
+    paid = true;
+    await vi.advanceTimersByTimeAsync(15000);
+    await state.t.finishInProgressScheduledFunctions();
+    expect((await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id })).execution?.status).toBe("succeeded");
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+    expect(transport.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(8 * 86400000);
+    await state.t.mutation(internal.buyerMaintenance.retain, {});
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+  } finally { vi.unstubAllEnvs(); }
+});
+
+test("Stripe rejects changed totals and live credentials, and only releases expired unpaid sessions", async () => {
+  const quote = await reserve(await resultRun());
+  const claim = { executionId: "execution_test", createdAt: Date.now(), quote: { ...quote, paymentMode: "stripe_test" as const }, scenario: "success", providerReference: "cs_test_checkout" };
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fixture");
+  const session = { id: "cs_test_checkout", client_reference_id: claim.executionId, livemode: false,
+    currency: "usd", amount_total: quote.totalCents, status: "expired", payment_status: "unpaid" };
+  const transport = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(session));
+  try {
+    expect((await buyerTools.stripePayment(claim)).status).toBe("declined");
+    transport.mockResolvedValue(Response.json({ ...session, amount_total: quote.totalCents + 1 }));
+    await expect(buyerTools.stripePayment(claim)).rejects.toThrow("approved terms");
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_forbidden");
+    await expect(buyerTools.stripePayment(claim)).rejects.toThrow("test secret");
+  } finally { vi.unstubAllEnvs(); }
+});
+
+
+test("operator provisioning verifies an existing account before granting access", async () => {
+  const { t } = await setup();
+  const email = "operator@example.com";
+  const password = "correct-secret-123";
+  const account = await t.action(internal.buyerAdmin.provisionOperator, { merchantId: "merchant_a", email, password });
+  await t.run(async ctx => {
+    const memberships = await ctx.db.query("operatorAccounts").collect();
+    for (const membership of memberships) await ctx.db.delete(membership._id);
+  });
+  await expect(t.action(internal.buyerAdmin.provisionOperator, {
+    merchantId: "merchant_a", email, password: "wrong-password-123",
+  })).rejects.toThrow();
+  expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(0);
+  const verified = await t.action(internal.buyerAdmin.provisionOperator, { merchantId: "merchant_a", email, password });
+  expect(verified.userId).toBe(account.userId);
+  expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(1);
+});

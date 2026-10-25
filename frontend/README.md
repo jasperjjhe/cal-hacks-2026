@@ -53,9 +53,11 @@ listing versions and preserves allocations and historical order snapshots.
 Seeding is idempotent for the same revision and refuses to reset a nonempty
 catalog with another revision. Existing purchases are never silently reset.
 
-A buyer session signs in anonymously. Keep the same browser profile to return to
-its requests; cross-device recovery is outside this prototype. A request URL
-contains only the request ID; ownership is checked by the server on every call.
+Buyers can create an email/password account and sign in across browsers. Existing
+anonymous sessions keep their data until sign-out; they are not automatically
+merged into a new account. Password reset and email verification are deferred for
+this MVP. Seller/operator access still requires internal provisioning. Request
+ownership is checked on the server.
 
 ## Working journey — current baseline
 
@@ -94,10 +96,10 @@ Optional `reddit` configuration enables dedicated comment search alongside edito
 reviews; both use `APIFY_TOKEN`. See the linked setup guide for the XM5 example.
 Credentials and live execution are still unverified. Seller jobs remain fixtures
 until the seller branch is consolidated; live buyer runs report mixed agent mode.
-External payment is deferred; fixture agents and simulated checkout need no keys.
+Stripe test checkout is available; see the setup below. Simulation still needs no payment keys.
 
 Operator accounts are provisioned only through the internal
-`buyerAdmin:provisionOperator` action. Public password signup is disabled;
+`buyerAdmin:provisionOperator` action. Public password signup creates buyer accounts only;
 membership is assigned server-side to one merchant. After password sign-in,
 call `seller.bindOperatorSession({})` before querying the seller workspace.
 It derives the merchant from an internal account grant and binds the exact
@@ -142,3 +144,32 @@ sidebar, centered prompt and illustrated offer cards use existing design tokens
 and downloaded local images. Photos illustrate laptops; exact facts come from
 the selected variant. Responsiveness and interactions follow implementation
 judgment. Figma placeholder identities, ratings and provider claims are not data.
+
+
+## MVP Stripe checkout
+
+Set these on the Convex backend (not in frontend `VITE_` variables):
+
+```sh
+npx convex env set PAYMENT_MODE stripe_test
+npx convex env set STRIPE_SECRET_KEY sk_test_YOUR_KEY
+npx convex env set SITE_URL http://localhost:5173
+```
+
+Use the deployed frontend origin instead of localhost when hosting the app.
+Then select an offer, approve the quote and click **Continue to Stripe payment**.
+Use Stripe test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC.
+Return to the request to see the saved order. The backend checks Stripe every 15
+seconds, including when the browser is closed; no webhook setup is needed.
+Checkout expires about 40 minutes after approval and then releases unpaid stock.
+Returning without paying lets you resume the same checkout; it does not cancel it.
+Set `PAYMENT_MODE` to `simulation` to restore the no-card demo.
+
+Only Stripe test keys are accepted. This exercises the real Stripe checkout API
+without charging money for synthetic inventory. PayPal, real-money charges,
+shipping/tax collection and fulfillment are outside this MVP. Stripe test orders
+are retained rather than removed by the research cleanup. An unresolved provider
+error keeps stock locked for safety; inspect the execution before retrying.
+
+References: [Stripe inventory/session expiry](https://docs.stripe.com/payments/checkout/managing-limited-inventory),
+[Convex password authentication](https://labs.convex.dev/auth/config/passwords).
