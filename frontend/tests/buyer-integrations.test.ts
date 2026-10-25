@@ -174,3 +174,21 @@ test('discovered Reddit content stays anecdotal and queries cannot inject search
   await expect(startEvidence({ ...input, query: 'https://evil.example' })).rejects.toThrow('query');
   expect(reviewQuery('Sony " OR site:evil.example')).not.toContain('site:evil.example');
 });
+
+test('dedicated Reddit discovery returns cited comments without paid AI enrichment', async () => {
+  const { startEvidence, pollEvidence } = await import('../convex/integrations/buyerTools');
+  const redditInput: EvidenceInput = { ...input, provider: 'reddit', actorId: '9sHOY9RzPYGjmTHo8', community: 'SonyHeadphones', build: 'reddit-build', buildNumber: '0.0.750' };
+  const redditRun = { ...run, actId: redditInput.actorId, buildId: redditInput.build };
+  const comment = { url: 'https://www.reddit.com/r/SonyHeadphones/comments/abc/discussion/comment1/', body: 'I use my Sony WH-1000XM5 on trains. Noise cancellation helps, but I have concerns about the hinges.', postTitle: 'Sony WH-1000XM5 experiences', postId: 't3_abc', dataType: 'comment', crawledAt: new Date().toISOString(), commentCreatedAt: '2026-10-20T00:00:00Z' };
+  const fetch = vi.fn().mockResolvedValueOnce(json({ data: redditRun }))
+    .mockResolvedValueOnce(json({ data: { ...redditRun, status: 'SUCCEEDED' } }))
+    .mockResolvedValueOnce(json([comment, comment, { ...comment, url: 'https://evil.example/comment' }, { ...comment, url: comment.url.replace('comment1', 'comment2'), body: '[removed]' }]));
+  vi.stubGlobal('fetch', fetch);
+  expect((await startEvidence(redditInput)).status).toBe('pending');
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ searchTerms: ['Sony WH-1000XM5'], searchComments: true, aiAnalysis: false, maxCommentsCount: 12, withinCommunity: 'SonyHeadphones' });
+  const result = await pollEvidence(redditInput, 'run1');
+  expect(result.status === 'completed' && result.evidence).toHaveLength(1);
+  expect(result.status === 'completed' && result.evidence[0]).toMatchObject({ sourceType: 'owner_report', applicability: 'family', sourceVerifiedPurchaseLabel: null, providerBuild: 'reddit-build', sourceDate: comment.commentCreatedAt });
+  fetch.mockResolvedValueOnce(json({ data: { ...redditRun, buildId: 'wrong' } }));
+  await expect(pollEvidence(redditInput, 'run1')).rejects.toThrow('provenance');
+});

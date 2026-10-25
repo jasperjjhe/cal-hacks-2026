@@ -90,6 +90,8 @@ with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRA
 for agent creation, automatic Apify RAG review discovery, backend variables and live acceptance.
 Apify no longer requires deploying the custom Python Actor or selecting product URLs;
 configure the maintained RAG Actor/build and use genuine catalog product identities.
+Optional `reddit` configuration enables dedicated comment search alongside editorial
+reviews; both use `APIFY_TOKEN`. See the linked setup guide for the XM5 example.
 Credentials and live execution are still unverified. Seller jobs remain fixtures
 until the seller branch is consolidated; live buyer runs report mixed agent mode.
 External payment is deferred; fixture agents and simulated checkout need no keys.

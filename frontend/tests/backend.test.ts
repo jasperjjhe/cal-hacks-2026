@@ -1378,7 +1378,8 @@ test("final revisions reject changed quantities, substituted listings and ungran
 
 test("genuine offered products queue automatic discovery without curated URLs", async () => {
   vi.stubEnv('BUYER_EVIDENCE_REGISTRY', JSON.stringify({
-    actorId: '3ox4R101TgZz67sLr', build: 'pinned', buildNumber: '1.0.33'
+    actorId: '3ox4R101TgZz67sLr', build: 'pinned', buildNumber: '1.0.33',
+    reddit: { build: 'reddit-build', buildNumber: '0.0.750', community: 'SonyHeadphones' }
   }));
   try {
     const state = await resultRun();
@@ -1397,5 +1398,33 @@ test("genuine offered products queue automatic discovery without curated URLs", 
     expect(job?.input.query).toBe('Sony WH-1000XM5 review');
     expect(job?.input.urls).toBeUndefined();
     expect(job?.input.domains).toContain('reddit.com');
+    expect(jobs.filter(j => j.variantId === job?.variantId)).toHaveLength(2);
+    expect(jobs.find(j => j.variantId === job?.variantId && j.input.provider === 'reddit')?.input.community).toBe('SonyHeadphones');
   } finally { vi.unstubAllEnvs(); }
+});
+
+test.each([false, true])('one failed evidence provider preserves the other provider sources (%s)', async (failedFirst) => {
+  const state = await resultRun();
+  const target = await state.t.run(async ctx => {
+    await ctx.db.patch(ctx.db.normalizeId('buyerRuns', state.view.runId)!, { stage: 'researching' });
+    const offer = (await ctx.db.query('buyerOffers').withIndex('by_run_effective', q => q.eq('runId', state.view.runId).eq('effective', true)).first())!;
+    const ids = [];
+    for (const provider of ['web', 'reddit']) ids.push(await ctx.db.insert('buyerResearch', {
+      runId: state.view.runId, variantId: offer.card.products[0].variantId, digest: provider, state: 'acquiring',
+      providerRunId: provider, providerBuild: provider, input: { domains: ['reddit.com'], syntheticProduct: false }, deadlineAt: Date.now() + 60000, createdAt: Date.now()
+    }));
+    return { ids, offerId: offer._id, variantId: offer.card.products[0].variantId };
+  });
+  const result = { status: 'completed', providerRunId: 'web', build: 'web', evidence: [{
+    id: 'retained-comment', variantId: target.variantId, applicability: 'family', sourceType: 'owner_report',
+    url: 'https://reddit.com/r/SonyHeadphones/comments/abc/discussion/comment/', sourceDate: null, retrievedAt: Date.now(),
+    claim: 'Owner anecdote', excerpt: 'An actual comment excerpt.', sourceVerifiedPurchaseLabel: null,
+    verification: 'unknown', providerRunId: 'web', providerBuild: 'web', duplicateGroup: 'thread'
+  }] };
+  for (const i of failedFirst ? [1, 0] : [0, 1]) await state.t.mutation(internal.buyerEvidence.complete, {
+    researchJobId: String(target.ids[i]), result: i === 0 ? result : { status: 'unavailable' }
+  });
+  const offer = await state.t.run(ctx => ctx.db.get(target.offerId));
+  expect(offer?.card.evidenceIds).toContain('retained-comment');
+  expect(offer?.card.evidenceStatus).toBe('partial');
 });

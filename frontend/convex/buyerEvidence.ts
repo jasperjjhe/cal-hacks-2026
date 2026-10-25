@@ -34,7 +34,7 @@ async function prepare(
   const prior = await ctx.db
     .query("buyerResearch")
     .withIndex("by_run", (q) => q.eq("runId", runId))
-    .take(5);
+    .take(10);
   if (refill) {
     if (run.refillCount >= 1) return [];
     await ctx.db.patch(run._id, { refillCount: 1 });
@@ -56,7 +56,7 @@ async function prepare(
     ...new Set(ordered.map((o) => o.card.products[0].variantId as string)),
   ]
     .filter((id) => !prior.some((j) => j.variantId === id))
-    .slice(0, (refill ? 5 : 4) - prior.length);
+    .slice(0, (refill ? 5 : 4) - new Set(prior.map(j => j.variantId)).size);
   const ids: string[] = [];
   const reg = registry();
   for (const variantId of identities) {
@@ -66,70 +66,74 @@ async function prepare(
     const snapshots = await loadSnapshots(ctx, row.merchantId);
     const product = snapshots.find((s) => s.variant.id === variantId)?.variant;
     if (!product) continue;
-    const input = {
-      variantId,
-      syntheticProduct: product.syntheticProduct,
-      productName: product.title,
-      query: reviewQuery(product.title),
-      domains: reg?.domains ?? [],
-      inputDigest: "",
-      actorId: reg?.actorId ?? "",
-      build: reg?.build ?? "unconfigured",
-      buildNumber: reg?.buildNumber ?? "",
-    };
-    input.inputDigest = await digest({
-      ...input,
-      profile: product.profile,
-      identity: product.manufacturerPartNumber,
-      policyVersion: 'rag-discovery-v1',
-    });
-    const cachedRows = await ctx.db
-      .query("buyerEvidence")
-      .withIndex("by_digest_time", (q) =>
-        q
-          .eq("digest", input.inputDigest)
-          .gte("retrievedAt", Date.now() - 86400000),
-      )
-      .take(40);
-    const cached = cachedRows.filter(
-      (e, i, all) =>
-        all.findIndex((other) => other.data.id === e.data.id) === i,
-    );
-    const id = await ctx.db.insert("buyerResearch", {
-      runId,
-      variantId,
-      digest: input.inputDigest,
-      state: cached.length
-        ? "cached"
-        : product.syntheticProduct || !reg
-          ? "unavailable"
-          : "queued",
-      providerRunId: null,
-      providerBuild: input.build,
-      input,
-      deadlineAt: researchDeadlineAt,
-      createdAt: Date.now(),
-    });
-    ids.push(String(id));
-    if (cached.length)
-      for (const source of cached)
-        await ctx.db.insert("buyerEvidence", {
-          variantId,
-          digest: input.inputDigest,
-          runId,
-          data: source.data,
-          facts: source.facts ?? [],
-          retrievedAt: source.retrievedAt,
-        });
-    if (cached.length || product.syntheticProduct || !reg)
-      await attach(
-        ctx,
+    const providers = [
+      { provider: 'web' as const, actorId: reg?.actorId ?? '', build: reg?.build ?? 'unconfigured', buildNumber: reg?.buildNumber ?? '' },
+      ...(reg?.reddit && reg.domains.includes('reddit.com') ? [{ provider: 'reddit' as const, ...reg.reddit }] : []),
+    ];
+    for (const provider of providers) {
+      const input = {
+        variantId,
+        syntheticProduct: product.syntheticProduct,
+        productName: product.title,
+        query: reviewQuery(product.title),
+        domains: reg?.domains ?? [],
+        inputDigest: "",
+        ...provider,
+      };
+      input.inputDigest = await digest({
+        ...input,
+        profile: product.profile,
+        identity: product.manufacturerPartNumber,
+        policyVersion: 'rag-reddit-discovery-v2',
+      });
+      const cachedRows = await ctx.db
+        .query("buyerEvidence")
+        .withIndex("by_digest_time", (q) =>
+          q
+            .eq("digest", input.inputDigest)
+            .gte("retrievedAt", Date.now() - 86400000),
+        )
+        .take(40);
+      const cached = cachedRows.filter(
+        (e, i, all) =>
+          all.findIndex((other) => other.data.id === e.data.id) === i,
+      );
+      const id = await ctx.db.insert("buyerResearch", {
         runId,
         variantId,
-        cached.map((s) => s.data),
-        cached.length ? "cached" : "unavailable",
-        cached.flatMap((e) => e.facts ?? []),
-      );
+        digest: input.inputDigest,
+        state: cached.length
+          ? "cached"
+          : product.syntheticProduct || !reg
+            ? "unavailable"
+            : "queued",
+        providerRunId: null,
+        providerBuild: input.build,
+        input,
+        deadlineAt: researchDeadlineAt,
+        createdAt: Date.now(),
+      });
+      ids.push(String(id));
+      if (cached.length)
+        for (const source of cached)
+          await ctx.db.insert("buyerEvidence", {
+            variantId,
+            digest: input.inputDigest,
+            runId,
+            data: source.data,
+            facts: source.facts ?? [],
+            retrievedAt: source.retrievedAt,
+          });
+      if (cached.length || product.syntheticProduct || !reg)
+        await attach(
+          ctx,
+          runId,
+          variantId,
+          cached.map((s) => s.data),
+          cached.length ? "cached" : "unavailable",
+          cached.flatMap((e) => e.facts ?? []),
+        );
+    }
   }
   return ids;
 }
@@ -287,7 +291,7 @@ export const complete = internalMutation({
         retrievedAt: e.retrievedAt,
       });
     await ctx.db.patch(job._id, {
-      state: "completed",
+      state: unique.length ? "completed" : "unavailable",
       providerRunId: result.providerRunId,
     });
     await attach(
@@ -314,6 +318,13 @@ async function attach(
     unit: string | null;
   }[] = [],
 ) {
+  const retained = (await ctx.db.query("buyerEvidence").withIndex("by_run", q => q.eq("runId", runId)).take(200))
+    .filter(row => row.variantId === variantId);
+  evidence = [...new Map([...retained.map(row => contracts.Evidence.parse(row.data)), ...evidence].map(e => [e.id, e])).values()];
+  facts = [...new Map([...retained.flatMap(row => row.facts ?? []), ...facts].map(f => [`${f.evidenceId}:${f.fieldId}`, f])).values()];
+  const jobs = (await ctx.db.query("buyerResearch").withIndex("by_run", q => q.eq("runId", runId)).take(10))
+    .filter(job => job.variantId === variantId);
+  if (evidence.length) status = jobs.some(job => !["completed", "cached"].includes(job.state)) ? "partial" : status === "cached" ? "cached" : "complete";
   const rows = await ctx.db
     .query("buyerOffers")
     .withIndex("by_run_effective", (q) =>

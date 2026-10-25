@@ -64,6 +64,8 @@ export type ToolResult =
 // Buyer roles use the documented API; credentials stay in backend environment variables.
 export { invokeCreao, pollCreao, cancelCreao } from "./creaoBuyer.ts";
 export interface EvidenceInput {
+  provider?: "web" | "reddit";
+  community?: string;
   variantId: string;
   syntheticProduct: boolean;
   inputDigest: string;
@@ -89,5 +91,12 @@ export type EvidenceResult =
       }[];
     }
   | { status: "unavailable" };
-// Only the pinned RAG Actor may discover sources under the server-owned domain policy.
-export { startEvidence, pollEvidence } from "./apifyBuyer.ts";
+// Pinned web and Reddit Actors share the server-owned evidence policy.
+import { startEvidence as startWebEvidence, pollEvidence as pollWebEvidence } from "./apifyBuyer.ts";
+import { startRedditEvidence, pollRedditEvidence } from "./redditBuyer.ts";
+export function startEvidence(input: EvidenceInput): Promise<EvidenceResult> {
+  return input.provider === "reddit" ? startRedditEvidence(input) : startWebEvidence(input);
+}
+export function pollEvidence(input: EvidenceInput, runId: string): Promise<EvidenceResult> {
+  return input.provider === "reddit" ? pollRedditEvidence(input, runId) : pollWebEvidence(input, runId);
+}
