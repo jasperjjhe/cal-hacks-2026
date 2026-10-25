@@ -690,6 +690,11 @@ a.cv-primary {
 .cv-recent button span {
   color: var(--cv-muted);
 }
+.cv-recent button span b {
+  margin-left: 12px;
+  color: var(--cv-coral);
+  font-weight: 600;
+}
 @media (hover: hover) and (pointer: fine) {
   .cv-recent button:hover {
     border-color: #dcc3ad;

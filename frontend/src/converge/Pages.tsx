@@ -5,11 +5,17 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { OfferCard } from "../contracts";
 import { ArrowUpRight } from "./ui";
-import { dayLabel, fullDayLabel, label as pretty, money, price } from "./format";
+import { dayLabel, fullDayLabel, money, price } from "./format";
 import { photoClass, productVisual } from "./visuals";
 import type { SavedOffer } from "./Home";
 
 const at = (i: number) => ({ "--i": i }) as CSSProperties;
+const applicabilityNames = { exact_variant: "Exact model", family: "Same product family" } as const;
+const verificationNames = {
+  supported: "supports the claim",
+  contradicted: "contradicts the claim",
+  unknown: "not verified",
+} as const;
 const sourceNames = {
   manufacturer: "Manufacturer",
   independent_test: "Independent test",
@@ -42,8 +48,9 @@ function EvidenceItem({ e, index }: { e: Evidence; index: number }) {
         )}
       </blockquote>
       <p className="cv-footnote">
-        {pretty(e.applicability)} · {e.verification} · retrieved {fullDayLabel(e.retrievedAt)}
-        {e.sourceVerifiedPurchaseLabel && ` · source label: ${e.sourceVerifiedPurchaseLabel}`}
+        {applicabilityNames[e.applicability]}, {verificationNames[e.verification]}. Retrieved{" "}
+        {fullDayLabel(e.retrievedAt)}.
+        {e.sourceVerifiedPurchaseLabel && ` The source labels it “${e.sourceVerifiedPurchaseLabel}”.`}
       </p>
     </article>
   );
@@ -171,19 +178,19 @@ export function OrdersView({
       {!orders ? (
         <p className="cv-empty-state" role="status">Loading your orders…</p>
       ) : orders.length === 0 ? (
-        <p className="cv-empty-state">No completed orders yet.</p>
+        <p className="cv-empty-state">No orders yet. Offers you approve will show up here.</p>
       ) : (
         <ul className="cv-orders">
           {orders.map((o, i) => (
             <li className="cv-card" key={o.orderId} style={at(i)}>
-              <p className="cv-eyebrow plain">Demo order · {fullDayLabel(o.createdAt)}</p>
+              <p className="cv-eyebrow plain">Ordered {fullDayLabel(o.createdAt)}</p>
               <h2>{money(o.quote.totalCents)} delivered</h2>
               <p>
                 {o.products
                   .map((p: { title: string; quantity: number }) => `${p.quantity} × ${p.title}`)
                   .join(" + ")}
               </p>
-              <p className="cv-footnote">Order {o.orderId} · arrives by {dayLabel(o.quote.arrivalAt)}</p>
+              <p className="cv-footnote">Order {o.orderId}, arrives by {dayLabel(o.quote.arrivalAt)}</p>
               <button className="cv-secondary" onClick={() => onOpen(o.requestId)}>
                 View request and receipt
               </button>
@@ -233,7 +240,7 @@ export function SavedView({
                   )}
                 </div>
                 <div className="cv-offer-body">
-                  <p className="cv-eyebrow">Saved snapshot · {s.card.merchant.displayName}</p>
+                  <p className="cv-eyebrow">Saved from {s.card.merchant.displayName}</p>
                   <div className="cv-offer-title">
                     <h3>{product.title}</h3>
                     <p className="cv-price">

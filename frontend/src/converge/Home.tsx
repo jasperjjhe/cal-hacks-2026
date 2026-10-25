@@ -129,7 +129,7 @@ export function Home({
           </div>
         </div>
         <p className="cv-hero-note">
-          Demo merchants · fictional inventory · delivery to San Francisco · USD
+          Demo merchants with fictional inventory. Delivery to San Francisco, prices in USD.
         </p>
       </section>
 
@@ -173,8 +173,8 @@ export function Home({
                     <button onClick={() => onOpenRequest(r.requestId)}>
                       <strong>{r.title}</strong>
                       <span>
-                        {fullDayLabel(r.updatedAt)} ·{" "}
-                        {r.activeRunId ? "View offers" : "Review brief"} →
+                        {fullDayLabel(r.updatedAt)}
+                        <b>{r.activeRunId ? "View offers" : "Review brief"}</b>
                       </span>
                     </button>
                   </li>
