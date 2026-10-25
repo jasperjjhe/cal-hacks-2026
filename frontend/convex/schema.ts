@@ -35,6 +35,14 @@ const fitAssessment = v.object({
   requirements: v.array(fitRequirement),
   reasons: v.array(safeReason),
 })
+const finalServiceOption = v.object({
+  id: v.string(),
+  shippingCents: v.number(),
+  arrivalCalendarDays: v.number(),
+  warrantyMonths: v.number(),
+  returnDays: v.number(),
+  incrementalCostCents: v.number(),
+})
 
 export default defineSchema({
   merchants: defineTable({
@@ -160,6 +168,7 @@ export default defineSchema({
     arrivalCalendarDays: v.number(),
     warrantyMonths: v.number(),
     returnDays: v.number(),
+    finalServiceOptions: v.optional(v.array(finalServiceOption)),
     createdAt: v.number(),
   })
     .index('by_merchantId_and_version', ['merchantId', 'version'])
@@ -236,6 +245,7 @@ export default defineSchema({
     merchantId: v.string(),
     parentOffer: v.union(ref, v.null()),
     policy: ref,
+    serviceOptionId: v.optional(nullableString),
     lines: v.array(offerLine),
     itemsCents: v.number(),
     shippingCents: v.number(),

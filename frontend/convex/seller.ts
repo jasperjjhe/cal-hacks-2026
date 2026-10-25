@@ -46,6 +46,14 @@ const policyChangesValidator = v.object({
   arrivalCalendarDays: v.optional(v.number()),
   warrantyMonths: v.optional(v.number()),
   returnDays: v.optional(v.number()),
+  finalServiceOptions: v.optional(v.array(v.object({
+    id: v.string(),
+    shippingCents: v.number(),
+    arrivalCalendarDays: v.number(),
+    warrantyMonths: v.number(),
+    returnDays: v.number(),
+    incrementalCostCents: v.number(),
+  }))),
 })
 
 function isSafeInteger(value: unknown, minimum = 0): value is number {
@@ -115,6 +123,7 @@ function projectPolicy(policy: {
   arrivalCalendarDays: number
   warrantyMonths: number
   returnDays: number
+  finalServiceOptions?: PricingPolicy['finalServiceOptions']
 }): PricingPolicy {
   return {
     policy: { id: policy.policyId, version: policy.version },
@@ -128,6 +137,7 @@ function projectPolicy(policy: {
     arrivalCalendarDays: policy.arrivalCalendarDays,
     warrantyMonths: policy.warrantyMonths,
     returnDays: policy.returnDays,
+    finalServiceOptions: policy.finalServiceOptions?.map((option) => ({ ...option })) ?? [],
   }
 }
 
@@ -323,6 +333,7 @@ export const publishOwnPolicy = mutation({
       arrivalCalendarDays: next.arrivalCalendarDays,
       warrantyMonths: next.warrantyMonths,
       returnDays: next.returnDays,
+      finalServiceOptions: next.finalServiceOptions,
       createdAt: Date.now(),
     })
     await ctx.db.patch(merchant._id, {

@@ -2,6 +2,7 @@ import {
   type Attribute,
   type CatalogSnapshot,
   type Cents,
+  type FinalServiceTerms,
   type FitAssessment,
   type OfferLine,
   type PricingPolicy,
@@ -20,6 +21,9 @@ const BASIS_POINTS = 10_000
 const MAX_DISCOUNT_BPS = BASIS_POINTS
 const MAX_QUANTITY = 10
 const MAX_CENTS = Number.MAX_SAFE_INTEGER
+const MAX_FINAL_SERVICE_OPTIONS = 8
+const MAX_ID_LENGTH = 128
+const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
 
 type NumericUnit = { family: string; multiplier: number }
 
@@ -100,6 +104,7 @@ export interface PolicyChanges {
   arrivalCalendarDays?: number
   warrantyMonths?: number
   returnDays?: number
+  finalServiceOptions?: PricingPolicy['finalServiceOptions']
 }
 
 export function validatePolicyValues(policy: PricingPolicy): SafeReason[] {
@@ -125,6 +130,41 @@ export function validatePolicyValues(policy: PricingPolicy): SafeReason[] {
   if (!Number.isSafeInteger(policy.returnDays) || policy.returnDays < 0 || policy.returnDays > 365) {
     reasons.push(safeReason('INVALID_INPUT', 'return days must be an integer from 0 to 365', 'returnDays'))
   }
+  if (!Array.isArray(policy.finalServiceOptions) || policy.finalServiceOptions.length > MAX_FINAL_SERVICE_OPTIONS) {
+    reasons.push(safeReason('INVALID_INPUT', 'final service options must contain at most eight options', 'finalServiceOptions'))
+  } else {
+    const optionIds = new Set<string>()
+    policy.finalServiceOptions.forEach((option, index) => {
+      const field = `finalServiceOptions.${index}`
+      if (
+        typeof option.id !== 'string' ||
+        option.id.length === 0 ||
+        option.id.length > MAX_ID_LENGTH ||
+        !SAFE_ID_PATTERN.test(option.id)
+      ) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option ID is invalid', `${field}.id`))
+      } else if (optionIds.has(option.id)) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option IDs must be unique', `${field}.id`))
+      } else {
+        optionIds.add(option.id)
+      }
+      if (!isSafeCents(option.shippingCents)) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option shipping must be non-negative integer cents', `${field}.shippingCents`))
+      }
+      if (!Number.isSafeInteger(option.arrivalCalendarDays) || option.arrivalCalendarDays < 0 || option.arrivalCalendarDays > 365) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option arrival days must be an integer from 0 to 365', `${field}.arrivalCalendarDays`))
+      }
+      if (!Number.isSafeInteger(option.warrantyMonths) || option.warrantyMonths < 0 || option.warrantyMonths > 120) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option warranty months must be an integer from 0 to 120', `${field}.warrantyMonths`))
+      }
+      if (!Number.isSafeInteger(option.returnDays) || option.returnDays < 0 || option.returnDays > 365) {
+        reasons.push(safeReason('INVALID_INPUT', 'service option return days must be an integer from 0 to 365', `${field}.returnDays`))
+      }
+      if (!isSafeCents(option.incrementalCostCents)) {
+        reasons.push(safeReason('INVALID_INPUT', 'incremental bundle cost must be non-negative integer cents', `${field}.incrementalCostCents`))
+      }
+    })
+  }
   return reasons
 }
 
@@ -146,12 +186,55 @@ export function applyPolicyChanges(current: PricingPolicy, changes: PolicyChange
     arrivalCalendarDays: changes.arrivalCalendarDays ?? current.arrivalCalendarDays,
     warrantyMonths: changes.warrantyMonths ?? current.warrantyMonths,
     returnDays: changes.returnDays ?? current.returnDays,
+    finalServiceOptions: changes.finalServiceOptions
+      ? changes.finalServiceOptions.map((option) => ({ ...option }))
+      : current.finalServiceOptions.map((option) => ({ ...option })),
   }
   const reasons = validatePolicyValues(next)
   if (reasons.length) {
     throw new SellerContractError('INVALID_INPUT', reasons[0].message, reasons[0].field)
   }
   return next
+}
+
+export function resolveFinalServiceTerms(
+  policy: PricingPolicy,
+  serviceOptionId: string | null,
+): FinalServiceTerms {
+  const policyReasons = validatePolicyValues(policy)
+  if (policyReasons.length) {
+    throw new SellerContractError('INVALID_INPUT', policyReasons[0].message, policyReasons[0].field)
+  }
+  if (serviceOptionId === null) {
+    return {
+      serviceOptionId: null,
+      shippingCents: policy.shippingCents,
+      arrivalCalendarDays: policy.arrivalCalendarDays,
+      warrantyMonths: policy.warrantyMonths,
+      returnDays: policy.returnDays,
+      incrementalCostCents: 0,
+    }
+  }
+  if (
+    typeof serviceOptionId !== 'string' ||
+    serviceOptionId.length === 0 ||
+    serviceOptionId.length > MAX_ID_LENGTH ||
+    !SAFE_ID_PATTERN.test(serviceOptionId)
+  ) {
+    throw new SellerContractError('INVALID_INPUT', 'service option ID is invalid', 'serviceOptionId')
+  }
+  const option = policy.finalServiceOptions.find((candidate) => candidate.id === serviceOptionId)
+  if (!option) {
+    throw new SellerContractError('INVALID_INPUT', 'service option is not authorized by policy', 'serviceOptionId')
+  }
+  return {
+    serviceOptionId: option.id,
+    shippingCents: option.shippingCents,
+    arrivalCalendarDays: option.arrivalCalendarDays,
+    warrantyMonths: option.warrantyMonths,
+    returnDays: option.returnDays,
+    incrementalCostCents: option.incrementalCostCents,
+  }
 }
 
 function numericValue(value: unknown, unit: string | null): number | null {
@@ -366,6 +449,7 @@ export function validateSellerProposal(
       merchantId: context.merchantId,
       parentOffer: proposal.parentOffer,
       policy: { ...context.policy.policy },
+      serviceOptionId: null,
       lines: offerLines.map((line) => ({ ...line, listing: { ...line.listing } })),
       itemsCents,
       shippingCents: context.policy.shippingCents,

@@ -89,6 +89,7 @@ function toPolicy(document: {
   arrivalCalendarDays: number
   warrantyMonths: number
   returnDays: number
+  finalServiceOptions?: PricingPolicy['finalServiceOptions']
 }): PricingPolicy {
   return {
     policy: { id: document.policyId, version: document.version },
@@ -102,6 +103,7 @@ function toPolicy(document: {
     arrivalCalendarDays: document.arrivalCalendarDays,
     warrantyMonths: document.warrantyMonths,
     returnDays: document.returnDays,
+    finalServiceOptions: document.finalServiceOptions?.map((option) => ({ ...option })) ?? [],
   }
 }
 
@@ -697,6 +699,7 @@ export const validateAndStoreProposal = internalMutation({
       arrivalCalendarDays: validated.offer.arrivalCalendarDays,
       warrantyMonths: validated.offer.warrantyMonths,
       returnDays: validated.offer.returnDays,
+      serviceOptionId: validated.offer.serviceOptionId,
       fit: validated.offer.fit,
       claims: validated.offer.claims,
       status: validated.offer.status,

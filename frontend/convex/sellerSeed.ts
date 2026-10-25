@@ -188,6 +188,7 @@ export const seedSellerDemo = internalMutation({
         arrivalCalendarDays: policy.arrivalCalendarDays,
         warrantyMonths: policy.warrantyMonths,
         returnDays: policy.returnDays,
+        finalServiceOptions: policy.finalServiceOptions,
         createdAt,
       })
       for (const snapshot of fixtures.snapshotsByMerchant[merchantId]) {

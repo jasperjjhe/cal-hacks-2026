@@ -30,6 +30,14 @@ terms. B validates cross-offer references, approved facts, challenge routing,
 phase membership and public event safety; S validates seller authorship, own
 offer references, policy authority, frozen-basket invariants and economics.
 
+The seller branch has now added the policy-side service authority needed by the
+v5.3 final phase without inventing a v2 wire schema: `PricingPolicy` versions
+store an immutable `finalServiceOptions` allowlist, `resolveFinalServiceTerms`
+accepts only a server-authorized option ID (or `null` for baseline), and
+accepted offer versions carry `serviceOptionId`. The buyer-owned v2 envelope
+must still supply the parent offer, frozen basket and final proposal before the
+seller can enable contribution, monotonic-total and weakened-term checks.
+
 Seller entry points:
 
 - `internal.sellerInternal.prepareSellerJob`: binds the job to the merchant, policy, candidate IDs and workflow identifiers. It accepts an optional `brief` for an atomic handoff.

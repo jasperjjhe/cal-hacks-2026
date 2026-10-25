@@ -398,6 +398,7 @@ function makePolicy(merchantId: Id, shippingCents: number, arrivalCalendarDays: 
     arrivalCalendarDays,
     warrantyMonths,
     returnDays,
+    finalServiceOptions: [],
   }
 }
 

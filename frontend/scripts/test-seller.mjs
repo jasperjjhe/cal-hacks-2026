@@ -9,8 +9,10 @@ import {
 } from '../convex/lib/sellerContracts.ts'
 import { makeSellerFixtures, makeValidProposal } from '../convex/lib/sellerFixtures.ts'
 import {
+  applyPolicyChanges,
   assessLine,
   minimumUnitCents,
+  resolveFinalServiceTerms,
   validateSellerProposal,
 } from '../convex/lib/sellerValidation.ts'
 import {
@@ -94,11 +96,64 @@ test('minimum price follows the documented floor, discount and contribution form
   )
 })
 
+test('final service terms come only from the immutable policy allowlist', () => {
+  const baseline = fixtures.policiesByMerchant.merchant_a
+  const policy = applyPolicyChanges(baseline, {
+    finalServiceOptions: [{
+      id: 'service:priority',
+      shippingCents: 2_000,
+      arrivalCalendarDays: 1,
+      warrantyMonths: 24,
+      returnDays: 30,
+      incrementalCostCents: 500,
+    }],
+  }, baseline.policy.version + 1)
+
+  assert.deepEqual(resolveFinalServiceTerms(policy, null), {
+    serviceOptionId: null,
+    shippingCents: baseline.shippingCents,
+    arrivalCalendarDays: baseline.arrivalCalendarDays,
+    warrantyMonths: baseline.warrantyMonths,
+    returnDays: baseline.returnDays,
+    incrementalCostCents: 0,
+  })
+  assert.deepEqual(resolveFinalServiceTerms(policy, 'service:priority'), {
+    serviceOptionId: 'service:priority',
+    shippingCents: 2_000,
+    arrivalCalendarDays: 1,
+    warrantyMonths: 24,
+    returnDays: 30,
+    incrementalCostCents: 500,
+  })
+  assert.throws(
+    () => resolveFinalServiceTerms(policy, 'service:unapproved'),
+    (error) => error instanceof Error && error.message.includes('not authorized by policy'),
+  )
+  assert.throws(
+    () => resolveFinalServiceTerms(policy, undefined),
+    (error) => error instanceof Error && error.message.includes('service option ID is invalid'),
+  )
+  assert.throws(
+    () => applyPolicyChanges(baseline, {
+      finalServiceOptions: [{
+        id: 'service:bad',
+        shippingCents: 0,
+        arrivalCalendarDays: 1,
+        warrantyMonths: 12,
+        returnDays: 14,
+        incrementalCostCents: -1,
+      }],
+    }, baseline.policy.version + 1),
+    (error) => error instanceof Error && error.message.includes('incremental bundle cost'),
+  )
+})
+
 test('valid seller proposals are recomputed and never trust model totals', () => {
   const result = validateSellerProposal(contextFor('merchant_a'), makeValidProposal('merchant_a'))
   assert.equal(result.ok, true)
   if (!result.ok) return
   assert.equal(result.offer.itemsCents, 97_500)
+  assert.equal(result.offer.serviceOptionId, null)
   assert.equal(result.offer.shippingCents, 1_500)
   assert.equal(result.offer.totalCents, 99_000)
   assert.equal(result.offer.fit.hardRequirementsPassed, true)

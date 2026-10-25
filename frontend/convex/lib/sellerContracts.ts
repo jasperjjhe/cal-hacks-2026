@@ -113,6 +113,24 @@ export interface Listing {
   diagnosticAttributes: Record<string, Attribute>
 }
 
+export interface FinalServiceOption {
+  id: Id
+  shippingCents: Cents
+  arrivalCalendarDays: number
+  warrantyMonths: number
+  returnDays: number
+  incrementalCostCents: Cents
+}
+
+export interface FinalServiceTerms {
+  serviceOptionId: Id | null
+  shippingCents: Cents
+  arrivalCalendarDays: number
+  warrantyMonths: number
+  returnDays: number
+  incrementalCostCents: Cents
+}
+
 export interface PricingPolicy {
   policy: Ref
   merchantId: Id
@@ -125,6 +143,7 @@ export interface PricingPolicy {
   arrivalCalendarDays: number
   warrantyMonths: number
   returnDays: number
+  finalServiceOptions: FinalServiceOption[]
 }
 
 export interface OfferLine {
@@ -215,6 +234,7 @@ export interface OfferVersion {
   merchantId: Id
   parentOffer: Ref | null
   policy: Ref
+  serviceOptionId: Id | null
   lines: OfferLine[]
   itemsCents: Cents
   shippingCents: Cents
