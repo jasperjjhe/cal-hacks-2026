@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import type { FunctionReference } from "convex/server";
 import { z } from "zod";
 import { contracts, type Contract } from "../src/contracts/index.ts";
 type ContractOffer = Contract<"OfferVersion">;
@@ -40,6 +41,73 @@ import type {
   SellerDecision,
   OfferVersion as SellerOffer,
 } from "./lib/sellerContracts.ts";
+type PrepareSellerJobInput = {
+  jobId: string;
+  requestId: string;
+  requestVersion: number;
+  runId: string;
+  phaseId: string;
+  merchantId: string;
+  candidateIds: string[];
+  policy: { id: string; version: number };
+  profileVersions: Record<string, number>;
+  role: "seller_initial" | "seller_response" | "seller_final" | "seller_advocacy" | "seller_reply";
+  provider: "fixture" | "fetch" | "creao";
+  providerConfigRevision: string;
+  inputDigest: string;
+  inputRef: string;
+  deadlineAt: number;
+  brief?: unknown;
+};
+const prepareSellerJob = internal.sellerInternal.prepareSellerJob as unknown as FunctionReference<"mutation", "internal", PrepareSellerJobInput, unknown>;
+type SellerValidationBridgeResult = {
+  ok: boolean;
+  outcome: string;
+  offer?: { id: string; version: number };
+  totalCents?: number;
+  reasons?: unknown[];
+};
+const validateSellerProposal = internal.sellerInternal.validateAndStoreProposal as unknown as FunctionReference<"mutation", "internal", {
+  jobId: string;
+  brief: unknown;
+  decision: unknown;
+  mode?: "fixture" | "live" | "cached" | "simulation" | "visa_sandbox";
+  providerRunId?: string | null;
+  providerModel?: string | null;
+  providerElapsedMs?: number | null;
+  deferPromotion?: boolean;
+}, SellerValidationBridgeResult>;
+type SellerDispatchReference = FunctionReference<"action", "internal", { jobId: string; poll?: boolean; reconcile?: boolean }, {
+  pending: boolean;
+  state: string;
+  providerRunId?: string;
+  result?: unknown;
+}>;
+const dispatchSellerJob = internal.sellerAgent.dispatch as unknown as SellerDispatchReference;
+const attachSellerProviderInput = internal.sellerInternal.attachSellerProviderInput as unknown as FunctionReference<"mutation", "internal", { jobId: string; input: unknown }, unknown>;
+const getSellerV2Result = internal.sellerInternal.getV2ProviderResult as unknown as FunctionReference<"query", "internal", { jobId: string }, {
+  output: unknown;
+  outputDigest: string;
+  validatedOffer: { id: string; version: number } | null;
+  providerRunId: string | null;
+  providerModel: string | null;
+  providerElapsedMs: number | null;
+} | null>;
+
+function isSellerV2Job(job: { role: string; sellerJobId: string | null; provider: string }): boolean {
+  return Boolean(job.provider === "fetch" && job.sellerJobId && ["seller_advocacy", "seller_reply", "seller_final"].includes(job.role));
+}
+
+function isSellerManagedJob(job: { role: string; sellerJobId: string | null; provider: string }): boolean {
+  return Boolean(job.provider === "fetch" && job.sellerJobId && [
+    "seller_initial", "seller_response", "seller_final", "seller_advocacy", "seller_reply",
+  ].includes(job.role));
+}
+
+function rebindCouncilOutput(output: unknown, buyerJobId: string): unknown {
+  if (typeof output !== "object" || output === null || Array.isArray(output)) throw new Error("Seller council output is not an object.");
+  return { ...(output as Record<string, unknown>), jobId: buyerJobId };
+}
 export const prepareIntake = internalMutation({
   args: { input: v.any() },
   handler: async (ctx, { input }) => {
@@ -120,6 +188,7 @@ export const preparePhase = internalMutation({
     const request = await versionFor(ctx, run.requestId, run.version);
     const brief = buildSellerBrief(request, args.runId);
     const now = Date.now();
+    const sellerProvider = process.env.FETCH_SELLER_START_URL?.trim() ? "fetch" as const : "fixture" as const;
     const ids: string[] = [];
     if (args.phase === "bidding") {
       const merchants = await ctx.db
@@ -169,7 +238,7 @@ export const preparePhase = internalMutation({
           };
           const inputDigest = await digest(payload);
           const inputRef = `${sellerJobId}:input`;
-          await ctx.runMutation(internal.sellerInternal.prepareSellerJob, {
+          await ctx.runMutation(prepareSellerJob, {
             jobId: sellerJobId,
             requestId: run.requestId,
             requestVersion: run.version,
@@ -182,11 +251,12 @@ export const preparePhase = internalMutation({
               brief.lines.map((l) => [l.profile.id, l.profile.version]),
             ),
             role: "seller_initial",
-            provider: "fixture", // Seller live dispatch is connected during branch consolidation.
+            provider: sellerProvider,
             providerConfigRevision: run.config.revision,
             inputDigest,
             inputRef,
             deadlineAt: Math.min(run.deadlineAt, run.config.councilSchedule?.bidding ?? run.startedAt + buyerTiming.councilEndMs.bidding),
+            brief,
           });
           ids.push(
             String(
@@ -202,7 +272,7 @@ export const preparePhase = internalMutation({
                 state: "queued",
                 input: payload,
                 inputDigest,
-                provider: "fixture", // Seller live dispatch is connected during branch consolidation.
+                provider: sellerProvider,
                 providerRunId: null,
                 outputDigest: null,
                 output: null,
@@ -243,6 +313,8 @@ export const preparePhase = internalMutation({
         );
         await ctx.db.patch(jobs._id, {
           role: "seller_final",
+          provider: sellerProvider,
+          providerConfigRevision: sellerProvider === "fetch" ? `${run.config.revision}:fetch-seller-v2` : run.config.revision,
           phaseId: args.phase,
           deadlineAt,
           status: "created",
@@ -288,9 +360,7 @@ export const preparePhase = internalMutation({
           outcomes: council?.outcomes ?? [] });
         // Only this canonical projection may cross the future seller provider port.
         const finalPayload = { ...payload, sellerInput };
-        ids.push(
-          String(
-            await ctx.db.insert("buyerJobs", {
+        const buyerJobId = String(await ctx.db.insert("buyerJobs", {
               runId: args.runId,
               requestId: run.requestId,
               version: run.version,
@@ -302,18 +372,22 @@ export const preparePhase = internalMutation({
               state: "queued",
               input: finalPayload,
               inputDigest: await digest(finalPayload),
-              provider: "fixture", // Seller live dispatch is connected during branch consolidation.
+               provider: sellerProvider,
+               providerConfig: sellerProvider === "fetch" ? { revision: `${run.config.revision}:fetch-seller-v2` } : null,
               providerRunId: null,
               outputDigest: null,
               output: null,
               deadlineAt,
               createdAt: now,
               completedAt: null,
-            }),
-          ),
-        );
+            }));
+        await ctx.runMutation(attachSellerProviderInput, {
+          jobId: sellerJobId,
+          input: sellerInput,
+        });
+        ids.push(buyerJobId);
         const invitation = invitations.find(i => i.candidateId === row.candidateId);
-        if (invitation) await ctx.db.patch(invitation._id, { jobId: ids[ids.length - 1], status: "invited" });
+        if (invitation) await ctx.db.patch(invitation._id, { jobId: buyerJobId, status: "invited" });
       }
     }
     return ids;
@@ -410,7 +484,45 @@ export const dispatch = internalAction({
     if (!job) return { pending: false };
     let result;
     try {
-      if (job.provider === "fixture")
+      if (isSellerManagedJob(job)) {
+        const seller = await ctx.runAction(dispatchSellerJob, {
+          jobId: job.sellerJobId!,
+          poll: args.poll ?? false,
+        });
+        if (seller.pending) {
+          result = {
+            status: "pending" as const,
+            providerRunId: seller.providerRunId ?? `seller:${job.sellerJobId}`,
+          };
+        } else if (seller.state === "completed" || seller.state === "rejected") {
+          if (isSellerV2Job(job)) {
+            const sellerResult = await ctx.runQuery(getSellerV2Result, { jobId: job.sellerJobId! });
+            if (!sellerResult) throw new Error("Seller completed without a durable v2 result.");
+            result = {
+              status: "completed" as const,
+              providerRunId: sellerResult.providerRunId ?? `seller:${job.sellerJobId}`,
+              model: sellerResult.providerModel,
+              output: job.role === "seller_final"
+                ? sellerResult.output
+                : rebindCouncilOutput(sellerResult.output, String(job._id)),
+            };
+          } else {
+            if (!seller.result) throw new Error("Seller completed without a durable validated result.");
+            result = {
+              status: "completed" as const,
+              providerRunId: seller.providerRunId ?? `seller:${job.sellerJobId}`,
+              model: null,
+              output: null,
+              sellerValidation: seller.result,
+            };
+          }
+        } else {
+          result = {
+            status: "failed" as const,
+            providerRunId: seller.providerRunId ?? null,
+          };
+        }
+      } else if (job.provider === "fixture")
         result = {
           status: "completed" as const,
           providerRunId: `fixture:${args.jobId}`,
@@ -503,6 +615,13 @@ export const completeJob = internalMutation({
           providerRunId: z.string().min(1).max(256),
           model: z.string().nullable(),
           output: z.unknown(),
+          sellerValidation: z.optional(z.object({
+            ok: z.boolean(),
+            outcome: z.string(),
+            offer: z.optional(z.object({ id: z.string(), version: z.number() })),
+            totalCents: z.optional(z.number()),
+            reasons: z.optional(z.array(z.unknown())),
+          })),
         }),
         z.object({
           status: z.literal("failed"),
@@ -610,6 +729,11 @@ export const completeJob = internalMutation({
     } else if (job.runId) {
       const request = await versionFor(ctx, job.requestId, job.version);
       let decision = result.output as SellerDecision;
+      if (result.sellerValidation) {
+        decision = result.sellerValidation.outcome === "abstain"
+          ? { kind: "abstain", jobId: job.sellerJobId!, reasonCode: "NO_MATCH" } as SellerDecision
+          : { kind: "hold", jobId: job.sellerJobId!, offer: result.sellerValidation.offer } as SellerDecision;
+      }
       if (job.phase === "negotiating") {
         const openings = await ctx.db.query("buyerOffers").withIndex("by_run_candidate", q => q.eq("runId", job.runId!).eq("candidateId", job.candidateId!)).take(20);
         const opening = openings.find(row => row.effective && sameRef(row.data.offer, job.input.parentOffer.offer));
@@ -636,16 +760,27 @@ export const completeJob = internalMutation({
         }
       }
       // Only the seller validator may accept prices, stock or product fit.
-      const accepted = await ctx.runMutation(
-        internal.sellerInternal.validateAndStoreProposal,
-        {
-          jobId: job.sellerJobId!,
-          brief: job.input.brief,
-          decision,
-          mode: job.provider === "fixture" ? "fixture" : "live",
-          deferPromotion: job.phase === "negotiating",
-        },
-      );
+      const sellerV2Result = job.provider === "fetch" && job.sellerJobId
+        ? await ctx.runQuery(getSellerV2Result, { jobId: job.sellerJobId })
+        : null;
+      const accepted: SellerValidationBridgeResult = sellerV2Result
+        ? sellerV2Result.validatedOffer
+          ? { ok: true, outcome: "accepted", offer: sellerV2Result.validatedOffer }
+          : decision.kind === "propose"
+            ? { ok: false, outcome: "rejected", reasons: [{ code: "POLICY_REJECTED" }] }
+            : { ok: true, outcome: decision.kind }
+        : result.sellerValidation
+          ? result.sellerValidation
+          : await ctx.runMutation(
+          validateSellerProposal,
+          {
+            jobId: job.sellerJobId!,
+            brief: job.input.brief,
+            decision,
+            mode: job.provider === "fixture" ? "fixture" : "live",
+            deferPromotion: job.phase === "negotiating",
+          },
+        );
       if (!accepted.ok) {
         if (!job.input.repairAttempt) throw new Error("Proposal requires one bounded repair.");
         await ctx.db.patch(job._id, { state: "failed", completedAt: Date.now() });
@@ -693,6 +828,7 @@ export const completeJob = internalMutation({
             ...raw,
             schemaVersion: 1,
             offer: ref,
+            serviceOptionId: raw.serviceOptionId ?? null,
             fit: {
               ...raw.fit,
               reasons: [],

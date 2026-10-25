@@ -1,9 +1,12 @@
 # Buyer council v2 implementation and seller integration boundary
 
-The buyer-owned v5.3 migration is implemented on `geoff/buyer`. Seller execution
-is deliberately fixture-backed until Dev S integrates Fetch. This does not claim
-that live peer negotiation, service concessions or the complete combined system
-passed acceptance. No seller branch, external account or deployment was changed.
+The buyer-owned v5.3 migration is implemented on `geoff/buyer`. The standalone
+buyer branch remains fixture-backed for seller execution; the merged
+`feature/seller-side` checkout adds the single Fetch dispatch/result bridge when
+its gateway is configured and keeps fixture fallback for CI/demo. This does not
+claim that live peer negotiation, service concessions or the complete combined
+system passed acceptance. External provider accounts and deployment still need
+configuration.
 
 ## What now runs
 

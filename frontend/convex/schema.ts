@@ -37,6 +37,14 @@ const fitAssessment = v.object({
   requirements: v.array(fitRequirement),
   reasons: v.array(safeReason),
 })
+const finalServiceOption = v.object({
+  id: v.string(),
+  shippingCents: v.number(),
+  arrivalCalendarDays: v.number(),
+  warrantyMonths: v.number(),
+  returnDays: v.number(),
+  incrementalCostCents: v.number(),
+})
 
 const sellerTables = {
   merchants: defineTable({
@@ -53,8 +61,9 @@ const sellerTables = {
     .index('by_enabled_paused', ['enabled', 'paused']),
 
   memberships: defineTable({
+    // Optional for legacy rows; migration must bind a concrete token before access.
     authTokenIdentifier: v.optional(v.string()),
-    authSubject: v.optional(v.string()), // migration-only; never authorizes a request
+    authSubject: v.optional(v.string()),
     merchantId: v.string(),
     role: v.union(v.literal('owner'), v.literal('operator')),
     enabled: v.boolean(),
@@ -64,9 +73,15 @@ const sellerTables = {
     .index('by_merchantId', ['merchantId'])
     .index('by_authTokenIdentifier_and_merchantId', ['authTokenIdentifier', 'merchantId']),
 
+  // Transitional provisioning records are retained for the buyer-side demo
+  // admin path. Seller authorization never trusts this table; it derives
+  // access from memberships and the authenticated token identifier.
   operatorAccounts: defineTable({
-    userId: v.string(), merchantId: v.string(), enabled: v.boolean(), createdAt: v.number(),
-  }).index('by_user', ['userId']),
+    userId: v.string(),
+    merchantId: v.string(),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+  }).index('by_user', ['userId']).index('by_merchantId', ['merchantId']),
 
   categoryProfiles: defineTable({
     profileId: v.string(),
@@ -167,6 +182,7 @@ const sellerTables = {
     arrivalCalendarDays: v.number(),
     warrantyMonths: v.number(),
     returnDays: v.number(),
+    finalServiceOptions: v.optional(v.array(finalServiceOption)),
     createdAt: v.number(),
   })
     .index('by_merchantId_and_version', ['merchantId', 'version'])
@@ -183,14 +199,35 @@ const sellerTables = {
     policyId: v.string(),
     policyVersion: v.number(),
     profileVersions: v.record(v.string(), v.number()),
-    role: v.union(v.literal('seller_initial'), v.literal('seller_response'), v.literal('seller_final')),
+    role: v.union(
+      v.literal('seller_initial'),
+      v.literal('seller_response'),
+      v.literal('seller_final'),
+      v.literal('seller_advocacy'),
+      v.literal('seller_reply'),
+    ),
     provider: v.union(v.literal('fixture'), v.literal('fetch'), v.literal('creao')),
     providerConfigRevision: v.string(),
     inputDigest: v.string(),
     inputRef: v.string(),
     deadlineAt: v.number(),
-    status: v.union(v.literal('created'), v.literal('pending'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'), v.literal('stale')),
+    status: v.union(
+      v.literal('created'),
+      v.literal('starting'),
+      v.literal('pending'),
+      v.literal('polling'),
+      v.literal('ambiguous'),
+      v.literal('completed'),
+      v.literal('failed'),
+      v.literal('cancelled'),
+      v.literal('stale'),
+    ),
     providerRunId: nullableString,
+    providerModel: nullableString,
+    providerElapsedMs: nullableNumber,
+    attemptCount: v.number(),
+    lastErrorCode: nullableString,
+    lastErrorRetryable: v.union(v.boolean(), v.null()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -198,6 +235,34 @@ const sellerTables = {
     .index('by_merchantId_and_status', ['merchantId', 'status'])
     .index('by_providerRunId', ['providerRunId'])
     .index('by_runId_and_phaseId', ['runId', 'phaseId']),
+
+  sellerJobInputs: defineTable({
+    jobId: v.string(),
+    brief: v.any(),
+    briefDigest: v.string(),
+    roleInput: v.optional(v.any()),
+    roleInputDigest: v.optional(nullableString),
+    openingCatalog: v.optional(v.any()),
+    openingCatalogDigest: v.optional(nullableString),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_jobId', ['jobId']),
+
+  sellerJobResults: defineTable({
+    jobId: v.string(),
+    role: v.union(
+      v.literal('seller_advocacy'),
+      v.literal('seller_reply'),
+      v.literal('seller_final'),
+    ),
+    output: v.any(),
+    outputDigest: v.string(),
+    validatedOffer: v.union(ref, v.null()),
+    providerRunId: nullableString,
+    providerModel: nullableString,
+    providerElapsedMs: nullableNumber,
+    createdAt: v.number(),
+  }).index('by_jobId', ['jobId']),
 
   candidates: defineTable({
     candidateId: v.string(),
@@ -220,6 +285,7 @@ const sellerTables = {
     merchantId: v.string(),
     parentOffer: v.union(ref, v.null()),
     policy: ref,
+    serviceOptionId: v.optional(nullableString),
     lines: v.array(offerLine),
     itemsCents: v.number(),
     shippingCents: v.number(),
@@ -282,12 +348,26 @@ const sellerTables = {
     .index('by_allocationId', ['allocationId'])
     .index('by_listingId_and_state', ['listingId', 'state'])
     .index('by_reservationKey', ['reservationKey'])
-    .index('by_quoteId', ['quoteId'])
     .index('by_requestId', ['requestId']),
 
   sellerEvents: defineTable({
     merchantId: v.string(),
-    eventType: v.union(v.literal('listing_published'), v.literal('policy_published'), v.literal('merchant_paused'), v.literal('merchant_resumed'), v.literal('proposal_received'), v.literal('proposal_rejected'), v.literal('offer_accepted'), v.literal('allocation_changed')),
+    eventType: v.union(
+      v.literal('listing_published'),
+      v.literal('policy_published'),
+      v.literal('merchant_paused'),
+      v.literal('merchant_resumed'),
+      v.literal('proposal_received'),
+      v.literal('proposal_rejected'),
+      v.literal('offer_accepted'),
+      v.literal('allocation_changed'),
+      v.literal('provider_started'),
+      v.literal('provider_pending'),
+      v.literal('provider_completed'),
+      v.literal('provider_failed'),
+      v.literal('provider_ambiguous'),
+      v.literal('provider_cancelled'),
+    ),
     jobId: nullableString,
     candidateId: nullableString,
     offerId: nullableString,

@@ -90,8 +90,11 @@ with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRA
 for agent creation, automatic Apify RAG review discovery, backend variables and live acceptance.
 Apify no longer requires deploying the custom Python Actor or selecting product URLs;
 configure the maintained RAG Actor/build and use genuine catalog product identities.
-Credentials and live execution are still unverified. Seller jobs remain fixtures
-until the seller branch is consolidated; live buyer runs report mixed agent mode.
+Credentials and live execution are still unverified. On the standalone buyer
+branch seller jobs remain fixtures; this merged seller checkout routes
+configured Fetch seller jobs through the single seller dispatcher and keeps an
+explicit fixture fallback for CI/demo. Live buyer runs still report mixed
+agent mode until provider credentials and gateway deployment are configured.
 External payment is deferred; fixture agents and simulated checkout need no keys.
 
 Operator accounts are provisioned only through the internal

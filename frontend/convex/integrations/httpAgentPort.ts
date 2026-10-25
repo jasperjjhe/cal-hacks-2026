@@ -13,7 +13,16 @@ export interface HttpAgentPortConfig {
   provider: Exclude<AgentProvider, 'fixture'>
   startUrl: string
   pollUrlTemplate: string
+  reconcileUrlTemplate?: string
   cancelUrlTemplate: string
+  pollMethod?: 'POST' | 'GET'
+  reconcileMethod?: 'POST' | 'GET'
+  /**
+   * Hosted Agentverse REST routes do not need to expose a bearer header to
+   * the agent code. When enabled, the server-side token is copied into the
+   * POST envelope under `providerAuthToken`; it is never logged or persisted.
+   */
+  sendTokenInBody?: boolean
   allowedHosts: string[]
   requestTimeoutMs: number
   providerConfigRevision: string
@@ -33,11 +42,23 @@ function validateConfig(config: HttpAgentPortConfig) {
   if (!Number.isSafeInteger(config.requestTimeoutMs) || config.requestTimeoutMs < 1_000 || config.requestTimeoutMs > 30_000) {
     throw new Error('provider request timeout must be between one and thirty seconds')
   }
-  for (const [name, template] of Object.entries({ startUrl: config.startUrl, pollUrlTemplate: config.pollUrlTemplate, cancelUrlTemplate: config.cancelUrlTemplate })) {
-    const url = new URL(template.replace('{providerRunId}', 'run-placeholder'))
-    if (url.protocol !== 'https:') throw new Error(`${name} must use HTTPS`)
-    if (!config.allowedHosts.includes(url.hostname)) throw new Error(`${name} host is not in the provider allowlist`)
+  for (const [name, template] of Object.entries({
+    startUrl: config.startUrl,
+    pollUrlTemplate: config.pollUrlTemplate,
+    reconcileUrlTemplate: config.reconcileUrlTemplate,
+    cancelUrlTemplate: config.cancelUrlTemplate,
+  })) {
+    if (!template) continue
+    const url = new URL(template.replace('{providerRunId}', 'run-placeholder').replace('{jobId}', 'job-placeholder'))
+    validateProviderUrl(url, config.allowedHosts, name)
   }
+}
+
+function validateProviderUrl(url: URL, allowedHosts: string[], field: string): URL {
+  if (url.protocol !== 'https:') throw new Error(`${field} must use HTTPS`)
+  if (url.username || url.password || url.port) throw new Error(`${field} must not include credentials or a non-default port`)
+  if (!allowedHosts.includes(url.hostname)) throw new Error(`${field} host is not in the provider allowlist`)
+  return url
 }
 
 function safeMessage(status: number): string {
@@ -52,10 +73,18 @@ function classifyNetworkError(error: unknown): ProviderApiError {
   return providerError('PROVIDER_NETWORK', 'provider request failed before a response was received', true)
 }
 
+function classifyRequestError(error: unknown): ProviderApiError {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/provider redirect|must use https|host is not in the provider allowlist|must not include credentials|invalid url/i.test(message)) {
+    return providerError('PROVIDER_PROTOCOL', 'provider returned an invalid redirect or request URL', false)
+  }
+  return classifyNetworkError(error)
+}
+
 function providerRunId(value: unknown): string | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
-  return typeof record.providerRunId === 'string' && record.providerRunId.length <= 256 ? record.providerRunId : null
+  return typeof record.providerRunId === 'string' && record.providerRunId.length > 0 && record.providerRunId.length <= 256 ? record.providerRunId : null
 }
 
 function resultFromResponse(value: unknown, statusCode: number, elapsedMs: number): AgentJobResult<unknown> {
@@ -96,13 +125,41 @@ export function createHttpAgentPort(
     if (body !== undefined) headers['content-type'] = 'application/json'
     if (token) headers.authorization = `Bearer ${token}`
     headers['idempotency-key'] = idempotencyKey
+    const requestBody = config.sendTokenInBody
+      && token
+      && method === 'POST'
+      && typeof body === 'object'
+      && body !== null
+      && !Array.isArray(body)
+      ? { ...(body as Record<string, unknown>), providerAuthToken: token }
+      : body
     try {
-      const response = await fetchImpl(url, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(config.requestTimeoutMs),
-      })
+      const serializedBody = requestBody === undefined ? undefined : JSON.stringify(requestBody)
+      let currentUrl = validateProviderUrl(new URL(url), config.allowedHosts, 'provider request').href
+      let response: Response | null = null
+      for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+        response = await fetchImpl(currentUrl, {
+          method,
+          headers,
+          body: serializedBody,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(config.requestTimeoutMs),
+        })
+        if (![301, 302, 303, 307, 308].includes(response.status)) break
+        if (redirectCount === 3) {
+          return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider returned too many redirects', false) }
+        }
+        const location = response.headers.get('location')
+        if (!location) {
+          return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider redirect omitted a location', false) }
+        }
+        const nextUrl = validateProviderUrl(new URL(location, currentUrl), config.allowedHosts, 'provider redirect')
+        if (nextUrl.hostname !== new URL(url).hostname) {
+          return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider redirect changed host', false) }
+        }
+        currentUrl = nextUrl.href
+      }
+      if (!response) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider returned no response', false) }
       let payload: unknown = null
       try {
         payload = await response.json()
@@ -114,7 +171,7 @@ export function createHttpAgentPort(
       }
       return resultFromResponse(payload, response.status, Date.now() - startedAt)
     } catch (error) {
-      return { status: 'failed', providerRunId: null, error: classifyNetworkError(error) }
+      return { status: 'failed', providerRunId: null, error: classifyRequestError(error) }
     }
   }
 
@@ -135,15 +192,21 @@ export function createHttpAgentPort(
     },
     async poll(jobId: string) {
       const providerRunIdValue = await dependencies.resolveProviderRunId(jobId)
-      if (!providerRunIdValue) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider run ID is not recorded; refusing to start a duplicate job', false) }
-      const url = config.pollUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
-      return request(url, 'GET', undefined, jobId)
+      const url = providerRunIdValue
+        ? config.pollUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
+        : config.reconcileUrlTemplate?.replace('{jobId}', encodeURIComponent(jobId))
+      if (!url) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider run ID is not recorded and no reconciliation endpoint is configured', false) }
+      const method = providerRunIdValue ? (config.pollMethod ?? 'GET') : (config.reconcileMethod ?? 'GET')
+      const body = method === 'POST'
+        ? { jobId, ...(providerRunIdValue ? { providerRunId: providerRunIdValue } : {}) }
+        : undefined
+      return request(url, method, body, jobId)
     },
     async cancel(jobId: string) {
       const providerRunIdValue = await dependencies.resolveProviderRunId(jobId)
       if (!providerRunIdValue) return
       const url = config.cancelUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
-      await request(url, 'POST', { jobId }, jobId)
+      await request(url, 'POST', { jobId, providerRunId: providerRunIdValue }, jobId)
     },
   }
 }

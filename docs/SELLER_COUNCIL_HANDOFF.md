@@ -1,12 +1,20 @@
 # Seller council v5.3 — agreed format and implementation handoff
 
-Status: user-confirmed specification, October 24, 2026. **Buyer migration implemented with fixture sellers; seller/live integration pending.**
-See [buyer migration status and exact seller seam](BUYER_COUNCIL_MIGRATION.md).
-The original agreement was documentation-only; the current `geoff/buyer` checkout now implements the buyer-owned migration.
-It does not edit `feature/seller-side`, merge branches, regenerate schemas or
-change provider agents. The active product/technical authority is
+Status: user-confirmed specification, October 24, 2026. The seller-side v2
+contract/worker/Convex bridge is now implemented on `feature/seller-side`; this
+document remains the normative format and acceptance handoff, not live-provider
+proof. It was originally published to `dev` from `geoff/buyer` so both
+developers could consume the agreed format without merging buyer implementation.
+The active product/technical authority is
 [implementation spec v5.3](../BUYERUNION_IMPLEMENTATION.md), sections 5.7 and 9.
 Historical review/test results do not establish acceptance of this new protocol.
+Implementation paths and baseline behavior below describe the feature branches,
+not code delivered by this documentation-only commit to `dev`.
+See [buyer migration status and exact seller seam](BUYER_COUNCIL_MIGRATION.md).
+The standalone buyer checkout remains fixture-backed for seller roles; the
+merged `feature/seller-side` checkout consumes the canonical v2 contracts and
+routes configured Fetch jobs through the seller bridge. This document does not
+claim live provider acceptance or replace the active implementation spec.
 
 ## Agreed product flow
 
@@ -58,11 +66,12 @@ offer per eligible candidate → independent research → deterministic comparis
 | Buyer events/UI | Earlier safe progress and summary | Publish only checked short public exchanges and real phase counts; preserve sealed prices and privacy |
 | Service revisions | Terms derived from baseline policy | Versioned permitted service options, private incremental cost/contribution checks and exact offer/quote/order snapshots |
 
-The buyer branch keeps seller roles as fixtures while CREAO can serve intake,
-moderator_brief, moderator_adjudication and evidence_summary. Its new two-agent
-definitions and council-v2 configuration replace the legacy moderator prompt.
-The table above records the pre-migration baseline; see the linked buyer migration
-status for implemented B work and the exact remaining S boundary. Live combined
+The standalone buyer branch keeps seller roles as fixtures while CREAO can
+serve buyer-owned intake, council and evidence roles. The merged seller
+checkout routes configured seller advocacy, reply and final jobs through Fetch,
+with explicit fixture fallback for CI/demo. The table above records the
+pre-migration baseline; see the linked buyer migration status for implemented
+buyer work and the exact remaining live deployment boundary. Live combined
 acceptance remains pending.
 
 ## Ownership and integration sequence
@@ -141,12 +150,11 @@ acceptance remains pending.
 
 ## Seller-branch documentation sync
 
-When the main conversation resumes consolidation, port the v5.3 references and
-acceptance gates into the seller branch's `SELLER_IMPLEMENTATION_PLAN.md`,
-`SELLER_SPONSOR_PROOF.md`, `BUYER_SELLER_INTEGRATION_NOTES.md`,
-`SELLER_FETCH_CONFIGURATION.md`, `LOCAL_CONTEXT.md` and
-`agents/fetch-seller/README.md` where present. Replace blanket bans on all
-competitor information with an explicit distinction between the approved public
-snapshot and forbidden private/arbitrary cross-merchant access. Replace legacy
-moderator-authored challenge/usefulness-gate claims and record implementation
-gaps honestly. Those branch-only files have not been edited in this checkout.
+The seller branch has synchronized the v5.3 references and acceptance gates
+into `SELLER_IMPLEMENTATION_PLAN.md`, `SELLER_SPONSOR_PROOF.md`,
+`BUYER_SELLER_INTEGRATION_NOTES.md`, `SELLER_FETCH_CONFIGURATION.md`,
+`LOCAL_CONTEXT.md` and `agents/fetch-seller/README.md` where present. The
+documentation distinguishes the approved public snapshot from forbidden
+private/arbitrary cross-merchant access, replaces legacy moderator-authored
+challenge/usefulness-gate claims, and records the remaining live deployment
+gaps honestly.
