@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current implementation checkpoint: `d3609ac` (`fix: gate final revisions on accepted offers`).
+Current implementation checkpoint: `895224c` (`feat: add seller operator console`).
 This context file is pushed in subsequent documentation-only checkpoints.
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`.
@@ -364,8 +364,9 @@ specific proof criteria.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime baseline and seller-owned v5.3
-final validation core implemented; canonical council contract migration,
+Status at this context update: **seller runtime baseline, seller-owned v5.3
+final validation core, and a fixture-safe seller operator surface implemented;
+canonical council contract migration, authenticated frontend Convex wiring,
 sealed Convex final-invitation persistence, hosted deployment, live route
 verification and buyer integration pending.**
 
@@ -398,6 +399,16 @@ Completed:
   monotonicity and term monotonicity. Thirty seller tests cover the accepted
   path and these rejection cases; Convex final-invitation persistence and v2
   provider wiring remain intentionally pending.
+- `convex/lib/sellerOperator.ts` now provides the shared seller operator
+  projection and fail-closed listing-draft validation. It copies catalog facts
+  before exposing them to the UI and does not include private buyer or seller
+  economics in the operator projection.
+- `src/SellerOperator.tsx`, `src/operatorDemo.ts` and
+  `src/SellerOperator.css` provide a fixture-safe operator flow for catalog
+  search/filtering, immutable listing-version edits, MSRP/floor/quantity
+  guardrails, authorized service options, merchant pause/resume, activity and
+  agent-readiness status. It is explicitly labeled fixture preview and does
+  not pretend to be authenticated Convex data.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -424,8 +435,12 @@ Pending:
 - Add the Convex sealed-invitation/final-version persistence and buyer-owned
   atomic promotion around the existing pure parent-bound frozen-basket,
   monotonic-total/term and bundle-contribution checks.
-- Finish a seller-only operator/demo surface and buyer-to-seller integration
-  tests.
+- Configure a frontend Auth provider and `ConvexProviderWithAuth`, then replace
+  the fixture source in the operator surface with authenticated
+  `seller.getMerchantView`, `updateOwnListing`, `publishOwnPolicy` and
+  `pauseOwnMerchant` calls. Keep the fixture preview for deterministic demo
+  and test mode; add operator integration tests without exposing private
+  economics.
 - Merge with the buyer branch only after contract regeneration and duplicate
   provider-dispatch review.
 - Configure and prove CREAO buyer role, Apify evidence, Visa simulation,
@@ -457,8 +472,10 @@ Pending:
    replay with same digest, replay with changed digest, pending-to-completed
    polling, ambiguous-start reconciliation, cancellation, malformed output,
    timeout, auth rejection, and one v5.3 council-role run after migration.
-8. Append the evidence to `docs/SELLER_SPONSOR_PROOF.md`, then build the
-   seller-only operator/demo flow and its integration tests.
+8. Configure frontend Auth/`ConvexProviderWithAuth`, wire the already
+   authenticated seller operator query/mutations, and add integration tests
+   for merchant isolation, immutable versions and pause/resume. Keep the
+   current fixture preview labeled as fixture-only.
 9. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
    integrate through `prepareSellerJob`/`attachSellerBrief`/`dispatch`, and
    verify there is exactly one provider call per seller job.

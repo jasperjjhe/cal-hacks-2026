@@ -32,4 +32,4 @@ The production deployment and Auth provider still require team configuration. Af
 
 See [`docs/SELLER_FETCH_CONFIGURATION.md`](../docs/SELLER_FETCH_CONFIGURATION.md) for the exact Convex environment variables and [`docs/BUYER_SELLER_INTEGRATION_NOTES.md`](../docs/BUYER_SELLER_INTEGRATION_NOTES.md) for the buyer-branch handoff. No provider credential or live sponsor run is present in this repository.
 
-The current Vite UI remains a scaffold while the buyer-side contributor and UI work proceed against the versioned seller contract.
+The Vite UI now contains a fixture-safe seller operator preview in `src/SellerOperator.tsx`. It uses the shared seller projection/validation seam and demonstrates catalog search, listing-version edits, policy/service-option guardrails, merchant pause/resume and activity/readiness status. It is labeled fixture-only because the frontend Auth provider is not configured yet; the next UI step is to use `ConvexProviderWithAuth` and wire the existing authenticated `seller.getMerchantView`, `updateOwnListing`, `publishOwnPolicy` and `pauseOwnMerchant` functions.

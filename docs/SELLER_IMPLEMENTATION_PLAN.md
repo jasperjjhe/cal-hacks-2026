@@ -77,6 +77,7 @@ The first seller-only checkpoint is now implemented on `feature/seller-side`:
 - `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. The seller schema and generated bindings are now pushed to the linked Convex development deployment and the revisioned fixture catalog has been seeded there. Production/Auth configuration and live provider sponsor evidence remain pending.
 - The seller-owned v5.3 service-authority groundwork is now implemented without widening the legacy v1 provider wire contract: versioned policies persist an immutable `finalServiceOptions` allowlist, validate bounded public terms plus private nonnegative incremental bundle cost, resolve only server-authorized option IDs, and persist `serviceOptionId` on accepted offer versions. The pure final validator is implemented separately; Convex final-invitation persistence and provider-role wiring remain gated on the buyer-owned canonical v2 council envelope.
 - `convex/lib/sellerValidation.ts` now exposes the seller-owned pure `validateFinalOfferRevision` seam. It accepts only the narrow final-candidate domain input and checks accepted-opening status, job/merchant/candidate/parent/policy scope, frozen listing identity and economics, brief fit, quantity and stock, non-increasing item prices, server floors/reference prices, allowlisted service terms, incremental contribution, delivered-total monotonicity and non-weakened terms. Thirty dependency-light seller tests cover accepted and rejected revisions. Convex persistence and the provider worker remain gated on the buyer-owned canonical v2 council envelope so this branch does not create a parallel council schema.
+- `convex/lib/sellerOperator.ts` is the shared operator projection and listing-draft validation seam. `src/SellerOperator.tsx` renders a fixture-safe merchant control plane that exercises immutable listing versions, policy/service-option guardrails, merchant pause/resume and activity/readiness states without inventing a browser-side seller contract. It is explicitly a fixture preview until the frontend Auth provider is configured and the existing authenticated Convex functions are wired.
 
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
 
@@ -127,7 +128,8 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 ### S4: integration handoff
 
 - Publish generated/type-checked contract usage for the buyer-side contributor.
-- Add a seller-only demo/operator flow and integration tests that a buyer workflow can call without gaining merchant secrets.
+- The seller-only fixture operator flow is implemented in `src/SellerOperator.tsx`; wire it to the authenticated `seller.getMerchantView`, `updateOwnListing`, `publishOwnPolicy` and `pauseOwnMerchant` functions after the frontend Auth provider is configured.
+- Add integration tests that a buyer workflow can call without gaining merchant secrets, and prove merchant isolation, immutable versions and pause/resume behavior.
 - Record exact live/fixture modes, limitations, run IDs and code paths in `docs/SELLER_SPONSOR_PROOF.md`.
 - See `docs/SELLER_FETCH_CONFIGURATION.md` and `docs/BUYER_SELLER_INTEGRATION_NOTES.md` for the exact environment variables, internal action sequence and merge points.
 
