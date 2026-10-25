@@ -64,11 +64,18 @@ class SellerInputError(ValueError):
 
 @lru_cache(maxsize=1)
 def _generated_schema() -> Mapping[str, Any]:
-    schema_path = Path(__file__).with_name("seller.schema.json")
     try:
+        schema_path = Path(__file__).with_name("seller.schema.json")
         value = json.loads(schema_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise SellerInputError("generated seller schema is unavailable") from error
+    except (NameError, OSError, ValueError):
+        # Agentverse-hosted modules may have no __file__ or data files; fall
+        # back to the identical generated module (see export-contracts.mjs).
+        try:
+            from seller_schema_data import SCHEMA_JSON
+
+            value = json.loads(SCHEMA_JSON)
+        except (ImportError, ValueError) as error:
+            raise SellerInputError("generated seller schema is unavailable") from error
     if not isinstance(value, dict) or not isinstance(value.get("$defs"), dict):
         raise SellerInputError("generated seller schema is invalid")
     return value

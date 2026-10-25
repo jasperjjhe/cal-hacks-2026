@@ -16,7 +16,7 @@ after review with:
 
 ```text
 avctl auth status
-avctl hosting deploy -f agent.py,protocol.py,seller_logic.py,seller.schema.json
+avctl hosting deploy -f agent.py,protocol.py,seller_logic.py,seller_schema_data.py,seller.schema.json
 ```
 
 `hosting deploy` updates and restarts the configured Agentverse agent. Do not
