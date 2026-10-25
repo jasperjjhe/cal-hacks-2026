@@ -236,6 +236,12 @@ def headphone_input(minimum_hours):
 
 
 class SellerLogicTests(unittest.TestCase):
+    def test_embedded_schema_matches_generated_json(self):
+        import json
+        from pathlib import Path
+        from seller_schema_data import SCHEMA_JSON
+        self.assertEqual(json.loads(SCHEMA_JSON), json.loads(Path(__file__).with_name("seller.schema.json").read_text()))
+
     def test_hour_based_battery_requirement_matches_real_headphone_catalog(self):
         decision = build_decision(headphone_input(20), "seller_initial")
         self.assertEqual(decision["kind"], "propose")
