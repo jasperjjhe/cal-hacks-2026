@@ -55,48 +55,39 @@ const samples = [
 export default function BackendApp() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signIn } = useAuthActions();
+  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const started = useRef(false);
-  async function connect() {
-    setError("");
-    try {
-      await signIn("anonymous");
-    } catch {
-      started.current = false;
-      setError(
-        "Your buyer session could not connect. Check the local backend and authentication setup.",
-      );
-    }
-  }
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated && !started.current) {
-      started.current = true;
-      void signIn("anonymous").catch(() => {
-        started.current = false;
-        setError(
-          "Your buyer session could not connect. Check the local backend and authentication setup.",
-        );
-      });
-    }
-  }, [isLoading, isAuthenticated, signIn]);
-  if (!isAuthenticated)
-    return (
-      <div className="connection-screen">
-        <div className="brand-mark">✦</div>
-        <h1>BuyerUnion</h1>
-        <p role="status">
-          {error || "Connecting your private buyer workspace…"}
-        </p>
-        {error && (
-          <button className="primary" onClick={() => void connect()}>
-            Retry connection
-          </button>
-        )}
-      </div>
-    );
-  return <Workspace />;
+  if (isLoading) return <div className="connection-screen" role="status">Loading your account…</div>;
+  if (isAuthenticated) return <Workspace />;
+  return (
+    <div className="connection-screen">
+      <div className="brand-mark">✦</div>
+      <h1>BuyerUnion</h1>
+      <p>{flow === "signUp" ? "Create your buyer account" : "Sign in to your buyer workspace"}</p>
+      <form onSubmit={async event => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        setBusy(true);
+        setError("");
+        try { await signIn("password", data); }
+        catch { setError(flow === "signIn" ? "Could not sign in. Check your email and password." : "Could not create an account. Try signing in if you already have one."); }
+        finally { setBusy(false); }
+      }}>
+        <input type="hidden" name="flow" value={flow} />
+        <label>Email<input name="email" type="email" autoComplete="email" required maxLength={254} /></label>
+        <label>Password<input name="password" type="password" autoComplete={flow === "signUp" ? "new-password" : "current-password"} minLength={8} maxLength={256} required /></label>
+        {error && <p role="alert">{error}</p>}
+        <button className="primary" disabled={busy}>{busy ? "Connecting…" : flow === "signUp" ? "Create account" : "Sign in"}</button>
+        <button type="button" disabled={busy} onClick={() => { setFlow(flow === "signIn" ? "signUp" : "signIn"); setError(""); }}>
+          {flow === "signIn" ? "Create an account" : "Already have an account? Sign in"}
+        </button>
+      </form>
+    </div>
+  );
 }
 function Workspace() {
+  const { signOut } = useAuthActions();
   const requests = useQuery(api.buyer.listRequests, {});
   const profiles = useQuery(api.buyer.getProfiles, {});
   const [requestId, setRequestId] = useState<string | null>(() =>
@@ -282,23 +273,23 @@ function Workspace() {
         <div className="sidebar-note">
           Private buyer session
           <small>
-            Your requests and approvals are stored in the backend. Keep this
-            browser session to return to them.
+            Your requests and approvals are saved to your buyer account.
           </small>
         </div>
         <div className="account">
           <span className="avatar">BU</span>
           <span>
-            Anonymous buyer<small>Authenticated workspace</small>
+            Buyer account<small>Authenticated workspace</small>
           </span>
         </div>
+        <button onClick={() => { history.replaceState(null, "", location.pathname); void signOut().catch(() => setError("Could not sign out. Please try again.")); }}>Sign out</button>
       </aside>
       <main>
         <header className="topline">
           <span>WORKSPACE / {page === "overview" ? "Overview" : page}</span>
           <span className="mode">
             <i />
-            Demo merchants · simulation
+            Demo merchants · {purchase?.quote?.paymentMode === "stripe_test" ? "Stripe test checkout" : "simulation"}
           </span>
         </header>
         {error && (
@@ -409,7 +400,9 @@ function Workspace() {
                       : run?.modes.agents === "mixed"
                         ? "Live buyer agents; deterministic seller fixtures."
                       : "Deterministic agent fixtures."}{" "}
-                    No payment is taken.
+                    {run?.modes.payment === "stripe_test"
+                      ? "Stripe test checkout; no real money is charged."
+                      : "No payment is taken."}
                   </p>
                 </div>
                 <div className="backend-actions">
@@ -673,6 +666,9 @@ function Workspace() {
                         </span>
                         <h2>{purchase.execution.resultMessage}</h2>
                         <p>Attempt {purchase.execution.executionId}</p>
+                        {purchase.execution.status === "pending" && purchase.execution.checkoutUrl && (
+                          <a className="primary" href={purchase.execution.checkoutUrl}>Continue to Stripe payment</a>
+                        )}
                         {purchase.execution.orderId && (
                           <p>Order {purchase.execution.orderId}</p>
                         )}
@@ -876,7 +872,7 @@ function Workspace() {
           <section className="offers-section">
             <div className="page-heading">
               <h1>Your orders</h1>
-              <p>Frozen purchase snapshots from successful simulations.</p>
+              <p>Your completed orders and frozen purchase details.</p>
             </div>
             {orders?.map((o) => (
               <article className="panel backend-receipt" key={o.orderId}>
@@ -892,7 +888,11 @@ function Workspace() {
                     )
                     .join(" + ")}
                 </p>
-                <p>Demo order completed; no payment taken.</p>
+                <p>
+                  {o.quote.paymentMode === "stripe_test"
+                    ? "Stripe test payment completed; no real money charged."
+                    : "Demo order completed; no payment taken."}
+                </p>
                 <button
                   className="secondary"
                   onClick={() => openRequest(o.requestId)}
@@ -910,7 +910,7 @@ function Workspace() {
             {page === "Connections" ? (
               <>
                 <p>
-                  Convex persistence and anonymous authentication are active.
+                  Your workspace uses Convex persistence and account authentication.
                 </p>
                 <p>
                   CREAO buyer agents and Apify evidence use server configuration.
@@ -947,7 +947,7 @@ function Workspace() {
                   confirmation and target consent.
                 </p>
                 <p>
-                  Payments are simulations. Delivery region is San Francisco;
+                  Checkout supports simulation or Stripe test payments. Delivery region is San Francisco;
                   currency is USD.
                 </p>
               </>
@@ -1752,8 +1752,7 @@ function QuotePanel({
           : "Quote expired. Select an offer again to renew and review the terms."}
       </p>
       <p>
-        Payment mode: simulation · operation: demo order. No card or payment is
-        required.
+        {quote.paymentMode === "stripe_test" ? "Stripe test checkout. Use a test card; no real money is charged." : "Simulation. No card or payment is required."}
       </p>
       <label className="backend-consent">
         <input
@@ -1762,14 +1761,14 @@ function QuotePanel({
           onChange={(e) => setConsent(e.target.checked)}
         />
         I approve this exact configuration, quantity, delivered total and
-        commercial terms for a simulated order.
+        commercial terms for this {quote.paymentMode === "stripe_test" ? "Stripe test purchase" : "simulated order"}.
       </label>
       <button
         className="primary"
         disabled={busy || !remaining || !consent}
         onClick={onApprove}
       >
-        {busy ? "Submitting approval…" : "Approve simulated order"}
+        {busy ? "Submitting approval…" : quote.paymentMode === "stripe_test" ? "Approve and continue to payment" : "Approve simulated order"}
       </button>
     </section>
   );

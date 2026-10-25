@@ -200,7 +200,7 @@ export const getBuyerRun = query({
           : cards.some((c) => c.evidenceStatus === "cached")
             ? "cached"
             : "unavailable",
-        payment: "simulation",
+        payment: process.env.PAYMENT_MODE === "stripe_test" ? "stripe_test" : "simulation",
       },
       error: run.error,
     });
