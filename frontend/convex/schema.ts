@@ -1,5 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { authTables } from '@convex-dev/auth/server'
+import { buyerTables } from './buyer/schema.ts'
 
 const ref = v.object({ id: v.string(), version: v.number() })
 const nullableString = v.union(v.string(), v.null())
@@ -44,7 +46,7 @@ const finalServiceOption = v.object({
   incrementalCostCents: v.number(),
 })
 
-export default defineSchema({
+const sellerTables = {
   merchants: defineTable({
     merchantId: v.string(),
     displayName: v.string(),
@@ -59,7 +61,9 @@ export default defineSchema({
     .index('by_enabled_paused', ['enabled', 'paused']),
 
   memberships: defineTable({
-    authTokenIdentifier: v.string(),
+    // Optional for legacy rows; migration must bind a concrete token before access.
+    authTokenIdentifier: v.optional(v.string()),
+    authSubject: v.optional(v.string()),
     merchantId: v.string(),
     role: v.union(v.literal('owner'), v.literal('operator')),
     enabled: v.boolean(),
@@ -68,6 +72,16 @@ export default defineSchema({
     .index('by_authTokenIdentifier', ['authTokenIdentifier'])
     .index('by_merchantId', ['merchantId'])
     .index('by_authTokenIdentifier_and_merchantId', ['authTokenIdentifier', 'merchantId']),
+
+  // Transitional provisioning records are retained for the buyer-side demo
+  // admin path. Seller authorization never trusts this table; it derives
+  // access from memberships and the authenticated token identifier.
+  operatorAccounts: defineTable({
+    userId: v.string(),
+    merchantId: v.string(),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+  }).index('by_user', ['userId']).index('by_merchantId', ['merchantId']),
 
   categoryProfiles: defineTable({
     profileId: v.string(),
@@ -185,7 +199,13 @@ export default defineSchema({
     policyId: v.string(),
     policyVersion: v.number(),
     profileVersions: v.record(v.string(), v.number()),
-    role: v.union(v.literal('seller_initial'), v.literal('seller_response'), v.literal('seller_final')),
+    role: v.union(
+      v.literal('seller_initial'),
+      v.literal('seller_response'),
+      v.literal('seller_final'),
+      v.literal('seller_advocacy'),
+      v.literal('seller_reply'),
+    ),
     provider: v.union(v.literal('fixture'), v.literal('fetch'), v.literal('creao')),
     providerConfigRevision: v.string(),
     inputDigest: v.string(),
@@ -220,8 +240,28 @@ export default defineSchema({
     jobId: v.string(),
     brief: v.any(),
     briefDigest: v.string(),
+    roleInput: v.optional(v.any()),
+    roleInputDigest: v.optional(nullableString),
+    openingCatalog: v.optional(v.any()),
+    openingCatalogDigest: v.optional(nullableString),
     createdAt: v.number(),
     updatedAt: v.number(),
+  }).index('by_jobId', ['jobId']),
+
+  sellerJobResults: defineTable({
+    jobId: v.string(),
+    role: v.union(
+      v.literal('seller_advocacy'),
+      v.literal('seller_reply'),
+      v.literal('seller_final'),
+    ),
+    output: v.any(),
+    outputDigest: v.string(),
+    validatedOffer: v.union(ref, v.null()),
+    providerRunId: nullableString,
+    providerModel: nullableString,
+    providerElapsedMs: nullableNumber,
+    createdAt: v.number(),
   }).index('by_jobId', ['jobId']),
 
   candidates: defineTable({
@@ -285,6 +325,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_reservationKey', ['reservationKey'])
+    .index('by_quoteId', ['quoteId'])
     .index('by_requestId_and_status', ['requestId', 'status'])
     .index('by_merchantId_and_status', ['merchantId', 'status']),
 
@@ -342,4 +383,6 @@ export default defineSchema({
     mode: v.literal('fixture'),
     createdAt: v.number(),
   }).index('by_seedRevision', ['seedRevision']),
-})
+}
+
+export default defineSchema({ ...authTables, ...sellerTables, ...buyerTables })

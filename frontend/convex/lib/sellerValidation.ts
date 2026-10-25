@@ -248,6 +248,21 @@ function numericValue(value: unknown, unit: string | null): number | null {
   return Number.isFinite(normalized) ? normalized : null
 }
 
+/** Convert a numeric requirement between compatible canonical unit families. */
+export function convertRequirementUnit(
+  value: number,
+  fromUnit: string | null,
+  toUnit: string | null,
+): number | null {
+  if (!Number.isFinite(value)) return null
+  if (fromUnit === toUnit) return value
+  const from = fromUnit === null ? null : NUMERIC_UNITS[fromUnit]
+  const to = toUnit === null ? null : NUMERIC_UNITS[toUnit]
+  if (!from || !to || from.family !== to.family) return null
+  const converted = value * from.multiplier / to.multiplier
+  return Number.isFinite(converted) ? converted : null
+}
+
 function compareNumeric(
   attribute: Attribute,
   requirementValue: number,
@@ -348,6 +363,15 @@ export function assessLine(
   )
   const coverage = softWeight === 0 ? null : Math.round((100 * softMatches) / softWeight)
   return { hardRequirementsPassed, coverage, requirements, reasons }
+}
+
+export function weightedCoverage(assessment: FitAssessment | RequirementResult[]): number | null {
+  const requirements = Array.isArray(assessment) ? assessment : assessment.requirements
+  const known = requirements.filter((requirement) => requirement.status !== 'unknown')
+  const total = known.reduce((sum, requirement) => sum + requirement.weight, 0)
+  if (total === 0) return null
+  const matched = known.reduce((sum, requirement) => sum + (requirement.status === 'satisfied' ? requirement.weight : 0), 0)
+  return Math.round((matched * 100) / total)
 }
 
 function findSnapshotInCatalog(catalog: CatalogSnapshot[], line: OfferLine): CatalogSnapshot | null {

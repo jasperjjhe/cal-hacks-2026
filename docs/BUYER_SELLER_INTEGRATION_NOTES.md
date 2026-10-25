@@ -10,17 +10,19 @@ tracked as a compatibility reference, not a merge target to apply wholesale.
 The branch now publishes the canonical v2 council source in
 `frontend/src/contracts/index.ts`, the generated seller worker schema in
 `frontend/convex/lib/seller.schema.json`, persisted council/invitation records,
-and fixture-backed role execution. The seller branch still uses its legacy v1
-provider boundary and has not enabled the new roles.
+and fixture-backed role execution. The seller merge now consumes that source
+for v2 role inputs/outputs and preserves its Fetch lifecycle.
 
-The current shared-file drift is material:
+The fetched reference still has shared-file drift, but the resolved seller
+checkout has reconciled it as follows:
 
-- The buyer branch now runs fixture-backed `seller_advocacy`, `seller_reply`
-  and final roles directly in `buyerJobs.ts` and calls
-  `internal.sellerInternal.validateAndStoreProposal` with `deferPromotion`.
-  The seller branch's validated internal seam does not yet accept that
-  argument. Replace the fixture invocation with the consolidated seller
-  dispatcher and reconcile the promotion boundary before integration.
+- The fetched buyer branch still runs fixture-backed `seller_advocacy`,
+  `seller_reply` and final roles directly in its `buyerJobs.ts`. The resolved
+  seller checkout replaces that invocation when the Fetch gateway is
+  configured, while preserving an explicit fixture fallback for CI/demo. The
+  seller seam accepts `deferPromotion`, stores canonical role inputs/results,
+  and exposes `internal.sellerInternal.getV2ProviderResult`; buyer remains
+  responsible for phase closure and publication.
 - The buyer branch removes `sellerAgent.ts`, `sellerJobInputs`, provider
   lifecycle metadata and the `starting`/`polling`/`ambiguous` states. A direct
   schema merge would remove Fetch dispatch, polling, reconciliation and
@@ -35,11 +37,14 @@ The current shared-file drift is material:
   seller authorization and generated API; do not overwrite seller ownership
   or hand-edit generated bindings.
 
-Until these seam differences are resolved, the seller branch must keep its v1
-Fetch worker and must not enable new council role names against the current
-seller wire contract. The seller migration must derive TypeScript/Python
-parsing and fixtures from the buyer-owned canonical source, not copy the
-fixture implementation or create a parallel council schema.
+The local integration gap is closed for deterministic and configured-provider
+execution: opening, advocacy, reply and final jobs use one seller job and one
+seller dispatcher path, and seller results cross back through the buyer job
+boundary without seller-owned phase closure or public promotion. Remaining
+work is external deployment/evidence and any future changes from the buyer
+developer that must be re-audited against this seam. The seller worker/parser
+and fixtures derive from the generated buyer-owned v2 source; no parallel
+council schema was added.
 
 The active Markdown specification remains normative while the buyer developer
 continues implementation. If `origin/geoff/buyer` lags, contradicts or omits
@@ -93,10 +98,17 @@ Seller entry points:
 
 - `internal.sellerInternal.prepareSellerJob`: binds the job to the merchant, policy, candidate IDs and workflow identifiers. It accepts an optional `brief` for an atomic handoff.
 - `internal.sellerInternal.attachSellerBrief`: idempotently stores the sanitized brief when the buyer has prepared the job first.
+- `internal.sellerInternal.attachSellerProviderInput`: idempotently stores and
+  scope-checks a canonical v2 advocacy/reply/final input.
 - `internal.sellerAgent.dispatch`: starts a configured Fetch/CREAO job, polls pending runs and validates terminal `SellerDecision` output.
 - `internal.sellerAgent.reconcile`: resolves an ambiguous start through the configured application-job reconciliation endpoint.
 - `internal.sellerAgent.cancel`: best-effort provider cancellation followed by a server-owned cancelled state.
 - `internal.sellerInternal.validateAndStoreProposal`: deterministic seller validation and immutable offer persistence; it never closes the buyer workflow.
+- `internal.sellerInternal.recordV2ProviderResult`: validates v2 seller
+  authorship/public references and records bounded provenance; final proposed
+  revisions are revalidated by the seller and are not promoted by seller code.
+- `internal.sellerInternal.getV2ProviderResult`: buyer-only read of the
+  validated seller result for its publication/phase logic.
 
 ## Merge hazards found on `origin/geoff/buyer`
 

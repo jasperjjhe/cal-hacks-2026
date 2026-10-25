@@ -1,35 +1,140 @@
-# BuyerUnion seller side
+# BuyerUnion buyer workspace
 
-This package contains the Vite frontend and the seller-owned Convex backend for BuyerUnion. The active backend contract is the repository-level [`BUYERUNION_IMPLEMENTATION.md`](../BUYERUNION_IMPLEMENTATION.md); the seller implementation plan and sponsor evidence ledger are in [`docs/SELLER_IMPLEMENTATION_PLAN.md`](../docs/SELLER_IMPLEMENTATION_PLAN.md) and [`docs/SELLER_SPONSOR_PROOF.md`](../docs/SELLER_SPONSOR_PROOF.md).
+The default React application uses an authenticated Convex backend. Requests,
+immutable confirmed versions, agent jobs, durable runs, evidence, quotes, stock
+allocations, approvals, execution attempts, bookmarks and orders are persisted.
+The historical browser-only prototype is available explicitly at `/mock`.
 
-The seller side owns merchant membership, catalog/profile data, immutable listing and pricing-policy versions, deterministic eligibility/fit/price validation, proposal persistence, inventory transition helpers and the provider-neutral Fetch.ai/CREAO seam. It does not own buyer prompts, private maximums, buyer runs, evidence, checkout or payment authority.
+## Council format: current implementation versus agreed revision
 
-## Local checks
+[Spec v5.3](../BUYERUNION_IMPLEMENTATION.md) and the
+[seller council handoff](../docs/SELLER_COUNCIL_HANDOFF.md) now require public
+competitive snapshots, merchant peer challenges/grouped replies, checked public
+exchanges and one sealed final invitation for every eligible candidate. The
+buyer now implements those phases, canonical v2 envelopes and validation with
+fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md)
+for the exact seller boundary. Live seller work and service authority are pending.
+Products stay fixed in the proposed round; above-budget hard-valid offers may
+compete privately with respect to affordability, while only affordable offers
+are selectable. User-approved MVP waits allow 90 seconds per CREAO role and eight minutes overall;
+there is no 45-second complete-comparison promise.
 
-Use Node `24.18.x` and npm `11.16.x` from `.nvmrc` and `package.json`.
+## Local setup
 
-```powershell
+Use Node 24 (`.nvmrc`) and the reviewed lockfile. From `frontend/`:
+
+```sh
+npm run security:dependencies
 npm ci --ignore-scripts
-npm run test:security
+npx convex dev --typecheck enable
+```
+
+Keep that terminal running. On a fresh checkout, select local development / use
+without an account if prompted. The CLI generates `.env.local` and downloads the
+local backend. A cloud deployment or provider key is not required. Unlike a cloud
+deployment, the local backend stops when its development process stops; `--once`
+is for deployment/checking, not for keeping the application online.
+
+In a second terminal, initialize the new local deployment once:
+
+```sh
+node scripts/setup-local-auth.mjs
+npx convex run sellerSeed:seedSellerDemo '{"seedRevision":"buyer-v1"}'
+npm run dev
+```
+
+Open `http://localhost:5173`. Restart Vite if it was running before `.env.local`
+was generated. Authentication keys and the local database are ignored by Git.
+Do not rerun the auth initializer on every startup: it rotates signing keys.
+For a local catalog seeded before the diagnostic fix, run
+`npx convex run buyerAdmin:upgradeDemoDiagnostics '{}'` once. This creates new
+listing versions and preserves allocations and historical order snapshots.
+
+Seeding is idempotent for the same revision and refuses to reset a nonempty
+catalog with another revision. Existing purchases are never silently reset.
+
+A buyer session signs in anonymously. Keep the same browser profile to return to
+its requests; cross-device recovery is outside this prototype. A request URL
+contains only the request ID; ownership is checked by the server on every call.
+
+## Working journey — current baseline
+
+1. Describe a laptop, clothing item, household accessory or small appliance.
+   Fixture intake proposes explicit supported details; it is not live language
+   interpretation. ISO dates such as `2026-11-15` are recognized. All missing or
+   unrecognized requirements can be entered in the editable brief.
+2. Review the primary item, up to two related items, quantities 1–10, conditions,
+   measurable hard requirements/weighted preferences, deadline and private
+   maximum delivered total. An optional shared target requires separate consent.
+3. Confirm and start. The backend coordinates actual persisted demo merchant
+   jobs, validates them through seller rules, runs at most one sealed price round
+   when useful, and checks evidence applicability. Missing real evidence is shown
+   honestly. These fixtures use synthetic product identities and diagnostics.
+4. Sort, compare, inspect sources/facts and save checked offers. Select one for a
+   freshly validated three-minute firm quote and atomic stock hold.
+5. Review exact product configuration, quantities, total and terms. Explicitly
+   approve the simulation. Duplicate approvals share one execution/order. A
+   decline releases stock; an unknown result retains it and reconciles the same
+   attempt. Success says **“Demo order completed; no payment taken.”**
+6. Reload or visit Orders to see persisted progress and the frozen receipt.
+
+Revising a brief invalidates its old run, releases unapproved holds and resets
+shared-target consent. Pending/unknown purchases block edits and new execution.
+Seven-day cleanup removes reconciled request/research data, retaining unresolved
+executions and stock ledger entries so deletion cannot restock sold goods.
+
+## Provider configuration
+
+CREAO buyer roles and the pinned Apify evidence Actor have implemented adapters
+with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRATIONS.md)
+for agent creation, Actor deployment, backend variables and live acceptance.
+Credentials and live execution are still unverified. Seller jobs remain fixtures
+until the seller branch is consolidated; live buyer runs report mixed agent mode.
+External payment is deferred; fixture agents and simulated checkout need no keys.
+
+Operator accounts are provisioned only through the internal
+`buyerAdmin:provisionOperator` action. Public password signup is disabled;
+membership is assigned server-side to one merchant. After password sign-in,
+call `seller.bindOperatorSession({})` before querying the seller workspace.
+It derives the merchant from an internal account grant and binds the exact
+`identity.tokenIdentifier`, following Dev S's authentication contract. Repeat
+this call after each new login; it is idempotent. Clients cannot choose a
+merchant or role. Use separate buyer/operator browser contexts. The buyer UI
+does not expose seller administration.
+
+For an existing deployment with the old `authSubject` membership field, deploy
+the transitional schema and run `npx convex run buyerAdmin:migrateOperatorMemberships '{}'`
+once. It is safe to repeat. Legacy subjects never authorize seller operations;
+existing token-identifier memberships remain valid. See the review-resolution
+handoff for details before merging Dev S's schema.
+
+## Checks
+
+```sh
+npm run contracts:check
+npm run test:buyer
 npm run test:seller
-npm run typecheck:seller
-npm run security
+npm run test:backend
+npm run typecheck:backend
 npm run lint
 npm run build
 ```
 
-The dependency policy requires the committed lockfile, npmjs-only HTTPS tarballs, SHA-512 integrity, a seven-day minimum release age, signature/audit checks and disabled lifecycle scripts. Do not use `npm install` in CI. Never add `.env`, `.env.local`, deploy keys, provider tokens, wallet material or raw buyer/merchant payloads to source control.
+`test:backend` runs real Convex function handlers and Workflow components against
+`convex-test`'s isolated database/runtime. It checks ownership, privacy, versioning,
+sealed promotion, category/basket behavior, contention, rollback, quote expiry,
+exact approval, duplicate execution, decline/unknown status, evidence provenance
+and seven-day retention. It does not prove external provider behavior.
 
-## Convex handoff
+`npm run ci` additionally installs from the lockfile with scripts disabled and
+checks dependency age, signatures, workflow policy and vulnerabilities. CI runs
+backend and seller checks as well as the original browser-mock regression tests.
 
-The backend source is under `convex/`. This branch is now linked to the team's Convex development deployment. Run `npx convex dev` or `npx convex dev --once` from this directory to push changes and regenerate the checked-in `convex/_generated/` bindings. The deployment URL is written to ignored `.env.local`; never commit that file, deploy keys or provider credentials.
+## Design reference
 
-The production deployment and Auth provider still require team configuration. After Auth and production settings are ready, use `npx convex deploy` from a protected environment. The development deployment and fixture seed are smoke-test evidence, not by themselves judge-facing production sponsor proof.
-
-## Provider handoff
-
-`convex/integrations/fixtureAgentPort.ts` is deterministic CI/demo behavior. `fetchAdapter.ts` and `creaoAdapter.ts` require explicit HTTPS start/poll/cancel URLs, optional application-job reconciliation, host allowlists, a provider config revision, a server-side token callback and an input resolver. The internal `sellerAgent` action claims a scoped job, invokes the configured provider, polls pending runs, preserves ambiguous starts and sends terminal output to seller validation. The adapters do not invent agent IDs or endpoints. A provider result is only accepted after the buyer-owned workflow supplies the scoped job, the seller validator checks the output and the stored provider run is reconciled.
-
-See [`docs/SELLER_FETCH_CONFIGURATION.md`](../docs/SELLER_FETCH_CONFIGURATION.md) for the exact Convex environment variables and [`docs/BUYER_SELLER_INTEGRATION_NOTES.md`](../docs/BUYER_SELLER_INTEGRATION_NOTES.md) for the buyer-branch handoff. No provider credential or live sponsor run is present in this repository.
-
-The Vite UI now contains a fixture-safe seller operator preview in `src/SellerOperator.tsx`. It uses the shared seller projection/validation seam and demonstrates catalog search, listing-version edits, policy/service-option guardrails, merchant pause/resume and activity/readiness status. It is the primary short-demo path with pre-provisioned merchant data; signup/onboarding is not required. If live Convex data materially improves the demo, use a controlled pre-authenticated development session with `ConvexProviderWithAuth` and the existing authenticated `seller.getMerchantView`, `updateOwnListing`, `publishOwnPolicy` and `pauseOwnMerchant` functions. Never add an unauthenticated production bypass.
+[Figma](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf), home `53:1134`,
+provides layout/colors. Rechecked during backend UI work on October 24. The navy
+sidebar, centered prompt and illustrated offer cards use existing design tokens
+and downloaded local images. Photos illustrate laptops; exact facts come from
+the selected variant. Responsiveness and interactions follow implementation
+judgment. Figma placeholder identities, ratings and provider claims are not data.

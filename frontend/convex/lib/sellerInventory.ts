@@ -102,18 +102,21 @@ export function reserveInTransaction(state: InventoryState, input: ReserveInput)
     }
     return { state, allocations: existing, replayed: true }
   }
-  const uniqueListings = new Set<string>()
+  const uniqueLines = new Set<string>()
+  const requested = new Map<string, number>()
   for (const line of input.lines) {
-    if (uniqueListings.has(line.listing.id)) {
-      throw new SellerContractError('DUPLICATE_LINE', 'a reservation cannot reserve the same listing twice')
+    if (uniqueLines.has(line.requestLineId)) {
+      throw new SellerContractError('DUPLICATE_LINE', 'a request line cannot be reserved twice')
     }
-    uniqueListings.add(line.listing.id)
+    uniqueLines.add(line.requestLineId)
     assertSafeQuantity(line.quantity, `lines.${line.requestLineId}.quantity`)
     const initial = state.initialQuantityByListing[line.listing.id]
     if (!Number.isSafeInteger(initial) || initial < 0) {
       throw new SellerContractError('INVALID_INPUT', 'listing inventory is missing or invalid', line.listing.id)
     }
-    if (quantityUsed(state, line.listing.id, input.now) + line.quantity > initial) {
+    const quantity = (requested.get(line.listing.id) ?? 0) + line.quantity
+    requested.set(line.listing.id, quantity)
+    if (quantityUsed(state, line.listing.id, input.now) + quantity > initial) {
       throw new SellerContractError('QUANTITY_UNAVAILABLE', 'one or more requested units are no longer available', line.listing.id)
     }
   }
@@ -139,7 +142,7 @@ export function reserveInTransaction(state: InventoryState, input: ReserveInput)
   }
 }
 
-export type AllocationTransition = 'lock' | 'sell' | 'release'
+export type AllocationTransition = 'lock' | 'sell' | 'release' | 'decline'
 
 export function transitionAllocationInTransaction(
   state: InventoryState,
@@ -156,7 +159,7 @@ export function transitionAllocationInTransaction(
     nextState = 'execution_locked'
   } else if (transition === 'sell' && allocation.state === 'execution_locked') {
     nextState = 'sold'
-  } else if (transition === 'release' && allocation.state === 'reserved') {
+  } else if ((transition === 'release' && allocation.state === 'reserved') || (transition === 'decline' && allocation.state === 'execution_locked')) {
     nextState = 'released'
   } else {
     throw new SellerContractError('INVALID_INPUT', `invalid allocation transition from ${allocation.state}`, allocationId)

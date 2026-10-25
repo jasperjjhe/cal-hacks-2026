@@ -867,6 +867,63 @@ test('Fetch Agentverse routes use fixed POST envelopes and keep the token server
   assert.equal(requests[0].body.providerAuthToken, 'shared-secret-not-logged')
 })
 
+test('HTTP provider adapter revalidates every redirect and rejects cross-host hops', async () => {
+  let calls = 0
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-redirect-v1',
+  }, {
+    getToken: async () => 'redirect-test-token',
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async () => {
+      calls += 1
+      return new Response(null, { status: 302, headers: { location: 'https://evil.example/steal' } })
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_redirect', requestId: 'req_redirect', requestVersion: 1, runId: 'run_redirect', phaseId: 'phase_redirect',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:redirect', inputRef: 'redirect',
+  })
+  assert.equal(result.status, 'failed')
+  if (result.status === 'failed') assert.equal(result.error.code, 'PROVIDER_PROTOCOL')
+  assert.equal(calls, 1)
+})
+
+test('HTTP provider adapter permits bounded same-host redirects without following them implicitly', async () => {
+  const requests = []
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-redirect-v1',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async (url) => {
+      requests.push(url)
+      return requests.length === 1
+        ? new Response(null, { status: 307, headers: { location: '/v2/start' } })
+        : new Response(JSON.stringify({ status: 'accepted', providerRunId: 'redirect-run' }), { status: 202, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_same_host_redirect', requestId: 'req_redirect', requestVersion: 1, runId: 'run_redirect', phaseId: 'phase_redirect',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:redirect', inputRef: 'redirect',
+  })
+  assert.equal(result.status, 'pending')
+  assert.deepEqual(requests, ['https://agent.example/start', 'https://agent.example/v2/start'])
+})
+
 test('HTTP provider adapter preserves an ambiguous timeout as a retryable failure without inventing a run ID', async () => {
   const port = createFetchAgentPort({
     provider: 'fetch',

@@ -13,18 +13,26 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "contracts:export": "node scripts/export-contracts.mjs",
+    "contracts:check": "node scripts/export-contracts.mjs --check",
+    "test:buyer": "node --test scripts/buyer-contracts.test.mjs scripts/buyer-mock.test.mjs scripts/buyer-audit.test.mjs",
     "security:dependencies": "node scripts/check-dependencies.mjs",
     "security:workflows": "node scripts/check-workflows.mjs",
-    "test:security": "node --test scripts/*.test.mjs",
-    "test:seller": "node --experimental-strip-types --test scripts/test-seller.mjs scripts/seller-schema.test.mjs",
-    "typecheck:seller": "tsc --project convex/tsconfig.json --noEmit",
+    "test:security": "node --test scripts/release-age.test.mjs",
     "security": "npm run security:dependencies && npm run security:workflows",
-    "ci": "npm run test:security && npm run test:seller && npm run typecheck:seller && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run lint && npm run build"
+    "ci": "npm run test:security && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run contracts:check && npm run test:buyer && npm run test:seller && npm run test:backend && npm run typecheck:backend && npm run lint && npm run build",
+    "test:backend": "vitest run tests/backend.test.ts tests/buyer-integrations.test.ts",
+    "smoke:creao": "node scripts/smoke-creao.mjs",
+    "test:seller": "node --test scripts/test-seller.mjs scripts/seller-schema.test.mjs",
+    "typecheck:backend": "tsc --noEmit -p convex/tsconfig.json"
   },
   "dependencies": {
+    "@convex-dev/auth": "0.0.96",
+    "@convex-dev/workflow": "0.4.10",
     "convex": "1.47.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -32,12 +40,14 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "convex-test": "0.0.62",
     "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "5.0.5"
   }
 }

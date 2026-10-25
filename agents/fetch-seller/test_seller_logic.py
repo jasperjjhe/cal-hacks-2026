@@ -98,6 +98,113 @@ def sample_input():
     }
 
 
+def public_offer(merchant_id, candidate_id, offer_id):
+    return {
+        "merchantId": merchant_id,
+        "candidateId": candidate_id,
+        "offer": {"id": offer_id, "version": 1},
+        "lines": [{
+            "requestLineId": "line_main",
+            "listing": {"id": f"{merchant_id}:P3", "version": 1},
+            "variantId": "P3",
+            "condition": "new",
+            "quantity": 1,
+            "configuration": {"ramGb": 16},
+        }],
+        "totalCents": 99_000,
+        "shippingCents": 1_500,
+        "arrivalAt": 1_800_000_000_000,
+        "warrantyMonths": 12,
+        "returnDays": 14,
+        "checks": [],
+        "claims": [],
+    }
+
+
+def council_input(role="seller_advocacy", challenges=None):
+    own = public_offer("merchant_a", "candidate_a", "offer_a")
+    rival = public_offer("merchant_b", "candidate_b", "offer_b")
+    brief = {
+        "schemaVersion": 1,
+        "request": {"id": "request_1", "version": 1},
+        "currency": "USD",
+        "deliveryRegion": "US-CA-SAN_FRANCISCO",
+        "deliveryDeadline": 1_800_000_000_000,
+        "lines": sample_input()["brief"]["lines"],
+        "sharedTarget": None,
+    }
+    fact = {
+        "id": "fact_rival_1",
+        "offer": rival["offer"],
+        "dimension": "fit",
+        "fieldId": "ramGb",
+        "value": 8,
+        "unit": "GB",
+        "requirementId": "r_ram",
+        "status": "unmet",
+        "provenance": "synthetic_demo",
+        "sourceIds": [],
+    }
+    snapshot = {
+        "schemaVersion": 2,
+        "snapshot": {"id": "snapshot_1", "version": 1},
+        "councilId": "council_1",
+        "request": {"id": "request_1", "version": 1},
+        "runId": "run_1",
+        "createdAt": 1_700_000_000_000,
+        "brief": brief,
+        "offers": [own, rival],
+        "approvedFactIds": [fact["id"]],
+        "approvedSourceIds": [],
+    }
+    return {
+        "schemaVersion": 2,
+        "jobId": "council_job_1",
+        "councilId": "council_1",
+        "request": {"id": "request_1", "version": 1},
+        "runId": "run_1",
+        "snapshot": {"id": "snapshot_1", "version": 1},
+        "snapshotDigest": "digest_1",
+        "phase": role.removeprefix("seller_") if role != "seller_final" else "reply",
+        "deadlineAt": 1_800_000_000_000,
+        "role": role,
+        "merchantId": "merchant_a",
+        "competition": snapshot,
+        "facts": [fact],
+        "ownOffers": [own["offer"]],
+        "comparisons": [],
+        "challenges": challenges or [],
+        "defenses": [],
+        "replies": [],
+    }
+
+
+def final_input():
+    council = council_input()
+    own = council["competition"]["offers"][0]
+    return {
+        "schemaVersion": 2,
+        "jobId": "final_job_1",
+        "roundId": "round_1",
+        "councilId": "council_1",
+        "snapshot": {"id": "snapshot_1", "version": 1},
+        "snapshotDigest": "digest_1",
+        "outcomeVersion": 1,
+        "candidateId": "candidate_a",
+        "merchantId": "merchant_a",
+        "policy": {"id": "merchant_a:policy", "version": 1},
+        "request": {"id": "request_1", "version": 1},
+        "runId": "run_1",
+        "deadlineAt": 1_800_000_000_000,
+        "brief": council["competition"]["brief"],
+        "ownOffer": own,
+        "competition": council["competition"],
+        "facts": council["facts"],
+        "comparisons": [],
+        "outcomes": [],
+    }
+
+
 class SellerLogicTests(unittest.TestCase):
     def test_selects_hard_requirement_match_and_public_reference_price(self):
         decision = build_decision(sample_input())
@@ -124,6 +231,45 @@ class SellerLogicTests(unittest.TestCase):
         original = copy.deepcopy(payload)
         build_decision(payload)
         self.assertEqual(payload, original)
+
+    def test_v2_advocacy_is_bound_to_generated_contract_and_public_snapshot(self):
+        decision = build_decision(council_input(), "seller_advocacy")
+        self.assertEqual(decision["phase"], "advocacy")
+        self.assertEqual(decision["jobId"], "council_job_1")
+        self.assertEqual(decision["challenge"]["factId"], "fact_rival_1")
+
+    def test_v2_reply_answers_only_admitted_challenges(self):
+        challenge = {
+            "id": "challenge_1",
+            "authorMerchantId": "merchant_b",
+            "targetMerchantId": "merchant_a",
+            "challenge": {
+                "targetOffer": {"id": "offer_a", "version": 1},
+                "question": "Please verify.",
+                "sourceIds": [],
+                "claimId": None,
+                "factId": "fact_rival_1",
+            },
+        }
+        payload = council_input("seller_reply", [challenge])
+        decision = build_decision(payload, "seller_reply")
+        self.assertEqual(decision["answers"][0]["challengeId"], "challenge_1")
+        self.assertEqual(decision["answers"][0]["disposition"], "unknown")
+
+    def test_v2_final_is_parent_bound_hold_when_pricing_is_not_authorized_in_input(self):
+        decision = build_decision(final_input(), "seller_final")
+        self.assertEqual(decision["decision"]["kind"], "hold")
+        self.assertEqual(decision["decision"]["offer"], {"id": "offer_a", "version": 1})
+
+    def test_v2_input_rejects_private_fields_and_unknown_schema_fields(self):
+        payload = council_input()
+        payload["privateMaximumCents"] = 1
+        with self.assertRaises(SellerInputError):
+            build_decision(payload, "seller_advocacy")
+        payload = council_input()
+        payload["unexpected"] = True
+        with self.assertRaises(SellerInputError):
+            build_decision(payload, "seller_advocacy")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,7 @@
+{
+  "actorSpecification": 1,
+  "name": "buyerunion-evidence",
+  "title": "BuyerUnion approved product evidence",
+  "version": "0.1",
+  "dockerfile": "../Dockerfile"
+}

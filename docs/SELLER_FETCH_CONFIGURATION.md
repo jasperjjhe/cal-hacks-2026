@@ -1,6 +1,13 @@
 # Seller provider runtime handoff
 
-Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The v5.3 council format is now the active specification, and the buyer branch publishes the canonical v2 envelopes at `origin/geoff/buyer` `d863b16`; seller role migration is not implemented in this worker yet. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
+Status: the Convex action path, canonical v2 seller-role bridge, and
+Agentverse-compatible Fetch seller agent are implemented on
+`feature/seller-side`. The buyer reference publishes the canonical v2 envelopes
+at `origin/geoff/buyer` `d863b16`; this branch consumes that source and keeps
+buyer deadlines, retries, phase closure and publication authoritative. The
+repository still does not contain a real gateway URL or credential, so no live
+Fetch.ai prize claim is made until external deployment is configured and
+recorded.
 
 The agent source is in `agents/fetch-seller/`. It can be copied into an
 Agentverse Hosted Agent or run as a local uAgent. Hosted process globals are
@@ -22,12 +29,12 @@ The provider never receives the raw buyer conversation, requirement origins, pri
 
 ## v5.3 seller council roles
 
-The current worker still accepts the legacy seller role names and must not be
-advertised as v5.3 council support. The seller branch now has a pure,
-server-side `validateFinalOfferRevision` seam for the final-phase invariants,
-but it is not a provider wire contract or a persistence path. After the
-buyer-owned canonical contract source publishes schema-versioned council
-envelopes, migrate the Fetch worker, gateway and Convex handoff together:
+The worker, gateway contract, and Convex handoff now accept the canonical v2
+seller advocacy, grouped reply and final-invitation roles in addition to the
+legacy opening path. Convex persists the validated v2 result and keeps final
+promotion on the buyer-owned sealed lifecycle. The seller branch also applies
+the pure `validateFinalOfferRevision` checks before storing a proposed final
+offer.
 
 - seller advocacy: defend the merchant's frozen candidates and optionally emit
   one scoped peer challenge;
@@ -73,7 +80,7 @@ The agent returns JSON with a bounded `providerRunId` and one of `pending`, `com
 ## Agentverse setup
 
 1. Authenticate AVCTL with `avctl auth login` and check `avctl auth status`. The checked-in `agents/fetch-seller/.avctl/config.toml` links this repository to the existing Agentverse agent; do not create a second agent or use `hosting sync` as the source of truth.
-2. From `agents/fetch-seller/`, run `avctl hosting deploy -f agent.py,protocol.py,seller_logic.py`. The deployment uses the typed `SellerMessage` query contract and the pinned Agentverse-supported `uagents==0.25.5` repository manifest.
+2. From `agents/fetch-seller/`, run `avctl hosting deploy -f agent.py,protocol.py,seller_logic.py,seller.schema.json`. The deployment uses the typed `SellerMessage` query contract, canonical v2 schema copy and the pinned Agentverse-supported `uagents==0.25.5` repository manifest.
 3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret with `avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN`. Generate a new random value for the deployment; do not reuse a source-control or personal credential. The current linked agent is compiled and running.
 4. The current hosted wrapper does not expose `on_rest_post`; do not use the Agentverse address or control-plane URL as `FETCH_SELLER_START_URL`. The hosted seller is reached through the typed uAgents query contract.
 5. Run `gateway.py` on the public Mana edge with `FETCH_SELLER_AGENT_ADDRESS`, `FETCH_SELLER_GATEWAY_TOKEN`, and `FETCH_SELLER_SHARED_TOKEN`. Terminate TLS at the Mana/public edge and expose only the four fixed `/seller/jobs*` POST routes. The gateway forwards to the fixed Agentverse address and never accepts a client-supplied destination or provider secret.
@@ -117,11 +124,11 @@ Agentverse's hosted allowlisted runtime is the intended submission path.
 
 ## Provider allocation
 
-The planned sponsor architecture assigns Fetch.ai to the seller role: each seller job gets one isolated Fetch run against that merchant's own catalog and policy, with v5.3 advocacy, grouped-reply and final roles added after the contract migration. CREAO is planned for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller action supports the same provider-neutral port for future configuration, but do not run both providers for the same seller job or use CREAO as silent failover. If CREAO is intentionally selected for a seller/merchant-operations role, use the analogous `CREAO_SELLER_*` variables and record why the role is distinct and necessary.
+The planned sponsor architecture assigns Fetch.ai to the seller role: each seller job gets one isolated Fetch run against that merchant's own catalog and policy, including v5.3 advocacy, grouped-reply and final roles. CREAO is reserved for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller action uses the same provider-neutral port, but never runs both providers for one seller job or uses CREAO as silent failover. If CREAO is intentionally selected for a seller/merchant-operations role, use the analogous `CREAO_SELLER_*` variables and record why the role is distinct and necessary.
 
 ## Buyer-side integration note
 
-`origin/geoff/buyer` currently has its own buyer job dispatcher and selects CREAO for live mode. When the branches are integrated, keep one provider call per seller job and choose the provider from server configuration. For a Fetch seller job, the buyer workflow must pass the `brief` to `sellerInternal.prepareSellerJob` or call `sellerInternal.attachSellerBrief` before scheduling `sellerAgent.dispatch`. It must not send the buyer job's larger input object to the seller provider.
+The fetched buyer reference still has fixture-backed seller calls, but the merged seller branch now routes Fetch-configured opening, advocacy, reply and final jobs through `sellerAgent.dispatch`. It passes the brief or canonical role input before dispatch, and the buyer consumes the seller status/result bridge without giving the seller the larger buyer job object. With no Fetch gateway configured, the same paths remain explicitly fixture-backed for CI and the short demo.
 
 The seller action does not close a buyer run, publish a shortlist, reserve stock, approve a quote or execute payment. Those remain buyer-owned responsibilities. The buyer completion handler should consume the seller result/status and advance only the expected run/phase.
 

@@ -23,12 +23,13 @@ from protocol import (
     SellerMessage,
     StartRequest,
 )
-from seller_logic import SellerInputError, bounded_id, build_decision
+from seller_logic import SellerInputError, bounded_id, build_decision, validate_v2_input
 
 
 AGENT_NAME = os.getenv("FETCH_SELLER_AGENT_NAME", "buyerunion-fetch-seller")
 SHARED_TOKEN_ENV = "FETCH_SELLER_SHARED_TOKEN"
 MODEL_NAME = "fetch-seller-deterministic-v1"
+V2_ROLES = {"seller_advocacy", "seller_reply", "seller_final"}
 
 
 def _provider_run_id(job_id: str) -> str:
@@ -88,14 +89,21 @@ def _request_job_id(value: Any) -> tuple[str, str]:
 
 
 def _validate_start_envelope(request: StartRequest, job_id: str) -> None:
-    if _validate_job_id(request.runId) != request.input.get("job", {}).get("runId"):
-        raise SellerInputError("request and input run IDs do not match")
-    if request.input.get("job", {}).get("jobId") != job_id:
-        raise SellerInputError("request and input job IDs do not match")
-    if request.input.get("job", {}).get("phaseId") != request.phaseId:
-        raise SellerInputError("request and input phase IDs do not match")
-    if request.input.get("job", {}).get("role") != request.role:
-        raise SellerInputError("request and input roles do not match")
+    if request.role in V2_ROLES:
+        root = validate_v2_input(request.input, request.role)
+        if root.get("jobId") != job_id or root.get("runId") != request.runId:
+            raise SellerInputError("request and v2 input identity does not match")
+        if request.role in {"seller_advocacy", "seller_reply"} and root.get("phase") != request.role.removeprefix("seller_"):
+            raise SellerInputError("request and council phase do not match")
+    else:
+        if _validate_job_id(request.runId) != request.input.get("job", {}).get("runId"):
+            raise SellerInputError("request and input run IDs do not match")
+        if request.input.get("job", {}).get("jobId") != job_id:
+            raise SellerInputError("request and input job IDs do not match")
+        if request.input.get("job", {}).get("phaseId") != request.phaseId:
+            raise SellerInputError("request and input phase IDs do not match")
+        if request.input.get("job", {}).get("role") != request.role:
+            raise SellerInputError("request and input roles do not match")
     if not isinstance(request.inputDigest, str) or not 1 <= len(request.inputDigest) <= 256:
         raise SellerInputError("inputDigest is invalid")
     if not isinstance(request.inputRef, str) or not 1 <= len(request.inputRef) <= 256:
@@ -150,7 +158,7 @@ def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
             if existing.get("inputDigest") != request.inputDigest:
                 return _failed(provider_run_id, "REPLAY_REJECTED")
             return _response_from_record(existing)
-        decision = build_decision(request.input)
+        decision = build_decision(request.input, request.role)
     except SellerInputError:
         return _failed(provider_run_id, "INVALID_INPUT")
     except Exception:

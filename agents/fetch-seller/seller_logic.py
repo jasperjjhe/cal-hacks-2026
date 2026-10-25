@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import math
 import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
@@ -21,6 +23,7 @@ MAX_CATALOG_ENTRIES = 500
 MAX_REQUIREMENTS_PER_LINE = 40
 MAX_QUANTITY = 10
 MAX_INPUT_BYTES = 1_000_000
+MAX_SCHEMA_DEPTH = 40
 
 FORBIDDEN_INPUT_KEYS = {
     "privateMaximumCents",
@@ -57,6 +60,161 @@ NUMERIC_UNITS: Dict[str, Tuple[str, float]] = {
 
 class SellerInputError(ValueError):
     """Raised when an inbound provider envelope is outside the contract."""
+
+
+@lru_cache(maxsize=1)
+def _generated_schema() -> Mapping[str, Any]:
+    schema_path = Path(__file__).with_name("seller.schema.json")
+    try:
+        value = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SellerInputError("generated seller schema is unavailable") from error
+    if not isinstance(value, dict) or not isinstance(value.get("$defs"), dict):
+        raise SellerInputError("generated seller schema is invalid")
+    return value
+
+
+def _schema_ref(root: Mapping[str, Any], reference: str) -> Mapping[str, Any]:
+    if not reference.startswith("#/$defs/"):
+        raise SellerInputError("unsupported schema reference")
+    name = reference.removeprefix("#/$defs/")
+    schema = root.get("$defs", {}).get(name)
+    if not isinstance(schema, dict):
+        raise SellerInputError("generated schema reference is missing")
+    return schema
+
+
+def _schema_type_matches(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, Mapping)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    return False
+
+
+def _validate_generated_schema(value: Any, schema: Mapping[str, Any], label: str, depth: int = 0, root: Optional[Mapping[str, Any]] = None) -> None:
+    if depth > MAX_SCHEMA_DEPTH:
+        raise SellerInputError(f"{label} exceeds schema nesting limit")
+    root = root or schema
+    if "$ref" in schema:
+        reference = schema.get("$ref")
+        if not isinstance(reference, str):
+            raise SellerInputError(f"{label} has an invalid schema reference")
+        _validate_generated_schema(value, _schema_ref(root, reference), label, depth + 1, root)
+        return
+    for branch_key in ("oneOf", "anyOf"):
+        branches = schema.get(branch_key)
+        if branches is not None:
+            if not isinstance(branches, list) or not branches:
+                raise SellerInputError(f"{label} has an invalid schema branch")
+            successes = 0
+            for branch in branches:
+                if not isinstance(branch, dict):
+                    continue
+                try:
+                    _validate_generated_schema(value, branch, label, depth + 1, root)
+                    successes += 1
+                except SellerInputError:
+                    pass
+            if successes == 0:
+                raise SellerInputError(f"{label} does not match the generated contract")
+            if branch_key == "oneOf" and successes != 1:
+                raise SellerInputError(f"{label} matches multiple generated contract branches")
+            return
+    if "const" in schema and value != schema["const"]:
+        raise SellerInputError(f"{label} does not match the required constant")
+    enum = schema.get("enum")
+    if isinstance(enum, list) and value not in enum:
+        raise SellerInputError(f"{label} is outside the generated enum")
+    expected_type = schema.get("type")
+    if isinstance(expected_type, list):
+        if not any(_schema_type_matches(value, item) for item in expected_type if isinstance(item, str)):
+            raise SellerInputError(f"{label} has the wrong type")
+    elif isinstance(expected_type, str) and not _schema_type_matches(value, expected_type):
+        raise SellerInputError(f"{label} has the wrong type")
+    if isinstance(value, str):
+        if isinstance(schema.get("minLength"), int) and len(value) < schema["minLength"]:
+            raise SellerInputError(f"{label} is too short")
+        if isinstance(schema.get("maxLength"), int) and len(value) > schema["maxLength"]:
+            raise SellerInputError(f"{label} is too long")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(schema.get("minimum"), (int, float)) and value < schema["minimum"]:
+            raise SellerInputError(f"{label} is below the minimum")
+        if isinstance(schema.get("maximum"), (int, float)) and value > schema["maximum"]:
+            raise SellerInputError(f"{label} is above the maximum")
+    if isinstance(value, list):
+        if isinstance(schema.get("minItems"), int) and len(value) < schema["minItems"]:
+            raise SellerInputError(f"{label} has too few items")
+        if isinstance(schema.get("maxItems"), int) and len(value) > schema["maxItems"]:
+            raise SellerInputError(f"{label} has too many items")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, child in enumerate(value):
+                _validate_generated_schema(child, item_schema, f"{label}[{index}]", depth + 1, root)
+    if isinstance(value, Mapping):
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        if not isinstance(properties, dict) or not isinstance(required, list):
+            raise SellerInputError(f"{label} has an invalid object schema")
+        for key in required:
+            if not isinstance(key, str) or key not in value:
+                raise SellerInputError(f"{label} is missing a required field")
+        additional = schema.get("additionalProperties")
+        if additional is False:
+            unknown = set(value) - set(properties)
+            if unknown:
+                raise SellerInputError(f"{label} has unknown fields")
+        for key, child in value.items():
+            child_schema = properties.get(key)
+            if isinstance(child_schema, dict):
+                _validate_generated_schema(child, child_schema, f"{label}.{key}", depth + 1, root)
+            elif isinstance(additional, dict):
+                _validate_generated_schema(child, additional, f"{label}.{key}", depth + 1, root)
+
+
+def validate_v2_input(value: Any, role: str) -> Mapping[str, Any]:
+    try:
+        encoded = json.dumps(value, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise SellerInputError("v2 input is not JSON-safe") from error
+    if len(encoded) > MAX_INPUT_BYTES:
+        raise SellerInputError("v2 input is too large")
+    reject_private_fields(value)
+    root = _mapping(value, "v2 input")
+    schema_name = "SellerFinalJobInput" if role == "seller_final" else "CouncilJobInput"
+    schema = _schema_ref(_generated_schema(), f"#/$defs/{schema_name}")
+    _validate_generated_schema(root, schema, "v2 input", root=_generated_schema())
+    bounded_id(root["jobId"], "v2 input.jobId")
+    bounded_id(root["runId"], "v2 input.runId")
+    if root.get("merchantId") is None:
+        raise SellerInputError("seller v2 input must be assigned to a merchant")
+    bounded_id(root["merchantId"], "v2 input.merchantId")
+    if role in ("seller_advocacy", "seller_reply"):
+        if root.get("role") != role or root.get("phase") != ("advocacy" if role == "seller_advocacy" else "reply"):
+            raise SellerInputError("council role does not match the seller input")
+    if role == "seller_final" and root.get("schemaVersion") != 2:
+        raise SellerInputError("final seller input must use schema version 2")
+    return root
+
+
+def validate_v2_output(value: Any, role: str) -> Mapping[str, Any]:
+    root = _mapping(value, "v2 output")
+    schema_name = {"seller_advocacy": "SellerAdvocacy", "seller_reply": "SellerReply", "seller_final": "SellerFinalDecision"}.get(role)
+    if schema_name is None:
+        raise SellerInputError("unsupported v2 seller role")
+    schema_root = _generated_schema()
+    _validate_generated_schema(root, _schema_ref(schema_root, f"#/$defs/{schema_name}"), "v2 output", root=schema_root)
+    return root
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:
@@ -388,8 +546,99 @@ def _candidate_for_line(line: Mapping[str, Any], catalog: Sequence[Mapping[str, 
     return candidates[0][3]
 
 
-def build_decision(value: Any) -> Dict[str, Any]:
+def _v2_envelope(root: Mapping[str, Any], phase: str) -> Dict[str, Any]:
+    return {
+        "schemaVersion": 2,
+        "jobId": root["jobId"],
+        "councilId": root["councilId"],
+        "request": root["request"],
+        "runId": root["runId"],
+        "snapshot": root["snapshot"],
+        "snapshotDigest": root["snapshotDigest"],
+        "phase": phase,
+        "deadlineAt": root["deadlineAt"],
+    }
+
+
+def _build_advocacy(value: Any) -> Dict[str, Any]:
+    root = validate_v2_input(value, "seller_advocacy")
+    own_offers = set((offer["id"], offer["version"]) for offer in root["ownOffers"])
+    facts_by_offer: Dict[Tuple[str, int], List[Mapping[str, Any]]] = {}
+    for fact in root["facts"]:
+        facts_by_offer.setdefault((fact["offer"]["id"], fact["offer"]["version"]), []).append(fact)
+    defenses: List[Dict[str, Any]] = []
+    for offer_ref in root["ownOffers"][:2]:
+        facts = facts_by_offer.get((offer_ref["id"], offer_ref["version"]), [])[:4]
+        defenses.append({
+            "ownOffer": offer_ref,
+            "text": "Seller confirms the frozen offer using only the approved public facts.",
+            "factIds": [fact["id"] for fact in facts],
+            "sourceIds": [source for fact in facts for source in fact["sourceIds"]][:40],
+        })
+    challenge: Optional[Dict[str, Any]] = None
+    for fact in root["facts"]:
+        offer_ref = (fact["offer"]["id"], fact["offer"]["version"])
+        if offer_ref in own_offers or fact["status"] not in ("unmet", "unknown"):
+            continue
+        challenge = {
+            "targetOffer": fact["offer"],
+            "question": "Please verify the recorded public fact for this frozen offer.",
+            "sourceIds": fact["sourceIds"][:40],
+            "claimId": None,
+            "factId": fact["id"],
+        }
+        break
+    result = {**_v2_envelope(root, "advocacy"), "defenses": defenses, "challenge": challenge}
+    validate_v2_output(result, "seller_advocacy")
+    return result
+
+
+def _build_reply(value: Any) -> Dict[str, Any]:
+    root = validate_v2_input(value, "seller_reply")
+    if not root["challenges"]:
+        raise SellerInputError("seller reply has no admitted challenge to answer")
+    answers: List[Dict[str, Any]] = []
+    for challenge in root["challenges"][:2]:
+        answers.append({
+            "challengeId": challenge["id"],
+            "disposition": "unknown",
+            "text": "Seller acknowledges that the recorded public facts do not establish a further claim.",
+            "factIds": [],
+            "sourceIds": [],
+        })
+    result = {**_v2_envelope(root, "reply"), "answers": answers}
+    validate_v2_output(result, "seller_reply")
+    return result
+
+
+def _build_final(value: Any) -> Dict[str, Any]:
+    root = validate_v2_input(value, "seller_final")
+    result = {
+        "schemaVersion": 2,
+        "jobId": root["jobId"],
+        "roundId": root["roundId"],
+        "councilId": root["councilId"],
+        "snapshot": root["snapshot"],
+        "snapshotDigest": root["snapshotDigest"],
+        "outcomeVersion": root["outcomeVersion"],
+        "candidateId": root["candidateId"],
+        "decision": {"kind": "hold", "jobId": root["jobId"], "offer": root["ownOffer"]["offer"]},
+    }
+    validate_v2_output(result, "seller_final")
+    return result
+
+
+def build_decision(value: Any, role: Optional[str] = None) -> Dict[str, Any]:
     """Build a SellerDecision that Convex can validate independently."""
+
+    if role == "seller_advocacy":
+        return _build_advocacy(value)
+    if role == "seller_reply":
+        return _build_reply(value)
+    if role == "seller_final":
+        return _build_final(value)
+    if role is not None:
+        raise SellerInputError("unsupported seller role")
 
     root = validate_provider_input(value)
     job = root["job"]

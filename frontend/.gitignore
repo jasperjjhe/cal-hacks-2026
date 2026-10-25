@@ -30,3 +30,8 @@ convex/_generated/ai
 *.njsproj
 *.sln
 *.sw?
+
+# Local Convex state and credentials
+.convex/
+.env*
+!.env.example

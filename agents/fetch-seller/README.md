@@ -1,12 +1,12 @@
 # BuyerUnion Fetch seller agent
 
 This is the seller-side Fetch.ai uAgent. It performs the seller's bounded
-catalog matching work and returns a `SellerDecision` that the Convex backend
-validates again. It never receives the buyer's raw conversation, requirement
-origins, private maximum, arbitrary rival records, seller cost, operator floor,
-or sealed final terms. The future v5.3 council roles may receive only the
-canonical immutable public competition snapshot and checked outcome references;
-those role envelopes are not implemented in this worker yet.
+catalog matching and v5.3 council work and returns canonical outputs that the
+Convex backend validates again. It never receives the buyer's raw conversation,
+requirement origins, private maximum, arbitrary rival records, seller cost,
+operator floor, or sealed final terms. Council roles receive only the
+canonical immutable public competition snapshot and checked outcome
+references; the worker cannot adjudicate or publish buyer results.
 
 ## Agentverse deployment
 
@@ -16,7 +16,7 @@ after review with:
 
 ```text
 avctl auth status
-avctl hosting deploy -f agent.py,protocol.py,seller_logic.py
+avctl hosting deploy -f agent.py,protocol.py,seller_logic.py,seller.schema.json
 ```
 
 `hosting deploy` updates and restarts the configured Agentverse agent. Do not
@@ -66,20 +66,19 @@ The agent fails closed if its shared secret is missing or does not match. Do
 not put either value in this repository, the agent profile, or a demo
 recording.
 
-## v5.3 council migration
+## v5.3 council roles
 
 The active specification adds seller advocacy, grouped replies and one sealed
-final invitation per eligible candidate. The current deployed code still
-implements the legacy bounded proposal path. The buyer branch now publishes
-the canonical v2 contracts and generated worker schema at
-`origin/geoff/buyer` `d863b16`, but this worker has not yet been migrated to
-those roles. Do not enable the new role names until the seller parser,
-fixtures, Convex seams and live provider path are migrated and tested from
-that source.
+final invitation per eligible candidate. The worker accepts those canonical v2
+roles in addition to the legacy opening proposal path. `seller.schema.json` is
+a generated deployment copy of `frontend/convex/lib/seller.schema.json`, which
+is emitted from the buyer-owned `frontend/src/contracts/index.ts` registry.
+Regenerate both artifacts from that registry before changing a council
+contract; do not hand-edit the Python schema copy.
 
-When migrated, the worker may defend its frozen candidates and emit at most one
-scoped peer challenge, answer one grouped batch of admitted challenges, or
-submit one parent-bound hold/abstention/final revision per invited candidate.
+The worker defends its frozen candidates and emits at most one scoped peer
+challenge, answers one grouped batch of admitted challenges, or submits one
+parent-bound hold/abstention/final revision per invited candidate.
 It must not adjudicate, rank or remove rivals, browse for new seller facts,
 change the common snapshot, reopen bargaining or expose sealed submissions.
 The Python parser and fixtures must be derived from the canonical shared

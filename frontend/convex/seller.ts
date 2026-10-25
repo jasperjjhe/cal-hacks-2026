@@ -1,3 +1,4 @@
+import { getAuthUserId } from '@convex-dev/auth/server'
 import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 
@@ -257,8 +258,17 @@ export const updateOwnListing = mutation({
     const current = await getListing(ctx, args.listing)
     if (current.merchantId !== membership.merchantId) throwSellerError('WRONG_MERCHANT_SCOPE', 'listing is not owned by the authenticated merchant')
     const patch = args.patch
+    const { _id, _creationTime, ...fields } = current
+    void _id
+    void _creationTime
+    const latest = await ctx.db
+      .query('listingVersions')
+      .withIndex('by_listingId_and_version', (q) => q.eq('listingId', current.listingId))
+      .order('desc')
+      .first()
+    if (latest?.version !== current.version) throwSellerError('LISTING_VERSION_STALE', 'listing version is stale')
     const next = {
-      ...current,
+      ...fields,
       version: current.version + 1,
       variantId: typeof patch.variantId === 'string' ? patch.variantId : current.variantId,
       condition: patch.condition === 'new' || patch.condition === 'refurbished' ? patch.condition : current.condition,
@@ -292,6 +302,7 @@ export const updateOwnListing = mutation({
     if (next.initialQuantity < committedQuantity) {
       throwSellerError('QUANTITY_INVALID', 'quantity cannot erase already committed stock', 'patch.initialQuantity')
     }
+    await ctx.db.patch(_id, { enabled: false })
     const insertedId = await ctx.db.insert('listingVersions', next)
     await recordEvent(ctx, {
       merchantId: membership.merchantId,
@@ -364,6 +375,40 @@ export const pauseOwnMerchant = mutation({
       })
     }
     return { merchantId: merchant.merchantId, paused: args.paused }
+  },
+})
+
+// Bind a newly authenticated session to an internally provisioned merchant grant.
+// The grant, not a user-controlled subject prefix, is the authority boundary.
+export const bindOperatorSession = mutation({
+  args: {},
+  handler: async (ctx: SellerMutationCtx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    const userId = await getAuthUserId(ctx)
+    if (!identity?.tokenIdentifier || !userId) throwSellerError('UNAUTHENTICATED', 'operator login required')
+    const grants = await ctx.db
+      .query('operatorAccounts')
+      .withIndex('by_user', (q) => q.eq('userId', String(userId)))
+      .collect()
+    const active = grants.filter((grant) => grant.enabled)
+    if (active.length !== 1) throwSellerError('UNAUTHORIZED', 'operator account is missing or ambiguous')
+    const memberships = await ctx.db
+      .query('memberships')
+      .withIndex('by_authTokenIdentifier', (q) => q.eq('authTokenIdentifier', identity.tokenIdentifier))
+      .collect()
+    if (memberships.some((membership) => membership.merchantId !== active[0].merchantId)) {
+      throwSellerError('UNAUTHORIZED', 'session membership conflicts with account grant')
+    }
+    if (memberships.length === 0) {
+      await ctx.db.insert('memberships', {
+        authTokenIdentifier: identity.tokenIdentifier,
+        merchantId: active[0].merchantId,
+        role: 'operator',
+        enabled: true,
+        createdAt: Date.now(),
+      })
+    }
+    return { merchantId: active[0].merchantId }
   },
 })
 

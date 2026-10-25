@@ -6,12 +6,16 @@ against the repository, and update it whenever a decision, constraint, test,
 deployment state, sponsor claim, or next step changes. It is a project context
 record, not a substitute for the authoritative implementation specification.
 
-Last reviewed: 2026-10-24  
+Last reviewed: 2026-10-25
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current implementation checkpoint: `895224c` (`feat: add seller operator console`).
-This context file is pushed in subsequent documentation-only checkpoints.
-Remote status at last review: clean and synchronized with
+Current implementation checkpoint: merge in progress from the buyer fixed point
+`d863b16`; the seller v2 migration, unified schema, generated bindings, and
+buyer completion bridge are implemented locally but not committed yet. The
+remote buyer branch has since advanced to `df26d70` with buyer-only Apify
+updates that must be reconciled before the seller branch is declared current.
+This context file is updated with each implementation checkpoint. Remote seller
+status before this merge was clean and synchronized with
 `origin/feature/seller-side`.
 
 ## Per-turn operating protocol
@@ -125,28 +129,31 @@ use the product's private secret-entry mechanism or a protected local shell.
   starts, polls, reconciles, and best-effort cancels provider jobs; it handles
   pending and ambiguous states; and it routes terminal output through
   deterministic Convex validation.
-- `frontend/convex/lib/sellerContracts.ts` and
-  `frontend/convex/lib/seller.schema.json` are the canonical strict seller
-  contracts.
+- `frontend/src/contracts/index.ts` is the canonical v2 contract registry;
+  `frontend/convex/lib/sellerContracts.ts` provides typed Convex compatibility
+  aliases and seller-owned extensions, while `frontend/convex/lib/seller.schema.json`
+  and `agents/fetch-seller/seller.schema.json` are generated/exported schema
+  artifacts checked by parity tests.
 - `frontend/convex/lib/sellerValidation.ts` recomputes category/profile/
   condition fit, stock, price floors, shipping, contribution, and policy
   terms. Provider/model totals are never authoritative. Its seller-owned
   `validateFinalOfferRevision` seam now checks accepted-opening status,
   parent/frozen-basket scope, brief fit, stock, price reductions, policy-
   authorized service terms, private incremental contribution, total
-  monotonicity and term monotonicity. It is pure validation only until the
-  buyer-owned v2 council envelope and sealed Convex persistence are available.
+  monotonicity and term monotonicity. V2 provider results pass through this
+  seller-owned validation before the buyer-owned sealed publication boundary;
+  seller does not close buyer phases or publish checkout state.
 - `frontend/convex/lib/sellerInventory.ts` contains transactional reservation,
   execution-lock, sale, release, expiration, and idempotent replay helpers.
 - `frontend/convex/integrations/` contains the provider-neutral port, fixture
   provider, Fetch adapter, CREAO adapter, HTTPS host allowlists, bounded
   timeouts, idempotency keys, and provider-run provenance.
-- v5.3 seller council participation is specified but not yet enabled on this
-  seller branch. The buyer branch now publishes the canonical v2 council
-  envelopes for the immutable public snapshot, advocacy/challenge, grouped
-  reply, checked-outcome references and sealed final invitation. The seller
-  branch must derive its worker/parser from that source and must not create a
-  second TypeScript/Python council schema.
+- v5.3 seller council participation now consumes the buyer-owned canonical v2
+  envelopes for advocacy, grouped reply and final invitation. Seller jobs
+  store a strict role input, validate authorship/scope/references, persist
+  bounded result provenance, and route final proposals through the existing
+  seller-owned parent/frozen-basket/economics validator. Buyer still owns
+  phase deadlines, retries, council closure and publication.
 
 ### Fetch seller agent
 
@@ -170,10 +177,11 @@ use the product's private secret-entry mechanism or a protected local shell.
 - Agent Storage holds only bounded job metadata, the input digest, state, and
   the validated decision. It does not store the shared token or full inbound
   request envelope.
-- The current worker implements the legacy bounded proposal path. Its future
-  v5.3 role inputs may include only the explicit public competition snapshot
-  and checked outcome references; arbitrary rival records, private economics
-  and sealed revisions remain forbidden.
+- The worker implements the legacy opening proposal plus canonical v2
+  advocacy, grouped-reply and final-invitation roles. Its v2 input validator is
+  backed by the generated `seller.schema.json` copied from the canonical
+  contract registry; arbitrary rival records, private economics and sealed
+  revisions remain forbidden.
 - The Agentverse shared secret is required at the gateway/agent boundary and
   fails closed when missing or incorrect. Convex uses a separate gateway
   secret; neither secret is stored in the repository or forwarded from a
@@ -210,20 +218,24 @@ When integrating `origin/geoff/buyer`:
 6. Generated Convex bindings are regenerated once after the unified schema is
    merged; `_generated` files must not be hand-written or duplicated.
 
-For v5.3, B has now published the canonical schema/fixtures and coordinates
-the snapshot, checked council phases, invitation records and sealed promotion
-on `origin/geoff/buyer` at `d863b16`. S must now migrate seller
-parsing/fixtures and validate seller authorship, frozen basket, policy
-authority and economics before enabling new seller roles. The buyer branch's
-seller execution remains fixture-backed until this seller migration and live
-Fetch integration are complete.
+For v5.3, B published the canonical schema/fixtures and coordinates the
+snapshot, checked council phases, invitation records and sealed promotion on
+the buyer branch. The fetched fixed point was `d863b16`; the current remote
+buyer tip is `df26d70` and adds buyer-side Apify work. This seller merge now
+migrates parsing/fixtures, validates seller authorship, frozen basket, policy
+authority and economics, and provides the single seller dispatch/result bridge.
+The standalone buyer branch's seller execution remains fixture-backed until
+the merged branch is configured with Fetch and the live integration is proven.
 
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
 must not also be started by that generic buyer dispatcher. At fetched ref
-`d863b16`, it still uses fixture seller dispatch, passes unsupported
-`deferPromotion` to seller validation, and drops seller provider lifecycle and
-final-service fields from shared files. The exact drift is recorded in
+`d863b16`, it used fixture seller dispatch, passed unsupported
+`deferPromotion` to seller validation, and dropped seller provider lifecycle
+and final-service fields from shared files. The local merge resolves that
+drift through the single seller bridge; the newer `df26d70` changes are
+buyer-side Apify changes and still need to be integrated without regressing
+the bridge. The exact boundary is recorded in
 `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 
 ## Sponsor strategy and evidence status
@@ -341,10 +353,10 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
-- Latest compatibility audit: buyer ref `d863b16`; the buyer branch now
-  publishes the canonical v2 council contracts and fixture-backed council
-  integration. Seller worker migration, shared schema reconciliation and live
-  Fetch wiring remain pending; drift is recorded in
+- Latest compatibility audit: buyer ref `d863b16`; this merge preserves its
+  canonical v2 council contracts, buyer tables and workflow bindings while
+  adding the seller v2 role seam. Live Fetch wiring and the buyer completion
+  bridge remain pending; drift is recorded in
   `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
@@ -379,12 +391,13 @@ specific proof criteria.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime baseline, seller-owned v5.3
-final validation core, and a fixture-safe seller operator surface implemented;
-canonical council contract migration, optional live Convex UI wiring, sealed
-Convex final-invitation persistence, hosted deployment, live route
-verification and buyer integration pending. Signup/onboarding is intentionally
-out of demo scope.**
+Status at this context update: **seller v2 contract/worker migration,
+unified buyer-plus-seller Convex schema/bindings, durable v2 result records,
+seller-owned final validation, buyer-compatible dispatch/completion bridge and
+fixture-safe operator surface implemented locally; merge resolution against the
+latest buyer tip, hosted deployment, live route verification and sponsor
+evidence remain pending. Signup/onboarding is intentionally out of demo
+scope.**
 
 Completed:
 
@@ -406,16 +419,16 @@ Completed:
 - Versioned seller policies now persist bounded `finalServiceOptions` with
   private nonnegative incremental bundle costs; `resolveFinalServiceTerms`
   rejects unapproved IDs and provides baseline terms for `null`; accepted
-  offer versions record `serviceOptionId`. The v1 provider wire contract is
-  intentionally unchanged until the seller migrates to the buyer-owned
-  canonical v2 envelopes and the shared Convex seams are reconciled.
+  offer versions record `serviceOptionId`. The opening v1 provider contract is
+  retained for compatibility while the seller's v2 council roles use the
+  buyer-owned canonical envelopes and shared Convex seams.
 - `validateFinalOfferRevision` is implemented as a pure seller-owned seam. It
   rechecks accepted opening status, candidate/parent/policy scope, frozen
   listing identity/economics, current brief fit, quantity/stock, price floors,
   authorized service terms, private incremental contribution, delivered-total
   monotonicity and term monotonicity. Thirty seller tests cover the accepted
-  path and these rejection cases; Convex final-invitation persistence and v2
-  provider wiring remain intentionally pending.
+  path and these rejection cases; v2 provider result persistence is now
+  implemented, while buyer-owned sealed publication remains pending.
 - `convex/lib/sellerOperator.ts` now provides the shared seller operator
   projection and fail-closed listing-draft validation. It copies catalog facts
   before exposing them to the UI and does not include private buyer or seller
@@ -426,11 +439,13 @@ Completed:
   guardrails, authorized service options, merchant pause/resume, activity and
   agent-readiness status. It is explicitly labeled fixture preview and does
   not pretend to be authenticated Convex data.
-- The latest buyer compatibility reference is `origin/geoff/buyer` at
-  `d863b16`; it now contains the canonical v2 council contracts and a
-  fixture-backed council path. This seller branch still has the legacy v1
-  provider boundary and must migrate from the buyer-owned source before
-  enabling v5.3 roles.
+- The buyer compatibility reference used to resolve the current merge was
+  `d863b16`; the remote tip is now `df26d70` and adds buyer-side Apify changes.
+  The local merge consumes the canonical v2 role input/output, preserves
+  buyer-owned coordination, and routes configured Fetch seller jobs through one
+  seller dispatch bridge with a result query before buyer publication. The
+  latest buyer-only changes still need a clean follow-up merge and combined
+  verification.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -443,6 +458,8 @@ Completed:
 
 Pending:
 
+- Reconcile the current remote buyer tip `df26d70` after resolving the in-flight
+  `d863b16` merge; preserve the single Fetch seller bridge and rerun all gates.
 - Set the linked Agentverse Hosted Agent's private shared secret; configure
   and deploy the Mana/public HTTPS gateway; and verify the typed query plus
   fixed HTTP route path end to end.
@@ -450,13 +467,9 @@ Pending:
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
   sponsor ledger.
-- Consume the buyer-owned canonical v2 final envelope and route its parsed
-  seller-owned fields through `validateFinalOfferRevision`; derive the worker,
-  parser and fixtures from that source without adding a duplicate council
-  schema.
-- Add the Convex sealed-invitation/final-version persistence and buyer-owned
-  atomic promotion around the existing pure parent-bound frozen-basket,
-  monotonic-total/term and bundle-contribution checks.
+- Exercise the buyer-owned sealed-invitation/final-version promotion around
+  the seller result record and existing pure parent-bound frozen-basket,
+  monotonic-total/term and bundle-contribution checks in the combined branch.
 - Keep the fixture operator path as the primary short-demo path using
   pre-provisioned merchant data. If live Convex data materially improves the
   demo, add only a controlled pre-authenticated development session and wire
@@ -476,15 +489,12 @@ Pending:
 
 ## Immediate next steps
 
-1. Review the published buyer-owned v5.3 contract and generated worker schema
-   at `origin/geoff/buyer` `d863b16`; reconcile shared schemas and fixtures
-   before enabling new seller roles.
-2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
-   snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the
-   change dependency-free and test deterministic privacy/parent-scope gates.
-3. Derive the seller parser and fixtures from the now-published buyer-owned v2
-   envelopes and route the seller-owned fields through the existing final
-   validator:
+1. Finish the in-flight merge, then merge/reconcile remote buyer tip
+   `df26d70`; preserve the single seller dispatcher and result bridge.
+2. Regenerate Convex bindings after any shared schema change and run the
+   combined buyer/seller contract and backend tests.
+3. Exercise the v2 seller roles through the generated contract and route final
+   proposals through the existing seller validator:
    parent candidate, frozen goods/configuration/condition/quantity, policy
    option authority, incremental contribution, no weaker terms and no higher
    delivered total. Then add golden fixtures and sealed Convex persistence

@@ -1,16 +1,27 @@
 # BuyerUnion
 
-## Agreed council format — specification, not implementation
+A buyer confirms a private shopping brief, compares policy-checked demo merchant
+offers, and explicitly approves an exact simulated order. The buyer interface is
+backed by Convex persistence, Convex Auth and durable Workflow orchestration.
 
-Read [the active v5.3 specification](BUYERUNION_IMPLEMENTATION.md), especially
-sections 5.7 and 9, and [the seller council handoff](docs/SELLER_COUNCIL_HANDOFF.md)
-for ownership, contract migration, privacy rules and acceptance tests.
+Start with [frontend/README.md](frontend/README.md). Product requirements and the
+owner split are in [BUYERUNION_IMPLEMENTATION.md](BUYERUNION_IMPLEMENTATION.md).
+The [buyer handoff](docs/BUYER_BACKEND_HANDOFF.md) describes APIs, seller integration
+and the remaining external adapter configuration.
 
-The agreed flow is independent bids → common frozen public offers → checked
-comparative briefs → merchant peer challenges and grouped replies → checked
-outcomes → sealed finals for every eligible candidate → independent research →
-deterministic comparison and buyer selection.
+Dev B works on `geoff/buyer`; Dev S works independently. The current buyer implementation
+imports seller source from `feature/seller-side` at `37d7ea5`, with the integration
+changes listed in the handoff. No public deployment is configured. All inventory,
+merchant prices and checkout are disclosed demo behavior; no payment is taken.
 
-These documents are shared on `dev`; buyer and seller implementations remain on
-their feature branches. This update merges no application code and proves no
-live council behavior. The v4 source and PDFs are historical references.
+## Agreed competition revision — buyer implemented, seller integration pending
+
+[PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md) now requires independent
+opening bids, a frozen public comparison, merchant peer challenges and grouped
+replies, checked outcomes, then one sealed final invitation per eligible candidate.
+The council explains supported tradeoffs; deterministic rules rank valid offers
+and the buyer chooses. See [seller council handoff](docs/SELLER_COUNCIL_HANDOFF.md)
+for contract, worker, workflow, privacy and acceptance work. Buyer v2 contracts and the coordinator now execute the agreed phases with seller
+fixtures. See [buyer migration status](docs/BUYER_COUNCIL_MIGRATION.md) and
+[two-agent CREAO setup](docs/BUYER_INTEGRATIONS.md). Seller worker/service authority
+and combined live acceptance remain pending; no seller branch was changed.

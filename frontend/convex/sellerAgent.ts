@@ -20,6 +20,8 @@ const POLL_DELAY_MS = 2_000
 const RETRY_DELAY_MS = 1_000
 
 type LiveProvider = Exclude<AgentProvider, 'fixture'>
+type SellerRole = 'seller_initial' | 'seller_response' | 'seller_final' | 'seller_advocacy' | 'seller_reply'
+type CouncilSellerRole = 'seller_advocacy' | 'seller_reply' | 'seller_final'
 
 type SellerDispatchState = 'missing' | 'not_claimed' | 'failed' | 'ambiguous' | 'pending' | 'completed' | 'rejected'
 
@@ -51,6 +53,13 @@ type ProviderValidationResult = { ok: boolean; [key: string]: unknown }
 // This explicit local type keeps the generated API from recursing through the
 // provider action -> validation mutation -> generated API import cycle.
 const validateProviderProposal = internal.sellerInternal.validateAndStoreProposal as unknown as FunctionReference<'mutation', 'internal', ProviderValidationArgs, ProviderValidationResult>
+const recordV2ProviderResult = internal.sellerInternal.recordV2ProviderResult as unknown as FunctionReference<'mutation', 'internal', {
+  jobId: string
+  output: unknown
+  providerRunId: string
+  providerModel: string | null
+  providerElapsedMs: number
+}, ProviderValidationResult>
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim()
@@ -127,7 +136,7 @@ function asAgentJob(job: {
   requestVersion: number
   runId: string
   phaseId: string
-  role: 'seller_initial' | 'seller_response' | 'seller_final'
+  role: SellerRole
   merchantId: string
   deadlineAt: number
   provider: AgentProvider
@@ -175,7 +184,8 @@ export const dispatch = internalAction({
     })
     if (!claimed) return { pending: false, state: 'not_claimed' as const }
     const job = asAgentJob(claimed)
-    if (!providerJob.input || !providerJob.brief) {
+    const v2Role = (['seller_advocacy', 'seller_reply', 'seller_final'] as const).includes(job.role as CouncilSellerRole)
+    if (!providerJob.input || (!v2Role && !providerJob.brief)) {
       const result = await ctx.runMutation(internal.sellerInternal.recordProviderResult, {
         jobId: args.jobId,
         status: 'failed',
@@ -208,7 +218,7 @@ export const dispatch = internalAction({
         errorCode: null,
         errorRetryable: null,
       })
-      if (stored.pending) {
+      if (stored.pending && !v2Role) {
         await ctx.scheduler.runAfter(POLL_DELAY_MS, internal.sellerAgent.dispatch, { jobId: args.jobId, poll: true })
       }
       return { pending: stored.pending, state: 'pending' as const, providerRunId: providerResult.providerRunId }
@@ -224,7 +234,7 @@ export const dispatch = internalAction({
         errorCode: providerResult.error.code,
         errorRetryable: providerResult.error.retryable,
       })
-      if (stored.retry) {
+      if (stored.retry && !v2Role) {
         await ctx.scheduler.runAfter(RETRY_DELAY_MS, internal.sellerAgent.dispatch, {
           jobId: args.jobId,
           poll: stored.poll,
@@ -234,16 +244,29 @@ export const dispatch = internalAction({
     }
 
     try {
-      const completed = await ctx.runMutation(validateProviderProposal, {
-        jobId: args.jobId,
-        brief: providerJob.brief,
-        decision: providerResult.output,
-        mode: 'live',
+      const completed = v2Role
+        ? await ctx.runMutation(recordV2ProviderResult, {
+          jobId: args.jobId,
+          output: providerResult.output,
+          providerRunId: providerResult.providerRunId,
+          providerModel: providerResult.model,
+          providerElapsedMs: providerResult.elapsedMs,
+        })
+        : await ctx.runMutation(validateProviderProposal, {
+          jobId: args.jobId,
+          brief: providerJob.brief,
+          decision: providerResult.output,
+          mode: 'live',
+          providerRunId: providerResult.providerRunId,
+          providerModel: providerResult.model,
+          providerElapsedMs: providerResult.elapsedMs,
+        })
+      return {
+        pending: false,
+        state: completed.ok ? 'completed' as const : 'rejected' as const,
         providerRunId: providerResult.providerRunId,
-        providerModel: providerResult.model,
-        providerElapsedMs: providerResult.elapsedMs,
-      })
-      return { pending: false, state: completed.ok ? 'completed' as const : 'rejected' as const, result: completed }
+        result: completed,
+      }
     } catch {
       const stored = await ctx.runMutation(internal.sellerInternal.recordProviderResult, {
         jobId: args.jobId,

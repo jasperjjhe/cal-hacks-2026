@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
+import { contracts } from '../src/contracts/index.ts'
 
 import {
   assertSellerBriefSafe,
@@ -7,11 +8,18 @@ import {
   parseSellerDecision,
   safeReason,
   type CatalogSnapshot,
+  type CouncilJobInput,
+  type FinalOfferCandidate,
+  type OfferVersion,
   type PricingPolicy,
+  type SellerAdvocacy,
   type SellerBrief,
+  type SellerFinalDecision,
   type SellerProposal,
+  type SellerReply,
+  type SafeReason,
 } from './lib/sellerContracts.ts'
-import { validateSellerProposal } from './lib/sellerValidation.ts'
+import { validateFinalOfferRevision, validateSellerProposal } from './lib/sellerValidation.ts'
 import {
   payloadDigest,
   requireMerchant,
@@ -23,7 +31,7 @@ import {
 const refValidator = v.object({ id: v.string(), version: v.number() })
 
 type Provider = 'fixture' | 'fetch' | 'creao'
-type SellerRole = 'seller_initial' | 'seller_response' | 'seller_final'
+type SellerRole = 'seller_initial' | 'seller_response' | 'seller_final' | 'seller_advocacy' | 'seller_reply'
 type OfferMode = 'fixture' | 'live' | 'cached' | 'simulation' | 'visa_sandbox'
 
 interface PrepareSellerJobArgs {
@@ -53,6 +61,14 @@ interface ValidateProposalArgs {
   providerRunId?: string | null
   providerModel?: string | null
   providerElapsedMs?: number | null
+  deferPromotion?: boolean
+}
+
+type CouncilRole = 'seller_advocacy' | 'seller_reply'
+type V2SellerRole = CouncilRole | 'seller_final'
+
+function isCouncilSellerRole(role: SellerRole): role is CouncilRole {
+  return role === 'seller_advocacy' || role === 'seller_reply'
 }
 
 function requireBoundedString(value: string, field: string) {
@@ -67,7 +83,59 @@ function providerToMode(provider: Provider): OfferMode {
   return provider === 'fixture' ? 'fixture' : 'live'
 }
 
-async function getPolicy(ctx: SellerQueryCtx | SellerMutationCtx, reference: { id: string; version: number }) {
+function isV2SellerRole(role: SellerRole): role is V2SellerRole {
+  return role === 'seller_advocacy' || role === 'seller_reply' || role === 'seller_final'
+}
+
+function assertLiveDeadline(deadlineAt: number) {
+  if (!Number.isSafeInteger(deadlineAt) || deadlineAt <= Date.now()) {
+    throwSellerError('LATE_COMPLETION', 'seller job deadline is expired')
+  }
+}
+
+function assertRoleInputScope(
+  role: SellerRole,
+  job: { jobId: string; runId: string; phaseId: string; merchantId: string; deadlineAt: number },
+  input: unknown,
+): unknown {
+  if (!isV2SellerRole(role)) {
+    const parsed = contracts.SellerBrief.parse(input)
+    if (parsed.runId !== job.runId) throwSellerError('WRONG_JOB_SCOPE', 'seller brief run does not match the prepared job')
+    return parsed
+  }
+  try {
+    assertLiveDeadline(job.deadlineAt)
+    if (role === 'seller_final') {
+      const parsed = contracts.SellerFinalJobInput.parse(input)
+      if (
+        parsed.jobId !== job.jobId ||
+        parsed.runId !== job.runId ||
+        parsed.merchantId !== job.merchantId ||
+        parsed.deadlineAt !== job.deadlineAt
+      ) {
+        throwSellerError('WRONG_JOB_SCOPE', 'final seller input is outside the prepared job scope')
+      }
+      return parsed
+    }
+    const parsed = contracts.CouncilJobInput.parse(input)
+    if (
+      parsed.jobId !== job.jobId ||
+      parsed.runId !== job.runId ||
+      job.phaseId !== parsed.phase && job.phaseId !== 'council' ||
+      parsed.phase !== (role === 'seller_advocacy' ? 'advocacy' : 'reply') ||
+      parsed.merchantId !== job.merchantId
+    ) {
+      throwSellerError('WRONG_JOB_SCOPE', 'council seller input is outside the prepared job scope')
+    }
+    if (parsed.deadlineAt !== job.deadlineAt) throwSellerError('WRONG_JOB_SCOPE', 'council seller input deadline does not match the prepared job')
+    return parsed
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('seller input')) throw error
+    throwSellerError('INVALID_INPUT', 'seller role input does not match the canonical v2 contract')
+  }
+}
+
+export async function getPolicy(ctx: SellerQueryCtx | SellerMutationCtx, reference: { id: string; version: number }) {
   const policies = await ctx.db
     .query('policyVersions')
     .withIndex('by_policyId_and_version', (query) => query.eq('policyId', reference.id).eq('version', reference.version))
@@ -76,7 +144,7 @@ async function getPolicy(ctx: SellerQueryCtx | SellerMutationCtx, reference: { i
   return policies[0]
 }
 
-function toPolicy(document: {
+export function toPolicy(document: {
   policyId: string
   merchantId: string
   version: number
@@ -107,7 +175,7 @@ function toPolicy(document: {
   }
 }
 
-async function loadSnapshots(ctx: SellerQueryCtx | SellerMutationCtx, merchantId: string): Promise<CatalogSnapshot[]> {
+export async function loadSnapshots(ctx: SellerQueryCtx | SellerMutationCtx, merchantId: string): Promise<CatalogSnapshot[]> {
   const listings = await ctx.db
     .query('listingVersions')
     .withIndex('by_merchantId_and_enabled', (query) => query.eq('merchantId', merchantId).eq('enabled', true))
@@ -222,7 +290,13 @@ export const prepareSellerJob = internalMutation({
     candidateIds: v.array(v.string()),
     policy: refValidator,
     profileVersions: v.record(v.string(), v.number()),
-    role: v.union(v.literal('seller_initial'), v.literal('seller_response'), v.literal('seller_final')),
+    role: v.union(
+      v.literal('seller_initial'),
+      v.literal('seller_response'),
+      v.literal('seller_final'),
+      v.literal('seller_advocacy'),
+      v.literal('seller_reply'),
+    ),
     provider: v.union(v.literal('fixture'), v.literal('fetch'), v.literal('creao')),
     providerConfigRevision: v.string(),
     inputDigest: v.string(),
@@ -297,8 +371,14 @@ export const prepareSellerJob = internalMutation({
         .withIndex('by_candidateId', (query) => query.eq('candidateId', candidateId))
         .collect()
       if (candidates.length > 0 && candidates[0].merchantId !== args.merchantId) throwSellerError('WRONG_MERCHANT_SCOPE', 'candidate belongs to another merchant')
-      if (candidates.length > 0 && candidates[0].jobId !== args.jobId) throwSellerError('REPLAY_REJECTED', 'candidate is already bound to another seller job')
+      // A council advocacy/reply job references the frozen opening candidate but
+      // does not own or mutate its commercial lifecycle. The opening seller job
+      // remains the sole owner of the candidate record.
+      if (candidates.length > 0 && candidates[0].jobId !== args.jobId && !isCouncilSellerRole(args.role)) {
+        throwSellerError('REPLAY_REJECTED', 'candidate is already bound to another seller job')
+      }
       if (candidates.length === 0) {
+        if (isCouncilSellerRole(args.role)) throwSellerError('WRONG_JOB_SCOPE', 'council candidate is not bound to an opening offer')
         await ctx.db.insert('candidates', {
           candidateId,
           jobId: args.jobId,
@@ -338,6 +418,10 @@ async function storeSellerBrief(
     .collect()
   if (existing.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate input records')
   if (existing.length === 1) {
+    if (existing[0].brief === null || existing[0].brief === undefined) {
+      await ctx.db.patch(existing[0]._id, { brief, briefDigest, updatedAt: Date.now() })
+      return { replayed: false }
+    }
     if (existing[0].briefDigest !== briefDigest) throwSellerError('REPLAY_REJECTED', 'seller job input cannot be replaced')
     return { replayed: true }
   }
@@ -428,6 +512,48 @@ export const attachSellerBrief = internalMutation({
   },
 })
 
+export const attachSellerProviderInput = internalMutation({
+  args: { jobId: v.string(), input: v.any() },
+  handler: async (ctx: SellerMutationCtx, args: { jobId: string; input: unknown }) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .collect()
+    if (jobs.length !== 1) throwSellerError('WRONG_JOB_SCOPE', 'seller job was not found')
+    const job = jobs[0]
+    if (job.status !== 'created') throwSellerError('REPLAY_REJECTED', 'provider input cannot be attached after dispatch')
+    assertNoPrivateSellerFields(args.input)
+    const input = assertRoleInputScope(job.role, job, args.input)
+    const inputDigest = await payloadDigest(input)
+    if (job.inputDigest !== inputDigest) {
+      await ctx.db.patch(job._id, { inputDigest, inputRef: `${job.jobId}:input`, updatedAt: Date.now() })
+    }
+    const existing = await ctx.db
+      .query('sellerJobInputs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .collect()
+    if (existing.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate input records')
+    if (existing.length === 1) {
+      if (existing[0].roleInputDigest === inputDigest) return { replayed: true }
+      if (existing[0].roleInput !== undefined && existing[0].roleInput !== null) {
+        throwSellerError('REPLAY_REJECTED', 'seller provider input cannot be replaced')
+      }
+      await ctx.db.patch(existing[0]._id, { roleInput: input, roleInputDigest: inputDigest, updatedAt: Date.now() })
+      return { replayed: false }
+    }
+    await ctx.db.insert('sellerJobInputs', {
+      jobId: job.jobId,
+      brief: null,
+      briefDigest: inputDigest,
+      roleInput: input,
+      roleInputDigest: inputDigest,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    return { replayed: false }
+  },
+})
+
 export const getProviderJob = internalQuery({
   args: { jobId: v.string() },
   handler: async (ctx: SellerQueryCtx, args: { jobId: string }) => {
@@ -445,7 +571,13 @@ export const getProviderJob = internalQuery({
     if (inputs.length === 0) return { job, brief: null, input: null }
     const merchant = await requireMerchant(ctx, job.merchantId)
     const policy = await getPolicy(ctx, { id: job.policyId, version: job.policyVersion })
-    const inputBrief = inputs[0].brief as SellerBrief
+    const inputBrief = inputs[0].brief as SellerBrief | null
+    const roleInput = inputs[0].roleInput
+    if (roleInput !== undefined && roleInput !== null) {
+      const input = assertRoleInputScope(job.role, job, roleInput)
+      return { job, brief: inputBrief, input }
+    }
+    if (!inputBrief) return { job, brief: null, input: null }
     assertSellerBriefSafe(inputBrief)
     const input = providerInput(
       job,
@@ -581,6 +713,319 @@ export const recordProviderResult = internalMutation({
   },
 })
 
+function sameRef(left: { id: string; version: number }, right: { id: string; version: number }) {
+  return left.id === right.id && left.version === right.version
+}
+
+function assertApprovedIds(values: string[], allowed: Set<string>, field: string) {
+  if (values.length > 40 || values.some((value) => !allowed.has(value))) {
+    throwSellerError('MALFORMED_PROVIDER_OUTPUT', `${field} contains an unapproved reference`, field)
+  }
+}
+
+function assertCouncilOutputScope(
+  input: CouncilJobInput,
+  output: SellerAdvocacy | SellerReply,
+) {
+  if (
+    output.jobId !== input.jobId ||
+    output.councilId !== input.councilId ||
+    !sameRef(output.request, input.request) ||
+    output.runId !== input.runId ||
+    !sameRef(output.snapshot, input.snapshot) ||
+    output.snapshotDigest !== input.snapshotDigest ||
+    output.phase !== input.phase ||
+    output.deadlineAt !== input.deadlineAt
+  ) {
+    throwSellerError('WRONG_JOB_SCOPE', 'council seller output is outside the prepared job scope')
+  }
+}
+
+function validateAdvocacyOutput(input: CouncilJobInput, output: SellerAdvocacy) {
+  assertCouncilOutputScope(input, output)
+  const allowedFacts = new Set(input.facts.map((fact) => fact.id))
+  const allowedSources = new Set(input.competition.approvedSourceIds)
+  const ownOffers = new Set(input.ownOffers.map((offer) => `${offer.id}:${offer.version}`))
+  for (const defense of output.defenses) {
+    if (!ownOffers.has(`${defense.ownOffer.id}:${defense.ownOffer.version}`)) {
+      throwSellerError('WRONG_JOB_SCOPE', 'seller defense references a rival offer', 'defenses.ownOffer')
+    }
+    assertApprovedIds(defense.factIds, allowedFacts, 'defenses.factIds')
+    assertApprovedIds(defense.sourceIds, allowedSources, 'defenses.sourceIds')
+  }
+  if (output.challenge) {
+    const target = input.competition.offers.find((offer) => sameRef(offer.offer, output.challenge!.targetOffer))
+    if (!target || target.merchantId === input.merchantId) {
+      throwSellerError('WRONG_JOB_SCOPE', 'seller challenge must target one rival offer', 'challenge.targetOffer')
+    }
+    if (output.challenge.claimId && !target.claims.some((claim) => claim.id === output.challenge!.claimId)) {
+      throwSellerError('MALFORMED_PROVIDER_OUTPUT', 'seller challenge references an unknown claim', 'challenge.claimId')
+    }
+    if (output.challenge.factId && !input.facts.some((fact) => fact.id === output.challenge!.factId)) {
+      throwSellerError('MALFORMED_PROVIDER_OUTPUT', 'seller challenge references an unknown fact', 'challenge.factId')
+    }
+    assertApprovedIds(output.challenge.sourceIds, allowedSources, 'challenge.sourceIds')
+  }
+}
+
+function validateReplyOutput(input: CouncilJobInput, output: SellerReply) {
+  assertCouncilOutputScope(input, output)
+  if (output.answers.length !== input.challenges.length) {
+    throwSellerError('MALFORMED_PROVIDER_OUTPUT', 'seller reply must answer every admitted challenge exactly once', 'answers')
+  }
+  const challengeIds = new Set(input.challenges.map((challenge) => challenge.id))
+  const seen = new Set<string>()
+  const allowedFacts = new Set(input.facts.map((fact) => fact.id))
+  const allowedSources = new Set(input.competition.approvedSourceIds)
+  for (const answer of output.answers) {
+    if (!challengeIds.has(answer.challengeId) || seen.has(answer.challengeId)) {
+      throwSellerError('MALFORMED_PROVIDER_OUTPUT', 'seller reply contains an unknown or duplicate challenge', 'answers.challengeId')
+    }
+    seen.add(answer.challengeId)
+    assertApprovedIds(answer.factIds, allowedFacts, 'answers.factIds')
+    assertApprovedIds(answer.sourceIds, allowedSources, 'answers.sourceIds')
+  }
+}
+
+function redactFinalDecision(output: SellerFinalDecision): SellerFinalDecision {
+  if (output.decision.kind !== 'propose') return output
+  return {
+    ...output,
+    decision: {
+      ...output.decision,
+      proposal: { ...output.decision.proposal, privatePriceRationale: '[redacted]' },
+    },
+  }
+}
+
+export const recordV2ProviderResult = internalMutation({
+  args: {
+    jobId: v.string(),
+    output: v.any(),
+    providerRunId: v.string(),
+    providerModel: v.union(v.string(), v.null()),
+    providerElapsedMs: v.number(),
+  },
+  handler: async (ctx: SellerMutationCtx, args) => {
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', args.jobId))
+      .take(2)
+    if (jobs.length !== 1) throwSellerError('WRONG_JOB_SCOPE', 'seller job was not found')
+    const job = jobs[0]
+    if (job.providerRunId && job.providerRunId !== args.providerRunId) {
+      throwSellerError('WRONG_JOB_SCOPE', 'provider run does not match the seller job')
+    }
+    const existing = await ctx.db
+      .query('sellerJobResults')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .take(2)
+    const outputDigest = await payloadDigest(args.output)
+    if (existing.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate result records')
+    if (existing.length === 1) {
+      if (existing[0].outputDigest === outputDigest) return { ok: true as const, replayed: true, outcome: 'replayed' as const }
+      throwSellerError('REPLAY_REJECTED', 'seller provider output cannot be replaced')
+    }
+    if (!['starting', 'polling', 'pending'].includes(job.status)) {
+      throwSellerError('REPLAY_REJECTED', 'seller provider output arrived outside the active job state')
+    }
+    const inputs = await ctx.db
+      .query('sellerJobInputs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .take(2)
+    if (inputs.length !== 1 || inputs[0].roleInput === undefined || inputs[0].roleInput === null) {
+      throwSellerError('INVALID_INPUT', 'v2 seller job input is missing')
+    }
+    const input = assertRoleInputScope(job.role, job, inputs[0].roleInput)
+    let storedOutput: unknown = args.output
+    let outcome = 'accepted'
+    let finalOfferRef: { id: string; version: number } | null = null
+    if (job.role === 'seller_advocacy') {
+      const parsed = contracts.SellerAdvocacy.parse(args.output)
+      validateAdvocacyOutput(input as CouncilJobInput, parsed)
+      storedOutput = parsed
+      outcome = 'advocacy'
+    } else if (job.role === 'seller_reply') {
+      const parsed = contracts.SellerReply.parse(args.output)
+      validateReplyOutput(input as CouncilJobInput, parsed)
+      storedOutput = parsed
+      outcome = 'reply'
+    } else if (job.role === 'seller_final') {
+      const parsed = contracts.SellerFinalDecision.parse(args.output)
+      const finalInput = input as ReturnType<typeof contracts.SellerFinalJobInput.parse>
+      if (
+        parsed.jobId !== finalInput.jobId ||
+        parsed.roundId !== finalInput.roundId ||
+        parsed.candidateId !== finalInput.candidateId ||
+        parsed.councilId !== finalInput.councilId ||
+        parsed.snapshotDigest !== finalInput.snapshotDigest ||
+        parsed.outcomeVersion !== finalInput.outcomeVersion ||
+        (parsed.snapshot && finalInput.snapshot && !sameRef(parsed.snapshot, finalInput.snapshot))
+      ) {
+        throwSellerError('WRONG_JOB_SCOPE', 'final seller output is outside the invitation scope')
+      }
+      if (parsed.decision.kind === 'propose') {
+        const proposal = parsed.decision.proposal
+        if (
+          proposal.jobId !== job.jobId ||
+          proposal.candidateId !== finalInput.candidateId ||
+          !proposal.parentOffer ||
+          !sameRef(proposal.parentOffer, finalInput.ownOffer.offer) ||
+          !sameRef(proposal.policy, finalInput.policy)
+        ) {
+          throwSellerError('WRONG_JOB_SCOPE', 'final proposal is not parent-bound to the invitation')
+        }
+        const openingRows = await ctx.db
+          .query('offerVersions')
+          .withIndex('by_offerId_and_version', (query) => query.eq('offerId', finalInput.ownOffer.offer.id).eq('version', finalInput.ownOffer.offer.version))
+          .take(2)
+        if (openingRows.length !== 1) throwSellerError('WRONG_JOB_SCOPE', 'opening seller offer was not found')
+        const openingRow = openingRows[0]
+        if (openingRow.merchantId !== job.merchantId || openingRow.candidateId !== finalInput.candidateId) {
+          throwSellerError('WRONG_JOB_SCOPE', 'opening seller offer belongs to another candidate')
+        }
+        const policyDocument = await getPolicy(ctx, { id: job.policyId, version: job.policyVersion })
+        const policy = toPolicy(policyDocument)
+        const currentCatalog = await loadSnapshots(ctx, job.merchantId)
+        const openingCatalog = (inputs[0].openingCatalog as CatalogSnapshot[] | undefined) ?? currentCatalog
+        const openingOffer: OfferVersion = {
+          schemaVersion: 1,
+          offer: { id: openingRow.offerId, version: openingRow.version },
+          jobId: openingRow.jobId,
+          candidateId: openingRow.candidateId,
+          merchantId: openingRow.merchantId,
+          parentOffer: openingRow.parentOffer,
+          policy: openingRow.policy,
+          serviceOptionId: openingRow.serviceOptionId ?? null,
+          lines: openingRow.lines,
+          itemsCents: openingRow.itemsCents,
+          shippingCents: openingRow.shippingCents,
+          totalCents: openingRow.totalCents,
+          arrivalCalendarDays: openingRow.arrivalCalendarDays,
+          warrantyMonths: openingRow.warrantyMonths,
+          returnDays: openingRow.returnDays,
+          fit: {
+            ...openingRow.fit,
+            requirements: openingRow.fit.requirements.map((requirement) => ({
+              ...requirement,
+              weight: requirement.weight === 2 ? 2 as const : 1 as const,
+            })),
+            reasons: openingRow.fit.reasons.map((reason) => ({
+              ...reason,
+              code: reason.code as SafeReason['code'],
+            })),
+          },
+          claims: openingRow.claims,
+          status: openingRow.status,
+          mode: openingRow.mode,
+          createdAt: openingRow.createdAt,
+        }
+        const candidate: FinalOfferCandidate = {
+          candidateId: proposal.candidateId,
+          parentOffer: proposal.parentOffer,
+          policy: proposal.policy,
+          serviceOptionId: proposal.serviceOptionId,
+          lines: proposal.lines,
+        }
+        const validated = validateFinalOfferRevision({
+          jobId: job.jobId,
+          merchantId: job.merchantId,
+          candidateId: finalInput.candidateId,
+          brief: { ...finalInput.brief, runId: finalInput.runId },
+          openingOffer,
+          openingCatalog,
+          currentCatalog,
+          policy,
+          now: Date.now(),
+          mode: 'live',
+        }, candidate)
+        if (!validated.ok) {
+          outcome = 'rejected'
+          storedOutput = redactFinalDecision(parsed)
+        } else {
+          const priorOffers = await ctx.db
+            .query('offerVersions')
+            .withIndex('by_candidateId_and_version', (query) => query.eq('candidateId', proposal.candidateId))
+            .collect()
+          const version = priorOffers.reduce((maximum, offer) => Math.max(maximum, offer.version), 0) + 1
+          const offerId = `${job.jobId}:${proposal.candidateId}`
+          finalOfferRef = { id: offerId, version }
+          await ctx.db.insert('offerVersions', {
+            offerId,
+            version,
+            jobId: validated.offer.jobId,
+            candidateId: validated.offer.candidateId,
+            merchantId: validated.offer.merchantId,
+            parentOffer: validated.offer.parentOffer,
+            policy: validated.offer.policy,
+            lines: validated.offer.lines,
+            itemsCents: validated.offer.itemsCents,
+            shippingCents: validated.offer.shippingCents,
+            totalCents: validated.offer.totalCents,
+            arrivalCalendarDays: validated.offer.arrivalCalendarDays,
+            warrantyMonths: validated.offer.warrantyMonths,
+            returnDays: validated.offer.returnDays,
+            serviceOptionId: validated.offer.serviceOptionId,
+            fit: validated.offer.fit,
+            claims: validated.offer.claims,
+            status: validated.offer.status,
+            mode: validated.offer.mode,
+            createdAt: validated.offer.createdAt,
+          })
+          await ctx.db.insert('fitAssessments', {
+            offerId,
+            offerVersion: version,
+            merchantId: job.merchantId,
+            assessment: validated.offer.fit,
+            createdAt: Date.now(),
+          })
+          storedOutput = redactFinalDecision(parsed)
+        }
+      } else {
+        if (parsed.decision.jobId !== job.jobId) throwSellerError('WRONG_JOB_SCOPE', 'final hold/abstain references another job')
+        if (parsed.decision.kind === 'hold' && !sameRef(parsed.decision.offer, finalInput.ownOffer.offer)) {
+          throwSellerError('WRONG_JOB_SCOPE', 'final hold references a different offer')
+        }
+        storedOutput = parsed
+        outcome = parsed.decision.kind
+      }
+    } else {
+      throwSellerError('INVALID_INPUT', 'v2 result received for a legacy seller role')
+    }
+    await ctx.db.insert('sellerJobResults', {
+      jobId: job.jobId,
+      role: job.role,
+      output: storedOutput,
+      outputDigest,
+      validatedOffer: finalOfferRef,
+      providerRunId: args.providerRunId,
+      providerModel: args.providerModel,
+      providerElapsedMs: args.providerElapsedMs,
+      createdAt: Date.now(),
+    })
+    await ctx.db.patch(job._id, {
+      status: 'completed',
+      providerRunId: args.providerRunId,
+      providerModel: args.providerModel,
+      providerElapsedMs: args.providerElapsedMs,
+      lastErrorCode: null,
+      lastErrorRetryable: null,
+      updatedAt: Date.now(),
+    })
+    await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome, finalOfferRef }, [], job.jobId, job.candidateIds[0] ?? null, finalOfferRef?.id ?? null)
+    return { ok: true as const, replayed: false, outcome, offer: finalOfferRef }
+  },
+})
+
+export const getV2ProviderResult = internalQuery({
+  args: { jobId: v.string() },
+  handler: async (ctx: SellerQueryCtx, args: { jobId: string }) => {
+    const rows = await ctx.db.query('sellerJobResults').withIndex('by_jobId', (query) => query.eq('jobId', args.jobId)).take(2)
+    if (rows.length > 1) throwSellerError('REPLAY_REJECTED', 'seller job has duplicate result records')
+    return rows[0] ?? null
+  },
+})
+
 export const markSellerJobCancelled = internalMutation({
   args: { jobId: v.string() },
   handler: async (ctx: SellerMutationCtx, args: { jobId: string }) => {
@@ -617,6 +1062,7 @@ export const validateAndStoreProposal = internalMutation({
     providerRunId: v.optional(v.union(v.string(), v.null())),
     providerModel: v.optional(v.union(v.string(), v.null())),
     providerElapsedMs: v.optional(v.union(v.number(), v.null())),
+    deferPromotion: v.optional(v.boolean()),
   },
   handler: async (ctx: SellerMutationCtx, args: ValidateProposalArgs) => {
     const jobs = await ctx.db
@@ -707,7 +1153,7 @@ export const validateAndStoreProposal = internalMutation({
       createdAt: validated.offer.createdAt,
     })
     const candidate = await findCandidate(ctx, job.jobId, proposal.candidateId, job.merchantId)
-    if (candidate) {
+    if (candidate && !args.deferPromotion) {
       await ctx.db.patch(candidate._id, {
         status: 'accepted',
         currentOfferId: offerId,
@@ -722,8 +1168,21 @@ export const validateAndStoreProposal = internalMutation({
       assessment: validated.offer.fit,
       createdAt: Date.now(),
     })
+    const inputRows = await ctx.db
+      .query('sellerJobInputs')
+      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
+      .take(1)
+    if (inputRows.length === 1 && inputRows[0].openingCatalog === undefined) {
+      await ctx.db.patch(inputRows[0]._id, {
+        openingCatalog: context.catalog,
+        openingCatalogDigest: await payloadDigest(context.catalog),
+        updatedAt: Date.now(),
+      })
+    }
     await ctx.db.patch(job._id, { status: 'completed', ...providerMetadata(args), updatedAt: Date.now() })
-    await recordInternalEvent(ctx, job.merchantId, 'offer_accepted', { offerId, version, totalCents: validated.offer.totalCents }, [], job.jobId, proposal.candidateId, offerId)
+    if (!args.deferPromotion) {
+      await recordInternalEvent(ctx, job.merchantId, 'offer_accepted', { offerId, version, totalCents: validated.offer.totalCents }, [], job.jobId, proposal.candidateId, offerId)
+    }
     await recordInternalEvent(ctx, job.merchantId, 'provider_completed', { outcome: 'accepted' }, [], job.jobId, proposal.candidateId, offerId)
     return { ok: true as const, outcome: 'accepted', offer: offerRef, totalCents: validated.offer.totalCents, reasons: [] }
   },
