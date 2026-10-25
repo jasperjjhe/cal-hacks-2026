@@ -7,7 +7,7 @@ Status: active working plan for `feature/seller-side`, branched from `dev` on Oc
 Per-turn project state, compliance checks, branch/deployment status, sponsor
 decisions, and next steps are maintained in [`LOCAL_CONTEXT.md`](LOCAL_CONTEXT.md).
 
-The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 6, 7, 8, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan.
+The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan. The v5.3 council contract is specified in the shared buyer-owned contract source and is not yet implemented on this branch.
 
 The seller-side implementation must preserve the buyer-side ownership described by the active handoff. A future buyer-side contributor will integrate through versioned contracts and Convex internal functions; this branch must not create a second workflow, buyer request store, evidence store, checkout authority or competing source of truth.
 
@@ -20,12 +20,14 @@ This branch owns:
 - immutable listing versions and seller pricing/service policies;
 - deterministic requirement eligibility, fit facts, delivered-price validation and seller-safe rejection reasons;
 - seller proposal validation and immutable offer versions;
+- seller participation in the moderated council: scoped defenses/challenges, grouped replies and parent-bound sealed final decisions;
+- immutable policy-authorized final service options and their private incremental contribution checks;
 - inventory availability, reservations and allocation transitions used transactionally by the buyer lifecycle;
 - seller job input/output contracts and provider-neutral Fetch.ai/CREAO adapters;
 - a seller operator view/query surface that exposes only the operator's own merchant data;
 - fixtures, tests and evidence artifacts proving the above behavior.
 
-The later buyer-side branch owns requests, raw buyer messages, private maximums, confirmation, run/workflow stage, council coordination, evidence acquisition, comparison projection, quote approval and execution. Seller code receives a sanitized `SellerBrief`; it never receives the raw prompt, requirement provenance or private maximum.
+The later buyer-side branch owns requests, raw buyer messages, private maximums, confirmation, run/workflow stage, council coordination, evidence acquisition, comparison projection, quote approval and execution. Seller code receives a sanitized `SellerBrief`; it never receives the raw prompt, requirement provenance or private maximum. During v5.3 council phases, seller code may receive only the immutable, allowlisted public competition snapshot and checked public outcomes for the current run, plus its own private catalog/policy context. It must never receive arbitrary rival records, rival costs/floors, private affordability or sealed revisions.
 
 ## Planned repository layout
 
@@ -69,6 +71,7 @@ The first seller-only checkpoint is now implemented on `feature/seller-side`:
 - `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership and the canonical auth token identifier; IDs supplied by a browser are not authorization.
 - `convex/sellerSeed.ts` provides an internal, revisioned fixture seed for all four profile families, P1–P6, accessories, C1/C2, H1/H2, A1/A2 and three synthetic merchants. It is empty-database-only and idempotent by seed revision; it does not make synthetic inventory or evidence look real.
 - `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
+- v5.3 council envelopes are not yet present in the seller runtime. The buyer-owned canonical contract source must add schema-versioned snapshot, advocacy, reply, checked-outcome and final-invitation shapes before the seller worker changes its wire contract. Do not add a second handwritten Python/TypeScript interpretation.
 - `convex/sellerAgent.ts` now provides the server-only provider action path. It stores sanitized job input separately, claims a job before network I/O, persists provider run/model/status metadata, schedules bounded polling, preserves ambiguous starts for explicit reconciliation, best-effort cancels, and sends terminal output through deterministic seller validation. No provider payload or token is logged or persisted.
 - `agents/fetch-seller/` now provides the actual Fetch seller runtime. Its fixed typed POST routes implement start, poll, reconcile and cancel; Agent Storage preserves idempotency across hosted invocations; a shared Agent Secret authenticates requests; and the pure seller logic performs bounded category/profile/condition/stock/requirement matching without seeing private pricing fields. The agent's public reference-price proposal remains non-authoritative and is revalidated by Convex.
 - `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. The seller schema and generated bindings are now pushed to the linked Convex development deployment and the revisioned fixture catalog has been seeded there. Production/Auth configuration and live provider sponsor evidence remain pending.
@@ -77,13 +80,16 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 
 ## Contract and authority rules
 
-1. `SellerBrief` is an allowlisted projection of the confirmed buyer brief plus a server-owned run/job ID. It excludes raw messages, origins and private budget.
+1. `SellerBrief` is an allowlisted projection of the confirmed buyer brief plus a server-owned run/job ID. It excludes raw messages, origins and private budget. A v5.3 council input is a separate schema-versioned envelope; it is not a widened `SellerBrief`.
 2. Every seller job is bound server-side to request/version, run, phase, merchant, candidate and input digest. A model-selected merchant ID is never authoritative.
-3. Seller output is a proposal or hold/abstain decision. The server recomputes product identity, policy version, stock, fit facts, delivered totals, contribution floors and service terms.
+3. Seller output is a proposal, scoped advocacy/reply, or hold/abstain/final-revision decision. The server recomputes product identity, policy version, stock, fit facts, delivered totals, contribution floors and service terms. Model text, comparisons and verdicts never override deterministic checks.
 4. `OfferVersion` is immutable. Revisions point to a parent candidate/version; no in-place rewrite may change buyer-visible history.
 5. Seller functions never approve, execute or settle a purchase. They expose validated offer data and transaction helpers to the buyer-owned lifecycle.
 6. All browser-facing seller reads are authenticated and merchant-scoped. Internal functions are used for buyer/workflow calls and remain unavailable to the Convex client.
 7. Network/model calls occur in actions or provider workers, never in Convex mutations. Stale, late, duplicated or mismatched completions are audited and ignored. A start timeout or no-response network failure without a provider reference becomes `ambiguous`; the system never blindly starts a second provider run and can reconcile by application job ID when configured.
+8. The common v5.3 snapshot is the only permitted competitor projection. It is immutable, public-by-allowlist, capped at six candidates and contains no private affordability, costs, floors, raw prompt, private rationale or sealed final terms.
+9. A seller may produce at most one outgoing challenge per merchant and one grouped reply for assigned incoming challenges. The seller worker cannot adjudicate, rank, remove a rival or open another debate.
+10. Final revisions must reference the frozen candidate and basket. Price reductions are permitted; service improvements require a versioned `finalServiceOptions` policy grant, a typed `serviceOptionId` and private incremental cost/contribution validation. An old policy grants no service upgrade.
 
 ## Implementation phases and push gates
 
@@ -91,6 +97,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 
 - Add this plan and the seller sponsor-proof checklist.
 - Add the exact seller/buyer boundary types and golden fixtures.
+- Review the buyer-owned v5.3 canonical contracts when they land: request schemas stay version 1; council envelopes use version 2. Record the resolved schema revision and derive seller parsing/fixtures from it.
 - Verify every new dependency against the seven-day package cooldown before installation.
 
 ### S1: deterministic seller core
@@ -111,6 +118,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 - Add one provider-neutral `AgentPort` with `start`, `poll` and best-effort `cancel`.
 - Add deterministic fixture mode for CI and explicit Fetch.ai and CREAO adapters behind the same port.
 - Validate all provider results against role-specific schemas, record provider run IDs/model/config revision, deduplicate repeated results and reconcile accepted-but-pending or ambiguous responses. The internal Convex action path is now implemented; live Fetch deployment/configuration is the next external handoff.
+- Migrate the worker from legacy `seller_initial`/`seller_response` council assumptions to the canonical v5.3 seller advocacy, grouped-reply and final-invitation roles only after the shared v2 envelopes are available. Add fixtures for the frozen snapshot, checked outcomes, one challenge, one grouped reply and parent-bound final decisions.
 - Deploy `agents/fetch-seller/` as an Agentverse Hosted Agent, set the Agent Secret and exact Convex HTTPS allowlist, then record live run evidence. The repository's pure Python tests are dependency-free; any local uAgents install must use an exact vetted release that satisfies the seven-day cooldown.
 - Do not claim Fetch.ai or CREAO prize eligibility until a real configured run is captured in the sponsor evidence ledger.
 
@@ -129,7 +137,7 @@ Convex is a real seller backend: typed schema, reactive seller operator queries,
 
 ### Fetch.ai — target Best Use of Fetch.ai
 
-Fetch.ai must perform real seller work: a scoped seller job produces a schema-valid proposal against the seller's own catalog/policy and returns provider provenance. The implementation will support fixture mode for deterministic tests, but the submission proof must show a real reachable Fetch agent, request/response, bounded tools and failure/retry behavior.
+Fetch.ai must perform real seller work: opening matching plus at least one v5.3 seller advocacy, grouped-reply or final-invitation job produces a schema-valid result against the seller's own catalog/policy and the approved public snapshot, with provider provenance. The implementation will support fixture mode for deterministic tests, but the submission proof must show a real reachable Fetch agent, request/response, bounded tools and failure/retry behavior. The seller agent must not be presented as the moderator or adjudicator.
 
 ### CREAO — target CREAO AI tracks where eligible
 
@@ -145,7 +153,11 @@ Visa, Coinbase/x402, Mana, Apify evidence and voice/design tracks remain outside
 
 - Merchant A cannot read, mutate or infer Merchant B's listings, policies, costs, floors, bids or jobs.
 - A browser-supplied merchant ID, owner ID, role, record ID or provider run ID never grants access.
-- Raw prompts, private maximums, requirement origins and competitor information never enter seller jobs or seller logs.
+- Raw prompts, private maximums, requirement origins, arbitrary competitor information and sealed final terms never enter seller jobs or seller logs. The approved v5.3 public snapshot and checked outcome references are allowed only through the canonical role envelope and explicit field allowlist.
+- The common snapshot is identical for all participants; changing only the buyer's private maximum cannot change seller input, comparative briefs or final invitations.
+- Each merchant has at most one advocacy/challenge job and each challenged merchant has one grouped reply job; no reply-to-reply or repeated council is possible.
+- A final decision is parent-bound, keeps goods/configuration/condition/quantity fixed, and cannot increase delivered total or weaken terms. Invalid or missing finals retain only a still-valid prior offer.
+- Seller-facing council output is checked, bounded and non-authoritative; unsupported accusations cannot remove or down-rank a rival, and the seller cannot invent facts or sources.
 - Invalid prices, quantities, variants, conditions, policy versions, stock transitions, replay keys and stale jobs fail closed.
 - A policy-valid but over-budget offer may remain internal but is never made selectable by seller code.
 - Late, duplicated, cancelled or mismatched provider results cannot reopen a job or alter a closed offer.
@@ -158,6 +170,8 @@ Visa, Coinbase/x402, Mana, Apify evidence and voice/design tracks remain outside
 These do not block deterministic seller implementation but do block claiming live sponsor use:
 
 - Which Fetch.ai transport/agent address and supported model will be used for the seller role?
+- Which buyer-owned canonical v5.3 contract revision will the seller worker consume, and which generated fixtures/bindings will be regenerated from it?
+- Which seller council phases are enabled in the first live proof: advocacy, grouped reply, final invitation, or all three?
 - Which CREAO project/agent ID, run endpoint and callback/poll mechanism is enabled for the buyer-owned role?
 - Which team-owned Convex production deployment and Auth environment will host the schema and functions?
 - Does the team want the Factory Droid seller audit in this branch, or should it remain a documented stretch target?

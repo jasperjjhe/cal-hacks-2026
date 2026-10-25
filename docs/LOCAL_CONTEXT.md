@@ -72,18 +72,21 @@ use the product's private secret-entry mechanism or a protected local shell.
 ## Authoritative documentation and precedence
 
 1. `BUYERUNION_IMPLEMENTATION.md` is the active product/backend
-   specification. Sections 3, 5, 6, 7, 8, 11, 12, 15, 16, 17, 19, and 20 are
+   specification. Sections 3, 5, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19,
+   and 20 are
    especially relevant to seller work.
-2. `docs/SELLER_IMPLEMENTATION_PLAN.md` is the seller execution plan.
-3. `docs/BUYER_SELLER_INTEGRATION_NOTES.md` is the merge boundary with the
+2. `docs/SELLER_COUNCIL_HANDOFF.md` records the user-confirmed v5.3 council
+   format and its acceptance gates; it is not an implementation proof.
+3. `docs/SELLER_IMPLEMENTATION_PLAN.md` is the seller execution plan.
+4. `docs/BUYER_SELLER_INTEGRATION_NOTES.md` is the merge boundary with the
    buyer branch.
-4. `docs/SELLER_FETCH_CONFIGURATION.md` is the Fetch deployment handoff.
-5. `docs/SELLER_SPONSOR_PROOF.md` is the evidence ledger; code, a logo, a key,
+5. `docs/SELLER_FETCH_CONFIGURATION.md` is the Fetch deployment handoff.
+6. `docs/SELLER_SPONSOR_PROOF.md` is the evidence ledger; code, a logo, a key,
    or a slide is not live sponsor proof.
-6. `SECURITY.md`, `frontend/.npmrc`, `security/dependency-policy.json`,
+7. `SECURITY.md`, `frontend/.npmrc`, `security/dependency-policy.json`,
    `.github/main-branch-protection.json`, and `.github/workflows/*` are release
    and security gates.
-7. `buyerunion-prd-v4-source.md` and the PDFs are historical/reference
+8. `buyerunion-prd-v4-source.md` and the PDFs are historical/reference
    material, not competing implementation specifications.
 
 ## Current architecture
@@ -113,6 +116,11 @@ use the product's private secret-entry mechanism or a protected local shell.
 - `frontend/convex/integrations/` contains the provider-neutral port, fixture
   provider, Fetch adapter, CREAO adapter, HTTPS host allowlists, bounded
   timeouts, idempotency keys, and provider-run provenance.
+- v5.3 seller council participation is specified but not implemented. The
+  seller branch must consume the buyer-owned canonical v2 council envelopes
+  for the immutable public snapshot, advocacy/challenge, grouped reply,
+  checked-outcome references and sealed final invitation. It must not create a
+  second TypeScript/Python council schema.
 
 ### Fetch seller agent
 
@@ -136,6 +144,10 @@ use the product's private secret-entry mechanism or a protected local shell.
 - Agent Storage holds only bounded job metadata, the input digest, state, and
   the validated decision. It does not store the shared token or full inbound
   request envelope.
+- The current worker implements the legacy bounded proposal path. Its future
+  v5.3 role inputs may include only the explicit public competition snapshot
+  and checked outcome references; arbitrary rival records, private economics
+  and sealed revisions remain forbidden.
 - The Agentverse shared secret is required at the gateway/agent boundary and
   fails closed when missing or incorrect. Convex uses a separate gateway
   secret; neither secret is stored in the repository or forwarded from a
@@ -172,6 +184,12 @@ When integrating `origin/geoff/buyer`:
 6. Generated Convex bindings are regenerated once after the unified schema is
    merged; `_generated` files must not be hand-written or duplicated.
 
+For v5.3, B first publishes the canonical schema/fixtures and coordinates the
+snapshot, checked council phases, invitation records and sealed promotion. S
+then migrates seller parsing/fixtures and validates seller authorship, frozen
+basket, policy authority and economics. No new seller role is enabled against
+the current baseline buyer contract.
+
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
 must not also be started by that generic buyer dispatcher.
@@ -185,7 +203,8 @@ must not also be started by that generic buyer dispatcher.
   merchant isolation and reservation contention behavior.
 - **Fetch.ai:** real seller work through the Agentverse-compatible seller
   agent. The live proof must show a reachable agent, pending-to-terminal run,
-  accepted schema-valid proposal, replay/reconciliation, and failure recovery.
+  accepted schema-valid proposal, v5.3 seller-role provenance after migration,
+  replay/reconciliation, and failure recovery.
 - **CREAO:** buyer-side core role such as intake, comparison/council, or
   bounded evidence explanation. It must do meaningful runtime work, not merely
   generate code or provide a peripheral summary.
@@ -279,13 +298,14 @@ specific proof criteria.
 - The local `main` branch is one commit behind `origin/main`; do not silently
   rewrite or reset it. Refresh it only as an explicitly requested maintenance
   step.
-- `origin/feature/seller-side` is clean and synchronized with the current
-  checkout at `d4cd902`.
-- `origin/feature/seller-side` is 11 commits ahead of `origin/dev`; this is
-  expected for the active seller feature branch.
-- `origin/geoff/buyer` and the seller feature branch have diverged (6 commits
-  unique to buyer, 11 unique to seller at last check). Integrate through the
-  documented internal seam rather than copying duplicate implementations.
+- The local branch contains the seller feature history plus merge commit
+  `84db50c`, which brings in the latest documentation-only `origin/dev`
+  council v5.3 revision. The documentation checkpoint below is pending push.
+- `origin/feature/seller-side` remains at the prior pushed seller checkpoint
+  until this documentation sync is pushed; refresh this section after push.
+- `origin/geoff/buyer` and the seller feature branch have diverged; integrate
+  through the documented internal seam rather than copying duplicate
+  implementations.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
   conversation resolution, no force pushes/deletions, and **zero required
@@ -310,17 +330,18 @@ specific proof criteria.
 - Chat Protocol decision: it may be added as an optional public Agentverse/
   ASI:One discovery and demo surface, but it is not the seller-job transport or
   source of truth. Chat messages are not allowed to carry raw buyer prompts,
-  private budgets, competitor data, hidden seller pricing, or arbitrary job
-  commands. Any future Chat handler may answer public capability/catalog
-  questions only. Core seller work remains the strict REST contract or a
-  custom typed uAgents Protocol/Dialogue with Convex-owned job scope,
-  idempotency, and reconciliation.
+  private budgets, arbitrary competitor data, hidden seller pricing, or
+  arbitrary job commands. Any future Chat handler may answer public
+  capability/catalog questions only. The approved v5.3 competition snapshot
+  is a separate authenticated, typed job input and is not a Chat payload. Core
+  seller work remains the strict REST contract or a custom typed uAgents
+  Protocol/Dialogue with Convex-owned job scope, idempotency, and reconciliation.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime implemented; Agentverse repo
-linkage configured; hosted deployment, live route verification and buyer
-integration pending.**
+Status at this context update: **seller runtime baseline implemented; v5.3
+council specification synced from `dev`; council contract migration, hosted
+deployment, live route verification and buyer integration pending.**
 
 Completed:
 
@@ -337,7 +358,8 @@ Completed:
   logs show successful startup and Almanac registration. Historical failed
   revisions remain in the log history and are not current proof.
 - Fetch configuration, sponsor proof, seller implementation plan, and buyer/
-  seller integration notes updated.
+  seller integration notes updated; the v5.3 seller council handoff is now
+  merged from `dev` and seller-branch docs record the migration gap honestly.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -357,6 +379,11 @@ Pending:
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
   sponsor ledger.
+- Review and consume the buyer-owned canonical v5.3 contract revision when it
+  lands. Migrate seller worker/parser/fixtures to advocacy, grouped reply and
+  parent-bound final roles without adding a duplicate council schema.
+- Add immutable `finalServiceOptions` policy support and seller-side validation
+  before claiming service concessions in final offers.
 - Finish a seller-only operator/demo surface and buyer-to-seller integration
   tests.
 - Merge with the buyer branch only after contract regeneration and duplicate
@@ -367,24 +394,29 @@ Pending:
 
 ## Immediate next steps
 
-1. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
+1. Review the buyer-owned canonical v5.3 contract revision and agree the
+   generated schema/fixtures before enabling new seller roles.
+2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
+   snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the
+   change dependency-free and test deterministic privacy/parent-scope gates.
+3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
    agent, then configure `gateway.py` on Mana with a separate gateway token and
    the fixed Agentverse address. Do not paste either secret into chat.
-2. Verify the four gateway routes and typed Agentverse query, then record the
-   exact public HTTPS host, agent address, runtime version, and non-secret test run IDs.
-   address, runtime version, and non-secret test run IDs.
-3. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
+4. Verify the four gateway routes and typed Agentverse query, then record the
+   exact public HTTPS host, agent address, runtime version, and non-secret test
+   run IDs.
+5. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
    the protected `frontend/` shell.
-4. Run the live seller acceptance matrix: valid proposal, no-match abstain,
+6. Run the live seller acceptance matrix: valid proposal, no-match abstain,
    replay with same digest, replay with changed digest, pending-to-completed
    polling, ambiguous-start reconciliation, cancellation, malformed output,
-   timeout, and auth rejection.
-5. Append the evidence to `docs/SELLER_SPONSOR_PROOF.md`, then build the
+   timeout, auth rejection, and one v5.3 council-role run after migration.
+7. Append the evidence to `docs/SELLER_SPONSOR_PROOF.md`, then build the
    seller-only operator/demo flow and its integration tests.
-6. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
+8. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
    integrate through `prepareSellerJob`/`attachSellerBrief`/`dispatch`, and
    verify there is exactly one provider call per seller job.
-7. After the core seller/buyer demo works, implement buyer-owned CREAO,
+9. After the core seller/buyer demo works, implement buyer-owned CREAO,
    Apify, Visa, Coinbase/x402, and Mana proof in separate small checkpoints.
 
 ## Required status wording for future turns

@@ -3,7 +3,10 @@
 This is the seller-side Fetch.ai uAgent. It performs the seller's bounded
 catalog matching work and returns a `SellerDecision` that the Convex backend
 validates again. It never receives the buyer's raw conversation, requirement
-origins, private maximum, competitor data, seller cost, or operator floor.
+origins, private maximum, arbitrary rival records, seller cost, operator floor,
+or sealed final terms. The future v5.3 council roles may receive only the
+canonical immutable public competition snapshot and checked outcome references;
+those role envelopes are not implemented in this worker yet.
 
 ## Agentverse deployment
 
@@ -63,6 +66,22 @@ The agent fails closed if its shared secret is missing or does not match. Do
 not put either value in this repository, the agent profile, or a demo
 recording.
 
+## v5.3 council migration
+
+The active specification adds seller advocacy, grouped replies and one sealed
+final invitation per eligible candidate. The current deployed code still
+implements the legacy bounded proposal path. Do not enable the new role names
+until the buyer-owned canonical v2 council contracts, fixtures and Convex
+bindings are available.
+
+When migrated, the worker may defend its frozen candidates and emit at most one
+scoped peer challenge, answer one grouped batch of admitted challenges, or
+submit one parent-bound hold/abstention/final revision per invited candidate.
+It must not adjudicate, rank or remove rivals, browse for new seller facts,
+change the common snapshot, reopen bargaining or expose sealed submissions.
+The Python parser and fixtures must be derived from the canonical shared
+contract source; do not create a second handwritten council schema here.
+
 The routes are fixed, typed POST endpoints:
 
 | Operation | Route | Purpose |
@@ -113,7 +132,8 @@ seed through the environment before running `python agent.py`.
 - Storage records contain only bounded state and the validated decision; they do
   not contain the token or the full request envelope.
 - Input fields are allowlisted and recursively scanned for private buyer/seller
-  fields before matching.
+  fields before matching. The v5.3 common snapshot, when enabled, is an
+  explicit public projection rather than an unrestricted competitor record.
 - Catalog matching fails closed for unknown hard facts, wrong units, wrong
   category/profile, disallowed condition, insufficient stock, and malformed
   policy/catalog data.

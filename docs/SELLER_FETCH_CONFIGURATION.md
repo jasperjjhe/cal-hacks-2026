@@ -1,6 +1,6 @@
 # Seller provider runtime handoff
 
-Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
+Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The v5.3 council format is now the active specification, but its shared v2 envelopes and seller role migration are not implemented yet. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
 
 The agent source is in `agents/fetch-seller/`. It can be copied into an
 Agentverse Hosted Agent or run as a local uAgent. Hosted process globals are
@@ -14,11 +14,33 @@ The buyer-owned workflow supplies a server-built, sanitized `SellerBrief`. The s
 1. prepares a `sellerJobs` record bound to request/version, run, phase, merchant, candidates, policy version and input digest;
 2. stores the brief in `sellerJobInputs` after strict validation;
 3. calls the internal `sellerAgent:dispatch` action for a Fetch job;
-4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms;
+4. sends only the public seller projection: brief, candidate IDs, own catalog facts, available quantity, MSRP/reference price and public service terms. A v5.3 advocacy/reply/final job additionally receives the immutable allowlisted common competition snapshot and checked public outcome references for the current phase, never arbitrary rival records;
 5. accepts `pending`, polls the same provider run, or reconciles an ambiguous start by application `jobId`;
 6. passes completed output to `validateAndStoreProposal`, which recomputes fit, stock, floor, delivered price and policy terms before creating an immutable offer.
 
-The provider never receives the raw buyer conversation, requirement origins, private maximum, competitor data, operator floor, unit costs or minimum contribution. The provider's output is not authoritative. A timeout or no-response network failure with no provider run ID becomes `ambiguous`; the action does not blindly start a second provider run. A reconciliation endpoint can resolve that state by the same job ID.
+The provider never receives the raw buyer conversation, requirement origins, private maximum, arbitrary competitor data, competitor costs/floors, private rationale or sealed final submissions. The approved v5.3 public snapshot is the only permitted competitor projection and must be built from an explicit field allowlist. The provider's output is not authoritative. A timeout or no-response network failure with no provider run ID becomes `ambiguous`; the action does not blindly start a second provider run. A reconciliation endpoint can resolve that state by the same job ID.
+
+## v5.3 seller council roles
+
+The current worker still accepts the legacy seller role names and must not be
+advertised as v5.3 council support. After the buyer-owned canonical contract
+source publishes schema-versioned council envelopes, migrate the Fetch worker
+and gateway together:
+
+- seller advocacy: defend the merchant's frozen candidates and optionally emit
+  one scoped peer challenge;
+- seller reply: answer the one grouped batch of admitted challenges for the
+  merchant, with `defend`, `correct` or `unknown` dispositions;
+- seller final: submit one hold, abstention or parent-bound revision per invited
+  candidate, keeping the frozen basket and policy authority intact.
+
+The worker does not produce moderator briefs or adjudication outcomes. It does
+not browse for new seller facts, invent source IDs, change the snapshot, rank
+rivals or reopen bargaining. B owns phase scheduling, cross-offer validation,
+checked outcomes, invitation records and sealed promotion. S owns seller scope,
+policy/frozen-basket/economic validation and the final service-option authority.
+Do not add a parallel Python schema: derive parsing and fixtures from the
+buyer-owned canonical v2 contract source.
 
 ## Fetch environment
 
@@ -93,7 +115,7 @@ Agentverse's hosted allowlisted runtime is the intended submission path.
 
 ## Provider allocation
 
-The planned sponsor architecture assigns Fetch.ai to the seller role: each seller job gets one isolated Fetch run against that merchant's own catalog and policy. CREAO is planned for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller action supports the same provider-neutral port for future configuration, but do not run both providers for the same seller job or use CREAO as silent failover. If CREAO is intentionally selected for a seller/merchant-operations role, use the analogous `CREAO_SELLER_*` variables and record why the role is distinct and necessary.
+The planned sponsor architecture assigns Fetch.ai to the seller role: each seller job gets one isolated Fetch run against that merchant's own catalog and policy, with v5.3 advocacy, grouped-reply and final roles added after the contract migration. CREAO is planned for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller action supports the same provider-neutral port for future configuration, but do not run both providers for the same seller job or use CREAO as silent failover. If CREAO is intentionally selected for a seller/merchant-operations role, use the analogous `CREAO_SELLER_*` variables and record why the role is distinct and necessary.
 
 ## Buyer-side integration note
 
@@ -103,4 +125,4 @@ The seller action does not close a buyer run, publish a shortlist, reserve stock
 
 ## Live sponsor evidence still required
 
-Do not claim the Fetch.ai prize from this adapter alone. The ledger needs a real reachable agent, non-secret provider run ID, config revision, input/output digests, pending-to-terminal transition, one accepted proposal, and one timeout or malformed-output recovery. The provider identity, agent address and model must be verified against the event's current rules before submission.
+Do not claim the Fetch.ai prize from this adapter alone. The ledger needs a real reachable agent, non-secret provider run ID, config revision, input/output digests, pending-to-terminal transition, one accepted proposal, one v5.3 seller-role result with snapshot/phase provenance, and one timeout or malformed-output recovery. The provider identity, agent address and model must be verified against the event's current rules before submission.
