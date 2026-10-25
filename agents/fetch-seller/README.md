@@ -8,6 +8,24 @@ operator floor, or sealed final terms. Council roles receive only the
 canonical immutable public competition snapshot and checked outcome
 references; the worker cannot adjudicate or publish buyer results.
 
+## Transport notes (verified live 2026-10-25)
+
+- The gateway signs a sync envelope with its own `agent1…` identity and posts it
+  to `https://agentverse.ai/v1/hosting/submit`. Agentverse answers hosted sync
+  queries from agent identities; `uagents.query`'s throwaway `user1…` senders
+  get HTTP 500. Replies are accepted only when signed by the configured agent
+  for the same session.
+- Agentverse's edge rejects urllib's default User-Agent (Cloudflare 1010), so the
+  gateway sends its own.
+- Hosted round trips measured 2–17 s; keep `FETCH_SELLER_REQUEST_TIMEOUT_MS` at
+  25000 in Convex.
+- Hosted modules can lack `__file__`; `seller_schema_data.py` (generated) carries
+  the same schema as `seller.schema.json`.
+- `protocol.py` must not use postponed annotations: the hosted runtime otherwise
+  fails every envelope with a pydantic ForwardRef ConfigError.
+- The agent also publishes the Agent Chat Protocol as a read-only description
+  of its role. Chat never starts or changes a seller job.
+
 ## Agentverse deployment
 
 The checked-in `.avctl/config.toml` points at the existing Agentverse Hosted
@@ -36,7 +54,9 @@ must be behind HTTPS and receives these runtime-only variables:
 ```text
 FETCH_SELLER_AGENT_ADDRESS=<this Agentverse address>
 FETCH_SELLER_GATEWAY_TOKEN=<Convex-to-gateway secret>
-FETCH_SELLER_SHARED_TOKEN=<gateway-to-agent secret>
+FETCH_SELLER_SHARED_TOKEN=<gateway-to-agent secret, also the hosted Agent Secret>
+FETCH_SELLER_GATEWAY_SEED=<random seed for the gateway's own agent identity>
+FETCH_SELLER_QUERY_TIMEOUT_SECONDS=22
 FETCH_SELLER_GATEWAY_HOST=127.0.0.1
 FETCH_SELLER_GATEWAY_PORT=8787
 ```

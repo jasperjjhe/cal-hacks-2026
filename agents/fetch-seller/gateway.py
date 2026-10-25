@@ -12,10 +12,13 @@ secret.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import secrets
+import time
+import urllib.error
+import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 
@@ -23,8 +26,8 @@ try:  # uagents >= 0.20 moved the envelope model into uagents-core.
     from uagents_core.envelope import Envelope
 except ImportError:  # pragma: no cover - older uagents releases
     from uagents.envelope import Envelope
-from uagents.query import query
-from uagents.resolver import RulesBasedResolver
+from uagents.crypto import Identity
+from uagents_core.models import Model
 
 from protocol import (
     CancelRequest,
@@ -40,7 +43,8 @@ from seller_logic import SellerInputError, bounded_id
 
 MAX_BODY_BYTES = 128 * 1024
 MAX_RESPONSE_BYTES = 256 * 1024
-DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_TIMEOUT_SECONDS = 20.0
+DEFAULT_AGENT_ENDPOINT = "https://agentverse.ai/v1/hosting/submit"
 ROUTES = {
     "/seller/jobs",
     "/seller/jobs/poll",
@@ -106,13 +110,38 @@ def _authorized(headers: Any, payload: Optional[Dict[str, Any]] = None) -> bool:
     return bool(supplied) and secrets.compare_digest(supplied, expected)
 
 
-def _resolver() -> Optional[RulesBasedResolver]:
-    """Optional fixed endpoint for the destination agent (local testing or a
-    pinned Agentverse submit URL). Never taken from a request."""
-    endpoint = os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip()
-    if not endpoint:
-        return None
-    return RulesBasedResolver({_agent_address(): endpoint})
+def _agent_endpoint() -> str:
+    """Fixed submit endpoint for the destination agent; never taken from a request."""
+    return os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip() or DEFAULT_AGENT_ENDPOINT
+
+
+def _gateway_identity() -> Identity:
+    """The gateway's own agent identity. Agentverse returns hosted sync replies
+    to agent-prefixed senders; uagents.query's throwaway user identities get a
+    500 from the hosted submit endpoint."""
+    seed = os.getenv("FETCH_SELLER_GATEWAY_SEED", "").strip()
+    if not seed:
+        raise RuntimeError("FETCH_SELLER_GATEWAY_SEED is not configured")
+    return Identity.from_seed(seed, 0)
+
+
+def _post_envelope(endpoint: str, body: bytes, timeout: float) -> bytes:
+    request = urllib.request.Request(
+        endpoint,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "x-uagents-connection": "sync",
+            # Agentverse's edge rejects urllib's default User-Agent (Cloudflare 1010).
+            "User-Agent": "converge-fetch-gateway/1",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed endpoint
+        raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError("agent response too large")
+    return raw
 
 
 def _message_for(path: str, payload: Dict[str, Any]) -> SellerMessage:
@@ -179,50 +208,49 @@ def _message_for(path: str, payload: Dict[str, Any]) -> SellerMessage:
     raise ValueError("unsupported route")
 
 
-async def _query_agent(message: SellerMessage) -> ProviderResponse:
+def _query_agent(message: SellerMessage) -> ProviderResponse:
     address = _agent_address()
     if not address:
         raise RuntimeError("FETCH_SELLER_AGENT_ADDRESS is not configured")
     timeout = float(os.getenv("FETCH_SELLER_QUERY_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
-    kwargs: Dict[str, Any] = {}
-    resolver = _resolver()
-    if resolver is not None:
-        kwargs["resolver"] = resolver
-    response = await asyncio.wait_for(
-        query(destination=address, message=message, timeout=timeout, **kwargs),
-        timeout=timeout + 2.0,
+    identity = _gateway_identity()
+    payload = message.model_dump_json() if hasattr(message, "model_dump_json") else message.json()
+    envelope = Envelope(
+        version=1,
+        sender=identity.address,
+        target=address,
+        session=uuid.uuid4(),
+        schema_digest=Model.build_schema_digest(message),
+        protocol_digest=None,
+        expires=int(time.time()) + int(timeout) + 5,
     )
-    if isinstance(response, ProviderResponse):
-        return response
-    if isinstance(response, Envelope):
-        decoded = response.decode_payload()
-        response = MailboxResponse(**json.loads(decoded))
-    if isinstance(response, MailboxResponse):
-        output = None
-        if response.outputJson:
-            output = json.loads(response.outputJson)
-        return ProviderResponse(
-            status=response.status,
-            providerRunId=response.providerRunId,
-            output=output,
-            model=response.model or None,
-            errorCode=response.errorCode or None,
-            errorRetryable=(
-                None
-                if not response.errorRetryable
-                else response.errorRetryable.lower() == "true"
-            ),
-        )
-    if isinstance(response, dict):
-        return ProviderResponse(**response)
-    raise TypeError("agent returned an unsupported response")
+    envelope.encode_payload(payload)
+    envelope.sign(identity)
+    raw = _post_envelope(_agent_endpoint(), envelope.model_dump_json().encode("utf-8"), timeout)
+    reply = Envelope.model_validate_json(raw)
+    # Only accept a reply signed by the fixed seller agent for this session.
+    if reply.sender != address or reply.session != envelope.session or not reply.verify():
+        raise ValueError("unexpected reply envelope")
+    response = MailboxResponse(**json.loads(reply.decode_payload()))
+    output = json.loads(response.outputJson) if response.outputJson else None
+    return ProviderResponse(
+        status=response.status,
+        providerRunId=response.providerRunId,
+        output=output,
+        model=response.model or None,
+        errorCode=response.errorCode or None,
+        errorRetryable=(None if not response.errorRetryable else response.errorRetryable.lower() == "true"),
+    )
 
 
 def _run_query(message: SellerMessage) -> ProviderResponse:
     try:
-        return asyncio.run(_query_agent(message))
-    except (asyncio.TimeoutError, TimeoutError):
-        return _failed(message.jobId, "PROVIDER_TIMEOUT", retryable=True)
+        return _query_agent(message)
+    except (TimeoutError, urllib.error.URLError) as error:
+        reason = getattr(error, "reason", error)
+        if isinstance(error, TimeoutError) or isinstance(reason, TimeoutError):
+            return _failed(message.jobId, "PROVIDER_TIMEOUT", retryable=True)
+        return _failed(message.jobId, "PROVIDER_UNAVAILABLE", retryable=True)
     except Exception:
         return _failed(message.jobId, "PROVIDER_PROTOCOL")
 
@@ -289,16 +317,16 @@ class GatewayHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         # Unauthenticated liveness only: no agent address, tokens or job data.
         if self.path in ("/health", "/healthz"):
-            self._write_json(200, {"ok": True, "configured": bool(_gateway_token() and _shared_agent_token() and _agent_address())})
+            self._write_json(200, {"ok": True, "configured": bool(_gateway_token() and _shared_agent_token() and _agent_address() and os.getenv("FETCH_SELLER_GATEWAY_SEED", "").strip())})
             return
         self._write_json(404, {"error": "not_found"})
 
 
 def main() -> None:
-    if not _gateway_token() or not _shared_agent_token() or not _agent_address():
+    if not _gateway_token() or not _shared_agent_token() or not _agent_address() or not os.getenv("FETCH_SELLER_GATEWAY_SEED", "").strip():
         raise SystemExit(
-            "FETCH_SELLER_GATEWAY_TOKEN, FETCH_SELLER_SHARED_TOKEN, and "
-            "FETCH_SELLER_AGENT_ADDRESS are required"
+            "FETCH_SELLER_GATEWAY_TOKEN, FETCH_SELLER_SHARED_TOKEN, FETCH_SELLER_AGENT_ADDRESS "
+            "and FETCH_SELLER_GATEWAY_SEED are required"
         )
     host = os.getenv("FETCH_SELLER_GATEWAY_HOST", "127.0.0.1")
     port = int(os.getenv("FETCH_SELLER_GATEWAY_PORT", os.getenv("PORT", "8787")))
