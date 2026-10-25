@@ -9,9 +9,10 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-25
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current implementation checkpoint: the current buyer tip `df26d70` is
-reconciled locally. The seller v2 migration, unified schema, generated
-bindings, buyer completion bridge, and buyer-side Apify updates are present
+Current implementation checkpoint: the current buyer tip `9f150fa` is
+reconciled locally (its resolved tree includes `df26d70` and the agreed
+`origin/dev` documentation merge). The seller v2 migration, unified schema,
+generated bindings, buyer completion bridge, and buyer-side Apify updates are present
 and verified. This context file is updated with each implementation
 checkpoint. Remote seller status before this merge was clean and synchronized
 with `origin/feature/seller-side`.
@@ -218,8 +219,9 @@ When integrating `origin/geoff/buyer`:
 
 For v5.3, B published the canonical schema/fixtures and coordinates the
 snapshot, checked council phases, invitation records and sealed promotion on
-the buyer branch. The current remote buyer tip is `df26d70` (v2 was introduced
-at `d863b16`) and adds buyer-side Apify work. This seller merge now consumes
+the buyer branch. The current remote buyer tip is `9f150fa` (v2 was introduced
+at `d863b16`, with Apify work in `df26d70`) and includes the agreed buyer/dev
+documentation merge. This seller merge now consumes
 that source, validates seller authorship, frozen basket, policy authority and
 economics, and provides the single seller dispatch/result bridge. The
 standalone buyer branch's seller execution remains fixture-backed; this merged
@@ -351,7 +353,7 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
-- Latest compatibility audit: buyer ref `df26d70`; this merge preserves its
+- Latest compatibility audit: buyer ref `9f150fa`; this merge preserves its
   canonical v2 council contracts, buyer tables, workflow bindings and Apify
   evidence path while adding the seller v2 role seam. Live Fetch wiring and
   sponsor evidence remain pending; drift is recorded in
@@ -437,14 +439,14 @@ Completed:
   guardrails, authorized service options, merchant pause/resume, activity and
   agent-readiness status. It is explicitly labeled fixture preview and does
   not pretend to be authenticated Convex data.
-- The current buyer compatibility reference is `df26d70` (the canonical v2
+- The current buyer compatibility reference is `9f150fa` (the canonical v2
   source originated at `d863b16`). The local merge consumes the canonical v2
   role input/output, preserves buyer-owned coordination, includes the buyer
   Apify changes, and routes configured Fetch seller jobs through one seller
   dispatch bridge with a result query before buyer publication.
 - Branch protection policy checked in with no required second approval.
 - Seller/buyer reconciliation is pushed to `origin/feature/seller-side` at
-  `eb29a16`; the current buyer compatibility ref is `df26d70`.
+  `b39bc51`; the current buyer compatibility ref is `9f150fa`.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
   Convex typecheck, dependency/workflow policy, `npm ci --ignore-scripts`, npm

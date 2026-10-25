@@ -10,6 +10,11 @@ The active product/technical authority is
 Historical review/test results do not establish acceptance of this new protocol.
 Implementation paths and baseline behavior below describe the feature branches,
 not code delivered by this documentation-only commit to `dev`.
+See [buyer migration status and exact seller seam](BUYER_COUNCIL_MIGRATION.md).
+The standalone buyer checkout remains fixture-backed for seller roles; the
+merged `feature/seller-side` checkout consumes the canonical v2 contracts and
+routes configured Fetch jobs through the seller bridge. This document does not
+claim live provider acceptance or replace the active implementation spec.
 
 ## Agreed product flow
 
@@ -45,7 +50,7 @@ offer per eligible candidate → independent research → deterministic comparis
 - Buyers see short checked exchanges as available, plus a final change/uncertainty
   summary. Up to three useful highlights are recommendations, not debate winners;
   the remaining qualified shortlist is accessible. Buyer authority is unchanged.
-- Preserve 210 seconds total, 28 model calls, 40 tools and phase deadlines;
+- Use the user-approved MVP ceiling of 480 seconds total, 28 model calls, 40 tools and phase deadlines;
   finish early or return usable partial results. The former 45-second complete
   comparison target is withdrawn pending real cold/warm measurements.
 
@@ -61,10 +66,13 @@ offer per eligible candidate → independent research → deterministic comparis
 | Buyer events/UI | Earlier safe progress and summary | Publish only checked short public exchanges and real phase counts; preserve sealed prices and privacy |
 | Service revisions | Terms derived from baseline policy | Versioned permitted service options, private incremental cost/contribution checks and exact offer/quote/order snapshots |
 
-The buyer branch currently keeps seller roles as fixtures while CREAO can serve
-buyer roles. Do not enable new role names against the current adapter or treat
-its legacy moderator prompt as this council. Provider code/configuration and
-live runs must be upgraded after the canonical contracts are implemented.
+The standalone buyer branch keeps seller roles as fixtures while CREAO can
+serve buyer-owned intake, council and evidence roles. The merged seller
+checkout routes configured seller advocacy, reply and final jobs through Fetch,
+with explicit fixture fallback for CI/demo. The table above records the
+pre-migration baseline; see the linked buyer migration status for implemented
+buyer work and the exact remaining live deployment boundary. Live combined
+acceptance remains pending.
 
 ## Ownership and integration sequence
 
@@ -142,12 +150,11 @@ live runs must be upgraded after the canonical contracts are implemented.
 
 ## Seller-branch documentation sync
 
-When the main conversation resumes consolidation, port the v5.3 references and
-acceptance gates into the seller branch's `SELLER_IMPLEMENTATION_PLAN.md`,
-`SELLER_SPONSOR_PROOF.md`, `BUYER_SELLER_INTEGRATION_NOTES.md`,
-`SELLER_FETCH_CONFIGURATION.md`, `LOCAL_CONTEXT.md` and
-`agents/fetch-seller/README.md` where present. Replace blanket bans on all
-competitor information with an explicit distinction between the approved public
-snapshot and forbidden private/arbitrary cross-merchant access. Replace legacy
-moderator-authored challenge/usefulness-gate claims and record implementation
-gaps honestly. Those branch-only files have not been edited in this checkout.
+The seller branch has synchronized the v5.3 references and acceptance gates
+into `SELLER_IMPLEMENTATION_PLAN.md`, `SELLER_SPONSOR_PROOF.md`,
+`BUYER_SELLER_INTEGRATION_NOTES.md`, `SELLER_FETCH_CONFIGURATION.md`,
+`LOCAL_CONTEXT.md` and `agents/fetch-seller/README.md` where present. The
+documentation distinguishes the approved public snapshot from forbidden
+private/arbitrary cross-merchant access, replaces legacy moderator-authored
+challenge/usefulness-gate claims, and records the remaining live deployment
+gaps honestly.
