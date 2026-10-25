@@ -18,8 +18,8 @@ const sellerSchema = {
   $schema: schema.$schema,
   $id: 'https://converge.local/contracts/seller.v1.schema.json',
   $comment: 'Request envelopes remain v1; council and final decision envelopes are v2. Generated from the canonical registry.',
-  oneOf: ['SellerBrief', 'SellerDecision', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => ({ $ref: `#/$defs/${name}` })),
-  $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput'].map(name => [name, schema.$defs[name]])),
+  oneOf: ['SellerBrief', 'SellerDecision', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput', 'SellerFinalAuthority'].map(name => ({ $ref: `#/$defs/${name}` })),
+  $defs: Object.fromEntries(['SellerBrief', 'SellerDecision', 'SellerProposal', 'CouncilJobInput', 'SellerAdvocacy', 'SellerReply', 'SellerFinalDecision', 'SellerFinalJobInput', 'SellerFinalAuthority'].map(name => [name, schema.$defs[name]])),
 }
 // Agentverse-hosted modules may run without __file__ or uploaded data files, so the
 // worker also gets the same generated JSON as a Python module (never hand-edited).

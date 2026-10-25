@@ -7,6 +7,7 @@ import {
   type FinalServiceTerms,
   type FitAssessment,
   type OfferLine,
+  type OfferVersion,
   type PricingPolicy,
   type Requirement,
   type RequirementResult,
@@ -691,6 +692,78 @@ export function validateFinalOfferRevision(
       mode: context.mode ?? opening.mode,
       createdAt: context.now,
     },
+  }
+}
+
+export interface FinalPricingAuthorityLine {
+  requestLineId: string
+  listing: { id: string; version: number }
+  quantity: number
+  unitCents: Cents
+  lowestAuthorizedUnitCents: Cents
+}
+
+export interface FinalPricingAuthority {
+  schemaVersion: 2
+  jobId: string
+  candidateId: string
+  offer: { id: string; version: number }
+  lines: FinalPricingAuthorityLine[]
+  shippingCents: Cents
+  totalCents: Cents
+}
+
+/**
+ * The merchant's own price authority for one sealed final invitation.
+ *
+ * Derived from the frozen opening offer, the opening catalog snapshot and the pinned
+ * policy with the same `minimumUnitCents` rule that `validateFinalOfferRevision`
+ * enforces, so a proposal inside this authority is not rejected for price. Only the
+ * resulting lowest unit price leaves Convex; costs, operator floors, discount caps and
+ * contribution inputs do not. Returns null when any frozen line cannot be priced,
+ * in which case the provider receives no authority and can only hold or abstain.
+ */
+export function finalPricingAuthority(input: {
+  jobId: string
+  candidateId: string
+  openingOffer: Pick<OfferVersion, 'offer' | 'lines' | 'shippingCents' | 'totalCents'>
+  catalog: CatalogSnapshot[]
+  policy: PricingPolicy
+}): FinalPricingAuthority | null {
+  if (!input.policy.enabled) return null
+  const lines: FinalPricingAuthorityLine[] = []
+  let itemsCents = 0
+  for (const line of input.openingOffer.lines) {
+    const snapshot = findSnapshotInCatalog(input.catalog, line)
+    const economics = policyForListing(input.policy, line.listing.id)
+    if (!snapshot || !economics || !isSafeCents(line.unitCents)) return null
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > MAX_QUANTITY) return null
+    const minimum = minimumUnitCents({
+      referenceUnitCents: snapshot.listing.referenceUnitCents,
+      operatorFloorCents: snapshot.listing.operatorFloorCents,
+      maxDiscountBps: input.policy.maxDiscountBps,
+      unitCostCents: economics.cost,
+      minimumContributionCents: economics.contribution,
+    })
+    lines.push({
+      requestLineId: line.requestLineId,
+      listing: { id: line.listing.id, version: line.listing.version },
+      quantity: line.quantity,
+      unitCents: line.unitCents,
+      // Never above the current price: a line already at or below its minimum has no room.
+      lowestAuthorizedUnitCents: Math.min(line.unitCents, minimum),
+    })
+    itemsCents = checkedAdd(itemsCents, checkedMultiply(line.quantity, line.unitCents))
+  }
+  if (checkedAdd(itemsCents, input.openingOffer.shippingCents) !== input.openingOffer.totalCents) return null
+  return {
+    schemaVersion: 2,
+    jobId: input.jobId,
+    candidateId: input.candidateId,
+    offer: { id: input.openingOffer.offer.id, version: input.openingOffer.offer.version },
+    lines,
+    shippingCents: input.openingOffer.shippingCents,
+    totalCents: input.openingOffer.totalCents,
   }
 }
 

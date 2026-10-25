@@ -108,5 +108,16 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual((body["status"], body["errorCode"], body["errorRetryable"]), ("failed", "PROVIDER_TIMEOUT", True))
 
 
+    def test_start_message_forwards_authority_beside_input(self):
+        start = {"jobId": "job_1", "runId": "run_1", "phaseId": "final", "role": "seller_final", "inputRef": "ref",
+                 "inputDigest": "d", "input": {"a": 1}, "sellerAuthority": {"schemaVersion": 2}}
+        with mock.patch.dict(os.environ, ENV, clear=False):
+            message = gateway._message_for("/seller/jobs", start)
+            self.assertEqual(json.loads(message.inputJson), {"a": 1})
+            self.assertEqual(json.loads(message.authorityJson), {"schemaVersion": 2})
+            start.pop("sellerAuthority")
+            self.assertEqual(gateway._message_for("/seller/jobs", start).authorityJson, "")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -124,7 +124,7 @@ Seller entry points:
 
 ## Data boundary checks
 
-The seller provider input may contain the confirmed public requirements, candidate IDs, the seller's own catalog and inventory facts, MSRP/reference price, public service terms, and the explicit allowlisted common competition snapshot plus checked outcome references for the active v5.3 role. It must not contain raw buyer messages, origins, private maximums, arbitrary competitor records, competitor costs/floors, private affordability, private rationale or sealed final submissions. The seller response is untrusted until the server recomputes the offer and, for council roles, checks the parent snapshot, author scope and phase rules.
+The seller provider input may contain the confirmed public requirements, candidate IDs, the seller's own catalog and inventory facts, MSRP/reference price, public service terms, and the explicit allowlisted common competition snapshot plus checked outcome references for the active v5.3 role. A final invitation also carries, beside the canonical input, the seller's own derived lowest authorized unit price per frozen line; it is computed at dispatch, never persisted, and never includes the costs, floors, discount caps or contribution inputs behind it. It must not contain raw buyer messages, origins, private maximums, arbitrary competitor records, competitor costs/floors, private affordability, private rationale or sealed final submissions. The seller response is untrusted until the server recomputes the offer and, for council roles, checks the parent snapshot, author scope and phase rules.
 
 ## Combined acceptance update — 2026-10-25
 

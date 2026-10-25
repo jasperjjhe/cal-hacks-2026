@@ -2,9 +2,11 @@
 
 The hosted agent intentionally performs bounded deterministic work. It receives
 only the sanitized seller projection produced by Convex, finds catalog entries
-that satisfy the requested hard requirements, and proposes the public reference
-price. Convex remains authoritative for floors, costs, inventory, policy
-versions, and all buyer-visible totals.
+that satisfy the requested hard requirements, and opens at the public reference
+price. In the sealed final round it applies a margin-preserving price strategy
+inside the merchant's own authorized lowest prices. Convex remains
+authoritative for floors, costs, inventory, policy versions, and all
+buyer-visible totals.
 """
 
 from __future__ import annotations
@@ -618,9 +620,137 @@ def _build_reply(value: Any) -> Dict[str, Any]:
     return result
 
 
-def _build_final(value: Any) -> Dict[str, Any]:
+# Final-round pricing strategy (deterministic; see agents/fetch-seller/README.md).
+# The merchant concedes only against concrete public pressure, by the smallest step
+# that changes the comparison, and never below its own authorized lowest price.
+COMPETITIVE_STEP_BPS = 50          # undercut a comparable rival by 0.5% ...
+COMPETITIVE_MIN_STEP_CENTS = 100   # ... and by at least $1.
+TARGET_MAX_ROOM_BPS = 5_000        # a buyer target may use at most half the room.
+
+
+def validate_final_authority(value: Any, root: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Validate the merchant-private price authority against the frozen invitation."""
+
+    authority = _mapping(value, "final authority")
+    reject_private_fields(authority)
+    schema_root = _generated_schema()
+    _validate_generated_schema(authority, _schema_ref(schema_root, "#/$defs/SellerFinalAuthority"), "final authority", root=schema_root)
+    own = root["ownOffer"]
+    if authority["jobId"] != root["jobId"] or authority["candidateId"] != root["candidateId"]:
+        raise SellerInputError("final authority is bound to another invitation")
+    if authority["offer"] != own["offer"]:
+        raise SellerInputError("final authority is bound to another offer")
+    if authority["shippingCents"] != own["shippingCents"] or authority["totalCents"] != own["totalCents"]:
+        raise SellerInputError("final authority does not match the frozen offer totals")
+    own_lines = {(line["requestLineId"], line["listing"]["id"], line["listing"]["version"], line["quantity"]) for line in own["lines"]}
+    authority_lines = {(line["requestLineId"], line["listing"]["id"], line["listing"]["version"], line["quantity"]) for line in authority["lines"]}
+    if len(authority_lines) != len(authority["lines"]) or authority_lines != own_lines:
+        raise SellerInputError("final authority does not match the frozen basket")
+    items = 0
+    for line in authority["lines"]:
+        unit = _safe_integer(line["unitCents"], "final authority unitCents")
+        lowest = _safe_integer(line["lowestAuthorizedUnitCents"], "final authority lowestAuthorizedUnitCents")
+        if lowest > unit:
+            raise SellerInputError("final authority lowest price exceeds the current price")
+        items += line["quantity"] * unit
+    if items + authority["shippingCents"] != authority["totalCents"]:
+        raise SellerInputError("final authority line prices do not sum to the frozen total")
+    return authority
+
+
+def _soft_fit_score(offer: Mapping[str, Any], weights: Mapping[str, int]) -> int:
+    matched = {check["requirementId"] for check in offer["checks"] if check["status"] == "matched"}
+    return sum(weight for requirement_id, weight in weights.items() if requirement_id in matched)
+
+
+def _price_plan(root: Mapping[str, Any], authority: Mapping[str, Any]) -> Tuple[Optional[int], str]:
+    """Return (target delivered total, reason). None means hold."""
+
+    own = root["ownOffer"]
+    own_total = authority["totalCents"]
+    floor_total = authority["shippingCents"] + sum(line["quantity"] * line["lowestAuthorizedUnitCents"] for line in authority["lines"])
+    room = own_total - floor_total
+    if room <= 0:
+        return None, "AT_AUTHORIZED_LOWEST"
+
+    targets: List[Tuple[int, str]] = []
+    competition = root.get("competition")
+    if competition:
+        weights: Dict[str, int] = {}
+        for line in root["brief"]["lines"]:
+            for requirement in line["requirements"]:
+                if requirement["strength"] == "soft":
+                    weights[requirement["id"]] = int(requirement["weight"])
+        own_score = _soft_fit_score(own, weights)
+        own_lines = sorted(line["requestLineId"] for line in own["lines"])
+        rivals = [
+            offer for offer in competition["offers"]
+            if offer["merchantId"] != root["merchantId"]
+            and sorted(line["requestLineId"] for line in offer["lines"]) == own_lines
+            and _soft_fit_score(offer, weights) >= own_score
+        ]
+        if rivals:
+            best = min(offer["totalCents"] for offer in rivals)
+            if best <= own_total:
+                step = max(COMPETITIVE_MIN_STEP_CENTS, -(-best * COMPETITIVE_STEP_BPS // 10_000))
+                undercut = best - step
+                if undercut >= floor_total:
+                    targets.append((undercut, "UNDERCUT_COMPARABLE_RIVAL"))
+                # A rival this merchant cannot beat within its authority is not chased:
+                # conceding toward an unwinnable price only gives margin away.
+
+    shared = root["brief"].get("sharedTarget")
+    if shared and shared["amountCents"] < own_total:
+        needed = own_total - shared["amountCents"]
+        if needed <= room * TARGET_MAX_ROOM_BPS // 10_000:
+            targets.append((shared["amountCents"], "MEET_SHARED_TARGET"))
+        # A target that would need more than half the room is treated as a bid to
+        # push the merchant to its lowest price, not as a reason to concede.
+
+    if not targets:
+        return None, "NO_PUBLIC_PRESSURE"
+    target, reason = min(targets)
+    if target >= own_total:
+        return None, "ALREADY_COMPETITIVE"
+    return max(target, floor_total), reason
+
+
+def _allocate_concession(authority: Mapping[str, Any], concession: int) -> List[Dict[str, Any]]:
+    """Spread a delivered-total concession over lines in proportion to their room."""
+
+    lines = authority["lines"]
+    rooms = [line["quantity"] * (line["unitCents"] - line["lowestAuthorizedUnitCents"]) for line in lines]
+    total_room = sum(rooms)
+    cuts = [0] * len(lines)  # per-unit reductions
+    remaining = concession
+    for index, line in enumerate(lines):
+        if rooms[index] <= 0 or remaining <= 0:
+            continue
+        share = -(-concession * rooms[index] // total_room)
+        per_unit = min(line["unitCents"] - line["lowestAuthorizedUnitCents"], -(-min(share, remaining) // line["quantity"]))
+        cuts[index] = per_unit
+        remaining -= per_unit * line["quantity"]
+    for index, line in enumerate(lines):  # rounding remainder, if any
+        if remaining <= 0:
+            break
+        spare = line["unitCents"] - line["lowestAuthorizedUnitCents"] - cuts[index]
+        extra = min(spare, -(-remaining // line["quantity"]))
+        cuts[index] += extra
+        remaining -= extra * line["quantity"]
+    return [
+        {
+            "requestLineId": line["requestLineId"],
+            "listing": dict(line["listing"]),
+            "quantity": line["quantity"],
+            "unitCents": line["unitCents"] - cuts[index],
+        }
+        for index, line in enumerate(lines)
+    ]
+
+
+def _build_final(value: Any, authority_value: Any = None) -> Dict[str, Any]:
     root = validate_v2_input(value, "seller_final")
-    result = {
+    result: Dict[str, Any] = {
         "schemaVersion": 2,
         "jobId": root["jobId"],
         "roundId": root["roundId"],
@@ -631,11 +761,34 @@ def _build_final(value: Any) -> Dict[str, Any]:
         "candidateId": root["candidateId"],
         "decision": {"kind": "hold", "jobId": root["jobId"], "offer": root["ownOffer"]["offer"]},
     }
+    # Without the merchant's own authority there is no safe price to offer: hold.
+    if authority_value is not None:
+        authority = validate_final_authority(authority_value, root)
+        target, reason = _price_plan(root, authority)
+        if target is not None:
+            lines = _allocate_concession(authority, authority["totalCents"] - target)
+            final_total = authority["shippingCents"] + sum(line["quantity"] * line["unitCents"] for line in lines)
+            if final_total < authority["totalCents"]:
+                result["decision"] = {
+                    "kind": "propose",
+                    "proposal": {
+                        "schemaVersion": 2,
+                        "jobId": root["jobId"],
+                        "candidateId": root["candidateId"],
+                        "parentOffer": root["ownOffer"]["offer"],
+                        "policy": root["policy"],
+                        "lines": lines,
+                        "claims": [],
+                        "fitArgument": "Same frozen goods, quantities and service terms at a lower delivered price.",
+                        "privatePriceRationale": f"{reason}: delivered total {authority['totalCents']} -> {final_total} cents, within the merchant's authorized lowest prices.",
+                        "serviceOptionId": None,
+                    },
+                }
     validate_v2_output(result, "seller_final")
     return result
 
 
-def build_decision(value: Any, role: Optional[str] = None) -> Dict[str, Any]:
+def build_decision(value: Any, role: Optional[str] = None, authority: Any = None) -> Dict[str, Any]:
     """Build a SellerDecision that Convex can validate independently."""
 
     if role == "seller_advocacy":
@@ -643,7 +796,7 @@ def build_decision(value: Any, role: Optional[str] = None) -> Dict[str, Any]:
     if role == "seller_reply":
         return _build_reply(value)
     if role == "seller_final":
-        return _build_final(value)
+        return _build_final(value, authority)
     if role not in (None, "seller_initial", "seller_response"):
         raise SellerInputError("unsupported seller role")
 

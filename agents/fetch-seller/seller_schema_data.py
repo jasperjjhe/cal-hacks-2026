@@ -25,6 +25,9 @@ SCHEMA_JSON = r'''{
     },
     {
       "$ref": "#/$defs/SellerFinalJobInput"
+    },
+    {
+      "$ref": "#/$defs/SellerFinalAuthority"
     }
   ],
   "$defs": {
@@ -4542,6 +4545,123 @@ SCHEMA_JSON = r'''{
         "facts",
         "comparisons",
         "outcomes"
+      ],
+      "additionalProperties": false
+    },
+    "SellerFinalAuthority": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "offer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "lines": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestLineId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "listing": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "unitCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "lowestAuthorizedUnitCents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "requestLineId",
+              "listing",
+              "quantity",
+              "unitCents",
+              "lowestAuthorizedUnitCents"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "shippingCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "totalCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "jobId",
+        "candidateId",
+        "offer",
+        "lines",
+        "shippingCents",
+        "totalCents"
       ],
       "additionalProperties": false
     }

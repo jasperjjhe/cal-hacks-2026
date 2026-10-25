@@ -530,7 +530,7 @@ Role input/output contracts:
 | Seller initial | SellerBrief, server-issued candidate IDs, own read-only catalog/policy tools | SellerDecision; up to two candidates, scoped by job. |
 | Moderator | Common competition snapshot, approved facts and scoped seller exchanges | Concrete comparative briefs and checked outcomes under 5.7. Sellers author peer challenges; moderator admits/checks them. No persuasion scoring or authority changes. |
 | Seller response | Baseline v5.2 role; superseded for new councils by `seller_advocacy` and `seller_reply` | New roles use 5.7: one defense/challenge and one grouped reply per merchant. Neither edits commercial terms during debate. |
-| Seller final | Own frozen candidate/policy, common snapshot, concrete comparison and checked council outcomes | One sealed hold, abstention or validated final revision per candidate; fixed goods/quantities, no price increase or weaker terms. |
+| Seller final | Own frozen candidate/policy (as `SellerFinalAuthority`: own lowest authorized unit prices only), common snapshot, concrete comparison and checked council outcomes | One sealed hold, abstention or validated final revision per candidate; fixed goods/quantities, no price increase or weaker terms. |
 | Evidence summary | Deduplicated applicable excerpts and exact identity | Attributed positives/concerns referencing existing evidence IDs. Cannot invent a source or modify eligibility. |
 
 Non-seller role outputs also validate against fixed shapes:
