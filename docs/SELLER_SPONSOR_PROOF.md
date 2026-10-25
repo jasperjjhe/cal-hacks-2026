@@ -1,5 +1,7 @@
 # Seller-side sponsor proof ledger
 
+**v5.3 council status:** the new merchant competition is specified, not implemented or verified. The ledger below describes earlier seller work; it does not prove peer debate. Follow the [seller council handoff](SELLER_COUNCIL_HANDOFF.md) before making that claim.
+
 This file is a submission artifact ledger. Code paths and deterministic tests document implementation, but a prize is claimed only after the `Live run or URL` and provider/deployment evidence columns are filled with a judge-reproducible run.
 
 | Track | Seller feature | Exact code/config path | Live run or URL | Mode | What judges can see | Limitation / pending verification |
@@ -26,3 +28,16 @@ This file is a submission artifact ledger. Code paths and deterministic tests do
 ## Deployment handoff
 
 The Convex CLI will generate `convex/_generated/` only after the team configures a real Convex deployment. Run `npx convex dev` from `frontend/` with credentials supplied through the private environment mechanism, review the generated diff, and commit generated bindings if the team’s deployment workflow requires them. Never add `.env.local`, deploy keys, provider tokens or raw run payloads to the repository. Until that handoff is complete, the generic Convex function builders and `typecheck:seller` are intentionally the local validation seam; this is not a claim that the backend is deployed.
+
+## Required v5.3 competition proof — pending
+
+Record independent initial bids, the identical frozen public snapshot and its
+digest, checked comparative briefs, actual merchant-authored challenge IDs and
+one grouped target reply, checked outcomes, every final invitation and sealed
+closure. Show a permitted concession or truthful hold, no budget/private-cost
+leak, no unsupported-accusation penalty, fixed goods and policy-authorized terms.
+Capture checked buyer-facing exchanges, deterministic ranking, partial/timeout
+behavior and actual cold/warm timing within 210 seconds and call/tool ceilings.
+Use genuine provider job/run provenance; fixtures and the older moderator-only
+flow do not prove this format. Branch-only proof/config/context documents still
+need the documented synchronization; no seller branch was edited here.

@@ -1,6 +1,6 @@
 # BuyerUnion: PRD and two-developer backend handoff
 
-Version 5.2 | October 24, 2026 | Working implementation specification
+Version 5.3 | October 24, 2026 | Working product and implementation specification
 
 **Outcome:** a buyer confirms one shopping request; isolated seller agents prepare policy-valid offers; the platform checks requirements and evidence; the buyer chooses and explicitly approves exact terms; the prototype records a truthful simulated order.
 
@@ -21,8 +21,10 @@ This document replaces v4's implementation direction. The complete original is p
 | Commerce | Disclosed fictional merchants, stock, prices and terms; real applicable web evidence; simulation by default. Visa sandbox only if a supported operation is tested and truthfully represented. |
 | Product breadth | Manufactured products across technology, clothing, household accessories and small appliances. Laptops are the first complete integration case, not the product boundary. |
 | Demo priority | Prove actual seller-agent bidding, policy validation and useful offer revisions before polishing merchant configuration or analytics. Merchant controls stay simple. |
-| Final bidding | Open one final-price round only when a permitted revision could materially improve the buyer's choices. Do not run a ceremonial round for every request. |
-| Buyer bidding view | Show short progress updates while agents work, then a checked summary of material corrections, concessions and remaining uncertainty. Do not stream raw agent exchanges as buyer-facing facts. |
+| Competition and final bidding | Independent opening offers → frozen public comparison → one merchant defense/challenge each → one grouped reply per challenged merchant → checked outcomes → one sealed final-offer invitation per eligible candidate. Every competitive round invites finals; no usefulness/affordability gate. Holding or abstaining is valid. |
+| Buyer bidding view | Show progress and short validated public exchanges as they become available, then a checked summary of corrections, concessions and uncertainty. Withhold unchecked accusations, private reasoning and sealed revisions. |
+
+**Revision status:** v5.3 adopts the user-confirmed moderated merchant competition format. Sections 5.7 and 9 are normative for the new council. This is a documentation revision, not an implementation or schema migration: checked-in runtime contracts, coordinator, moderator and seller workers still need coordinated changes. Existing tests prove the earlier workflow, not this format. See [seller council handoff](docs/SELLER_COUNCIL_HANDOFF.md) for ownership, gaps and acceptance gates. The v4 archive and PDFs are historical.
 
 **How to use this handoff:** freeze section 5 together, build the first end-to-end path in section 15, then add the remaining behavior. Provider role allocation and Mana details do not block contract or deterministic backend work. A real supported provider call is required before claiming live AI integration.
 
@@ -45,7 +47,7 @@ BuyerUnion is like asking several stores for a suitable offer without repeating 
 1. A privately provisioned operator accesses only its merchant's inventory, policy and offer activity.
 2. Review prepopulated catalog data, update permitted listing data, publish a versioned pricing/service policy and pause new participation. The team prepares backend seed data from CSV and applicable scraped product facts; merchant self-service import is later work. Out-of-policy agent quotes are rejected automatically, with no merchant approval queue.
 3. A seller agent searches only that merchant's inventory, checks its authority, proposes a bundle and explains suitability.
-4. Respond to one useful claim challenge and, when warranted, submit one sealed final price revision. Holding price or abstaining is valid.
+4. See a common frozen snapshot of public competing offers, make one defense/peer challenge per merchant, answer received challenges in one grouped reply, and receive one sealed final-offer invitation per eligible candidate. Products/configurations/quantities stay fixed; holding or abstaining is valid.
 5. See own catalog/policy activity, safe offer and rejection reasons, and analytics calculated from recorded demo activity, without buyer ceilings or competitor costs/floors.
 
 ### Bounds retained from v4
@@ -56,7 +58,7 @@ BuyerUnion is like asking several stores for a suitable offer without repeating 
 - Supported condition is explicit per category. Unsupported categories stay drafts. Services, consumables, regulated goods and installation promises are excluded.
 - No live-money purchases, real fulfillment, multi-seller checkout, escrow, refunds, credit scoring, voice/photo input or arbitrary third-party agent registration.
 - Required condition facts use one platform-owned demo rule: unknown mandatory facts fail, and known synthetic diagnostics are labeled as such. No merchant-configured or age-based condition gate in the demo; show any available check date without treating a web review as unit inspection.
-- One council round is sufficient for the required demo. A second verification-only round is optional and disabled initially. No repeated price auctions.
+- One bounded competitive council: defense/challenge, grouped reply, checked outcomes, then sealed finals. No reply-to-the-reply, second council or reopened bargaining; independent research follows without restarting competition.
 
 ## 3. Ownership: one owner for every write
 
@@ -68,11 +70,11 @@ Treat the handoff like a relay: S produces a validated seller offer; B decides w
 | Category profiles, products, variants, seed data | S | Typed attributes, compatibility rules, provenance and all four profile families. |
 | Merchant membership and seller authorization | S | Own-merchant queries/mutations and internally provisioned membership. B provides shared auth foundation. |
 | Listing/policy writes and price validation | S | Immutable versions; floor/cap/contribution checks; service terms from policy. |
-| Seller agent integration and scoped tools | S | Provider-neutral job input/output, seller invocation, own-catalog tools, proposal/response/final-bid handling. |
+| Seller agent integration and scoped tools | S | Provider-neutral job input/output, seller invocation, own-catalog tools, opening proposal/defense/challenge/grouped-reply/final-offer handling. |
 | Requirement eligibility and fit calculation | S | Shared deterministic functions reused at intake validation, offer acceptance, evidence revalidation and checkout. B must not fork them. |
 | Buyer authentication, chat drafts and confirmation | B | Own-request auth, ordered messages, structured suggestions, private maximum, requirement provenance and sanitized seller projection. |
 | Durable run coordinator and deadlines | B | Sole writer of run stages, cancellation, stale-work checks and phase closure. |
-| Council coordination / feedback | B | Selects material challenges; S executes seller responses and validates revisions. |
+| Council coordination / feedback | B | Publishes one common public snapshot, checks moderator comparisons and peer exchanges, groups replies, shares checked outcomes and closes phases. S scopes seller jobs and validates final revisions. |
 | Price round | B coordinates; S validates | B freezes participants and closes the round; S stores private submissions through one validated internal boundary. |
 | Independent evidence and applicability | B | Real source acquisition, caching, provenance and safe completion. S supplies product identity and reevaluates affected eligibility. |
 | Buyer comparison / shortlist | B | Safe view projection and shared deterministic ordering using S's fit results. |
@@ -398,7 +400,7 @@ interface BuyerRunView {
   allowedActions: ("cancel" | "revise" | "select" | "approve" | "retry")[];
   modes: {
     inventory: "mock";
-    agents: "live" | "fixture";
+    agents: "live" | "fixture" | "mixed";
     evidence: "live" | "cached" | "mixed" | "unavailable";
     payment: "simulation" | "visa_sandbox";
   };
@@ -493,7 +495,7 @@ Hash a canonical, versioned representation of exact terms, line identities/quant
 ```ts
 type AgentProvider = "fetch" | "creao";
 type AgentRole = "intake" | "seller_initial" | "moderator"
-  | "seller_response" | "seller_final" | "evidence_summary";
+  | "seller_response" | "seller_final" | "evidence_summary"; // v5.2 baseline; v5.3 additions below.
 interface AgentJob {
   jobId: Id;
   request: Ref;
@@ -526,9 +528,9 @@ Role input/output contracts:
 |---|---|---|
 | Intake | Own buyer conversation and current draft/profile definitions | Proposed draft fields, clarification questions and source spans. Cannot set confirmed timestamps or consent. |
 | Seller initial | SellerBrief, server-issued candidate IDs, own read-only catalog/policy tools | SellerDecision; up to two candidates, scoped by job. |
-| Moderator | Confirmed public requirements, permitted claims and approved sources | At most one `{claimId, offer, question}` challenge per merchant plus safe summary. No ranking or authority changes. |
-| Seller response | Own latest offer, specific challenge and approved evidence | Corrected proposal or acknowledgment; changed goods/price require a new validated offer. |
-| Seller final | Own current candidate and safe truthful market feedback | One hold, abstention or proposal revision per candidate/round. |
+| Moderator | Common competition snapshot, approved facts and scoped seller exchanges | Concrete comparative briefs and checked outcomes under 5.7. Sellers author peer challenges; moderator admits/checks them. No persuasion scoring or authority changes. |
+| Seller response | Baseline v5.2 role; superseded for new councils by `seller_advocacy` and `seller_reply` | New roles use 5.7: one defense/challenge and one grouped reply per merchant. Neither edits commercial terms during debate. |
+| Seller final | Own frozen candidate/policy, common snapshot, concrete comparison and checked council outcomes | One sealed hold, abstention or validated final revision per candidate; fixed goods/quantities, no price increase or weaker terms. |
 | Evidence summary | Deduplicated applicable excerpts and exact identity | Attributed positives/concerns referencing existing evidence IDs. Cannot invent a source or modify eligibility. |
 
 Non-seller role outputs also validate against fixed shapes:
@@ -553,7 +555,7 @@ interface DraftView {
   confirmedRequest: Ref | null;
   updatedAt: Ms;
 }
-interface ChallengePlan {
+interface ChallengePlan { // Historical v5.2 runtime shape; not the v5.3 council protocol.
   challenges: { offer: Ref; claimId: Id; question: string; sourceIds: Id[] }[];
   summary: string;
 }
@@ -565,11 +567,83 @@ interface EvidenceSummary {
 }
 ```
 
-Intake origins are proposals: `buyerConfirmed` must be false until the authenticated confirmation handler records it. Model-suggested target language is never consent. Limit clarification questions to the current grouped turn and at most three turns overall. Challenge references must belong to the current permitted offer and source set; enforce one challenge per participating merchant. Every summary evidence ID must identify an applicable source in the job input; reject invented references.
+Intake origins are proposals: `buyerConfirmed` must be false until the authenticated confirmation handler records it. Model-suggested target language is never consent. Limit clarification questions to the current grouped turn and at most three turns overall. For v5.3, challenge references must belong to the frozen public snapshot and approved source set; enforce one outgoing challenge per merchant and one grouped reply per challenged merchant, not one reply per candidate or incoming challenge. Every summary evidence ID must identify an applicable source in the job input; reject invented references.
 
 Suggested replies are optional shortcuts for sending ordinary buyer messages. `saveDraft` stores selected reply text through the same validation/version check as typed input; it does not silently confirm a requirement. A “show options” control opens brief review and `confirmRequest`, not seller work from an unconfirmed interpretation. The live brief displays proposed fields separately from buyer-confirmed fields; incomplete/ambiguous values remain editable proposals. After results, `compare_offers` changes only the local comparison view; `revise_request` starts the existing versioned edit flow. Sorting uses the existing `Sort` contract and server ordering, while selecting cards for side-by-side display is local UI state tied to the current run. No recommended action bypasses confirmation, server eligibility or approval.
 
 Fetch and CREAO can implement any role if their tested integration supports it. Team-selected provider/model IDs are server configuration. Disable Gemini explicitly in the chosen account/runtime if it otherwise defaults to it; inability to inspect a hosted provider's internal model must be disclosed rather than asserted as verified. A deterministic fixture adapter is allowed for development and labeled as such; it is not proof of Fetch/CREAO use.
+
+### 5.7 v5.3 competition contracts — required coordinated migration
+
+**Specified, not implemented:** sections 5.1–5.6 preserve the baseline request/commerce shapes; the old `ChallengePlan` and `seller_response` role cannot encode the new protocol. B owns the single runtime schema source and exports; S reviews and migrates its worker/fixtures in the same integration change. New council envelopes use schema version 2, while unchanged request schemas remain version 1. Do not enable the new roles on the current runtime or manually edit generated files.
+
+Required JSON-compatible boundary shapes (names below are application-owned):
+
+```ts
+type CouncilPhase = "brief" | "advocacy" | "reply" | "adjudication";
+type CouncilRole = "moderator_brief" | "seller_advocacy"
+  | "seller_reply" | "moderator_adjudication";
+interface PublicCompetitionOffer {
+  merchantId: Id; candidateId: Id; offer: Ref;
+  lines: { requestLineId: Id; listing: Ref; variantId: Id;
+    condition: Condition; quantity: number;
+    configuration: Record<string, Value | null> }[];
+  totalCents: Cents; shippingCents: Cents; arrivalAt: Ms;
+  warrantyMonths: number; returnDays: number;
+  checks: RequirementCheck[]; claims: Claim[];
+}
+interface CompetitionSnapshot {
+  schemaVersion: 2; snapshot: Ref; councilId: Id;
+  request: Ref; runId: Id; createdAt: Ms;
+  brief: ConfirmedBrief;
+  offers: PublicCompetitionOffer[]; // <= 6; <= 2 per merchant.
+  approvedFactIds: Id[]; approvedSourceIds: Id[];
+}
+interface ComparativePoint {
+  ownOffer: Ref; rivalOffer: Ref;
+  dimension: "price" | "delivery" | "warranty" | "returns" | "fit";
+  factIds: Id[]; sourceIds: Id[];
+  summary: string; // Checked against the referenced snapshot values.
+}
+interface PeerChallenge {
+  targetOffer: Ref; claimId: Id | null;
+  factId: Id | null; // Exactly one of claimId/factId; scoped to target.
+  question: string; sourceIds: Id[];
+}
+interface SellerAdvocacy {
+  schemaVersion: 2; jobId: Id; snapshot: Ref;
+  defenses: { ownOffer: Ref; text: string; factIds: Id[]; sourceIds: Id[] }[];
+  challenge: PeerChallenge | null;
+}
+interface SellerReply {
+  schemaVersion: 2; jobId: Id; snapshot: Ref;
+  answers: { challengeId: Id;
+    disposition: "defend" | "correct" | "unknown";
+    text: string; factIds: Id[]; sourceIds: Id[] }[];
+}
+interface CheckedCouncilOutcome {
+  id: Id; snapshot: Ref; challengeId: Id; targetOffer: Ref;
+  finding: "supported" | "contradicted" | "unknown";
+  factIds: Id[]; sourceIds: Id[];
+  summary: string; // No rank/eligibility override in a model result.
+}
+interface CouncilJobInput {
+  schemaVersion: 2; jobId: Id; councilId: Id;
+  snapshot: Ref; phase: CouncilPhase; deadlineAt: Ms;
+  // Server composes only the role's allowlisted snapshot, comparisons,
+  // admitted challenges or checked outcomes; never arbitrary private records.
+}
+```
+
+B must supply runtime-validated moderator outputs: a brief maps each participant to `ComparativePoint[]`; adjudication maps each admitted challenge ID to a finding, approved references and explanation. The server issues challenge IDs only after scoped admission and derives author/target merchant IDs from jobs/offers, never from model identity claims. Each admitted challenge occurs in exactly one target reply batch. Require exactly one answer per assigned challenge; omitted/malformed output is a missing reply with existing bounded repair rules, never a second debate turn. Defenses cover only the author's up-to-two frozen candidates. A merchant may submit no challenge; the moderator must not invent one to fill a quota.
+
+All payloads pin request/version, run, council/snapshot digest, role/subphase and deadline. B persists the snapshot digest, per-role sanitized input/digest and expected job membership. S validates author/own-offer references and read-only own-tool scope; B validates cross-offer references, target routing and approved facts. Strictly reject unknown permission-sensitive fields. Use the canonical bounded ID/text/array validators: at most three advocacy jobs, three grouped reply jobs, three outgoing challenges total and six final invitations. Existing approved sources only; source text remains untrusted. No model-supplied numeric delta, verdict, prose or score overrides deterministic checks.
+
+The snapshot projector must not spread an `OfferCard`, private `OfferVersion` or buyer request wholesale: those can carry `affordable`, `selectable`, private maximum or private rationale. Build the listed public fields explicitly; `checks` excludes private-budget checks. Snapshot membership, comparative points and final invitation selection must not depend on private ceiling. Shared targets remain consented inputs only. The common snapshot is immutable; later checked outcomes and final offer versions are separate records. Never edit it to leak an early final bid.
+
+**Final service authority:** prices already vary through validated line prices. Supporting service improvements additionally requires a versioned `finalServiceOptions` allowlist on S's policy, each with server-issued option ID, shipping/arrival-calendar-days/warranty/returns tuple and private nonnegative incremental bundle cost. A v2 seller proposal selects `serviceOptionId: Id | null` (null = baseline), not arbitrary service values. Recompute item floors, bundle contribution including that incremental cost, shipping once, arrival and delivered total. Reject any worsened term or increased delivered total relative to the frozen opening offer; snapshot the granted option into accepted offer, quote and order. An old policy with no options grants **no** improvement authority. These fields, policy UI/configuration and validation must be migrated before advertising service improvements; until then an implemented pricing-only final may be labeled as partial scope. Debate itself never changes a policy or terms.
+
+B/S must also migrate price-round records to reference council/snapshot and checked-outcome versions, add one persisted invitation/status per candidate, and guard promotion against changed participation/eligibility. Extend safe events with snapshot publication, checked comparative brief/advocacy/reply/outcome and final invitation/closure; unchecked output has separate internal storage. Add `councilPhase: CouncilPhase | null` and safe per-phase status/counts to the buyer view; expose no raw worker payloads. Generated schemas/bindings, fixtures and Python worker validation derive from the same source; none are changed by this documentation revision.
 
 ## 6. Internal handoff functions and public API
 
@@ -613,10 +687,12 @@ For `reviseRequest`, accept a complete replacement of editable draft fields (mes
 |---|---|---|
 | B | `buildSellerBrief(request, runId)` | Allowlisted SellerBrief; no raw messages/origins/private maximum. |
 | S | `prepareSellerJob(brief, merchantId, phase)` | Immutable scoped job payload; authenticated internal caller and eligible participating merchant. |
+| B | `freezeCompetitionSnapshot(runId)` (v5.3 required) | Explicit common public projection and immutable digest; hard/policy eligibility independent of private ceiling. No raw card/private-record spread. |
+| B/S | `prepareCouncilJobs(snapshot, phase)` / `completeCouncilExchange(jobId, output)` (v5.3 required) | B groups/advances subphases and validates public cross-references; S authenticates seller scope and executes one advocacy/grouped reply per merchant. Check snapshot/version/digest/deadline before storing/emitting. |
 | S | `validateAndStoreProposal(jobId, decision)` | `{offer: Ref\|null, outcome, safeReasons}`; server job scope, versions, policy/stock/requirements checked. Does not close the run. |
 | S | `assessOffer(offer, confirmedRequirements, authoritativeFacts)` | Deterministic checks/fit and invalidation reasons; no network. |
 | B | `completeAgentJob(jobId, providerResult)` | Deduplicates completion and advances only expected current run/phase. Invokes S validator for seller roles. |
-| B | `openPriceRound(runId)` / `closePriceRound(roundId)` | Snapshot participants, deadline, hidden submissions; coordinator sole stage writer. |
+| B | `openPriceRound(runId)` / `closePriceRound(roundId)` | Invite every still-eligible competitive candidate once after checked council outcomes, without a usefulness/affordability gate; pin participants/deadline, hide submissions and close atomically. Coordinator is sole stage writer. |
 | S | `submitFinalBid(jobId, roundId, decision)` | Stores one validated private submission per candidate; rejects mismatched/late replay. |
 | B | `completeResearch(researchJobId)` | Fetches expected provider dataset/status, checks identity/run and attaches safe evidence. |
 | S | `reserveInTransaction(context, selectedSnapshot)` | Check available stock and insert allocation, or fail atomically. |
@@ -637,7 +713,7 @@ Use separate records for private and buyer-safe data. It must be impossible to a
 | Request, Draft, RequestVersion | B | Owner + updated time; request + version; active run pointer. Raw messages/private maximum in private records. |
 | Run, AgentJob, AgentCompletion | B | Request/version; run + phase + status; job ID; provider run ID. |
 | Candidate, OfferVersion, FitAssessment | S | Run + merchant; candidate + version; parent revision; effective latest accepted offer. |
-| CouncilEvent, PriceRound, FinalSubmission | B/S boundaries above | Run + sequence; round + candidate. Private submissions excluded from buyer queries until close. |
+| CompetitionSnapshot, CouncilJob/Exchange/Outcome, CouncilEvent, PriceRound, FinalSubmission | B/S boundaries above | Request/version + run + council/snapshot/subphase; one advocacy and grouped reply per merchant; one final submission per candidate. Snapshots/exchanges immutable. Unchecked text stays internal; sealed submissions hidden until close. |
 | ResearchJob, Evidence | B | Run + identity/input digest; expected provider run; canonical identity + freshness + source build. |
 | Reservation, Allocation | S | Listing + state; request; quote; expiry. Count active unexpired and execution-locked allocations. |
 | FirmQuote, Approval, Execution, Order | B | Request; quote hash; execution key; provider reference. One terminal order per execution. |
@@ -668,11 +744,11 @@ For each unit:
 
 `minimum = max(operatorFloor, ceil(referencePrice * (10000 - maxDiscountBps) / 10000), unitCost + minimumContribution)`
 
-Use safe integer arithmetic and checked multiplication/sums; reject overflow, fractional cents, negative prices, wrong quantities and repeated request-line IDs. Every requested line must be satisfied exactly once; all lines belong to one merchant; related variants must be compatible. No substitution by persuasive text. A new product is a new checked offer version.
+Use safe integer arithmetic and checked multiplication/sums; reject overflow, fractional cents, negative prices, wrong quantities and repeated request-line IDs. Every requested line must be satisfied exactly once; all lines belong to one merchant; related variants must be compatible. No substitution by persuasive text. Freeze listing/product/configuration/condition/unit/quantity identities for this competition; reject final-round substitutions even if otherwise valid. A changed basket needs a separately confirmed request version/run, not an in-round replacement.
 
-`items = sum(quantity * unitPrice)`; `total = items + shippingOnce`; demo tax = 0 and no extra fee. Price cannot exceed reference or fall below minimum. Costs/floors are private and explicit synthetic demo inputs. Fixed warranty/returns/shipping cannot be reduced in a revision. Inventory is checked at offer time and rechecked at selection; offers do not hold stock.
+`items = sum(quantity * unitPrice)`; `total = items + shippingOnce`; demo tax = 0 and no extra fee. Price cannot exceed reference or fall below minimum. Costs/floors are private and explicit synthetic demo inputs. No final revision may worsen shipping, arrival, warranty or returns, or increase delivered total. Service improvements require an explicit immutable policy grant, typed fields and validated cost/contribution treatment under 5.7; prose grants nothing. Inventory is checked at offer time and rechecked at selection; offers do not hold stock.
 
-Unknown required facts fail. A policy-valid offer that meets all requirements except private budget may remain internal for negotiation. Only B computes affordability against the full delivered ceiling. Above-budget candidates do not become selectable.
+Unknown required facts fail. A policy-valid offer that meets hard requirements participates in the seller-facing public competition even when above the private budget; its affordability flag and ceiling stay private. Only B computes affordability against the full delivered ceiling. Above-budget candidates do not become selectable.
 
 ### Fit and shortlist (S computes fit; B presents/orders)
 
@@ -685,27 +761,33 @@ Shared stable sorting keys:
 - Soonest: arrival, coverage descending, total, warranty descending, ID.
 - Warranty: warranty descending, coverage descending, total, arrival, ID.
 
-Omit coverage from keys when no score exists. Take the best qualifying candidate per participating seller, then fill to five by the chosen order and sort that shortlist. Label seller diversity; it is not necessarily the global five cheapest. Claims, agent self-scores and sentiment do not vote an offer into eligibility.
+Omit coverage from keys when no score exists. Take the best qualifying candidate per participating seller, then fill to five by the chosen order and sort that shortlist. Label seller diversity; it is not necessarily the global five cheapest. Claims, agent self-scores, rhetoric and sentiment do not vote an offer into eligibility or add rank points. An unresolved accusation alone causes no score penalty. Only validated facts change checks. Highlight up to three useful comparison lenses, without forcing three distinct offers or hiding the remaining qualified shortlist (up to five); the buyer chooses and approves.
 
-## 9. Workflow, challenges and final bidding (B coordinates)
+## 9. Moderated merchant competition (B coordinates)
 
-1. **Start:** atomically create a run for a confirmed current request, persist config/deadlines, build SellerBrief and snapshot eligible merchants. Three concurrent seller jobs maximum.
-2. **Bidding:** S agents read own catalog/policy, submit up to two proposals, and receive one bounded repair opportunity after validation failure. Otherwise abstain. Stream safe progress; never fabricate a proposal when a provider fails.
-3. **Useful challenge:** with at least two policy-valid participating merchants, moderator selects at most one material claim per seller. Use approved source facts already available. Sellers answer/correct once; S revalidates. With fewer merchants skip competitive debate. No hidden reasoning transcript is needed.
-4. **Conditional price round:** require two genuine participating demo seller contexts and either a useful possible price-order improvement among comparable offers, an explicit buyer negotiation request, or potential affordability through an authorized reduction. Skip and record the reason when no permitted revision could materially change the buyer's options. Do not disclose ceiling/floor. With one seller, allow a single counteroffer only for an explicitly requested target and label it single-seller negotiation.
-5. **Sealed submission:** B snapshots round/candidates and deadline. S receives only own offer and truthful limited feedback, e.g. that its delivered price trails a comparable alternative. One final response per candidate. No future rival bids, rival floors or invented competitor. Retain prior valid offer if a final response is absent/invalid. Reject price increases, weaker terms, late submissions or replay with changed payload.
-6. **Evidence/comparison:** source jobs may begin once identities stabilize. Complete authoritative requirement checks before enabling results. Advisory owner evidence can be partial/unavailable. Any changed identity makes old evidence inapplicable. One bounded replacement/refill pass; five primary identities total. Do not restart bargaining because a seller dislikes a review.
-7. **Close:** freeze final accepted versions, revalidate, order and publish safe results. No match means confirmed supply/requirement mismatch; provider failure with no usable offers means retryable failure. Do not confuse these.
+**Target behavior, not yet implemented.** This replaces moderator-only questioning, vague competitive hints and the conditional usefulness gate. With two or more actual qualified merchants, run one competitive council. Fewer than two means no competition claim; retain the existing explicitly consented single-seller target counteroffer path.
 
-When a seller is paused mid-run, exclude it from new participation/selection; keep prior history for explanation. A policy update invalidates affected unapproved offers until revalidation. A locked execution uses its approved snapshot.
+1. **Independent opening offers:** persist the confirmed run, invite at most three merchants and accept at most two validated candidates each. No rival openings are disclosed until this phase closes. Policy-valid offers meeting hard requirements qualify regardless of private affordability; unknown mandatory facts fail. Offers do not reserve stock.
+2. **Common frozen snapshot:** B freezes the eligible public offers, request/profile/policy references and approved facts. Every seller receives the identical competition snapshot (up to six candidates), plus only its own private job/tool context. Public product/configuration/condition/quantity, delivered price, shipping, arrival, warranty/returns and checked fit facts are visible. Never expose private ceiling, affordability flags, costs/floors, raw prompts, private rationale or future final bids. No snapshot pruning based on private budget.
+3. **Checked competitive brief:** the moderator identifies concrete differences from this snapshot; the backend checks referenced offers, arithmetic, units and facts. For example, “B offers the same configuration/condition for $50 less; your delivery is two days earlier.” For different products name the differences, not a false equivalent-saving claim. The snapshot is common; personalized briefs contain only derivable public facts. No “beat this price and win” promise or invented rival.
+4. **One merchant defense/challenge:** each merchant can defend advantages on its frozen candidates, acknowledge limitations and optionally submit one specific outgoing challenge to a rival's public claim/fact. One job per merchant, not per candidate. Cite supplied offer/claim/fact/source IDs. S authenticates authorship; B checks scope and admits material challenges. Sellers have no arbitrary browsing or cross-merchant tools. This phase cannot change prices, goods or service terms.
+5. **One grouped reply:** B freezes and groups admitted incoming challenges for each merchant. Each challenged merchant gets one reply job covering all of them; no reply is required for an unchallenged merchant. Responses cite available approved facts, correct a claim or concede uncertainty. No reply-to-the-reply. Missing replies are marked unanswered, not admissions of falsehood.
+6. **Checked outcomes:** the council classifies supported/contradicted/unknown using approved evidence and publishes checked outcomes to all participants. The backend applies deterministic fact changes and revalidates. An accusation or moderator preference alone cannot change eligibility/rank. If an authoritative contradiction makes a mandatory fact unknown/unmet, the offer is unselectable; otherwise retain the offer with disclosed uncertainty and no invented score penalty. Public advocacy corrections do not rewrite the frozen snapshot or silently change commercial terms.
+7. **One sealed final-offer invitation:** B invites every still-eligible candidate from the competitive snapshot once. There is no predicted-usefulness, affordability or guaranteed-discount gate. S receives the common snapshot, checked outcomes, concrete public comparison and its own candidate/policy authority. Each candidate submits one hold, abstention or final revision; missing/invalid replies retain the last valid offer only if it remains eligible. Freeze products, configurations, conditions, unit/listing identity and quantities. Permit lower prices or explicit policy-authorized service improvements, never greater delivered total or weaker terms. A newly paused/invalid merchant cannot participate; do not invent a replacement rival. If fewer than two survive after snapshot publication, disclose changed participation and retain one final invitation for the survivors without claiming ongoing two-party competition.
+8. **Close and research:** final submissions remain hidden from buyers and rivals until all respond or the server deadline closes; only receipt counts are public before close. Atomically promote valid revisions and retain eligible prior offers. Independent bounded research then checks applicable identities; it may invalidate offers but never reopens bargaining. Existing one-pass research/refill may use other already validated frozen candidates; it must not introduce a new basket or seller commercial round.
+9. **Comparison and buyer authority:** rank affordable, currently valid offers by the deterministic section 8 lens. Up to three highlights explain useful choices; keep the qualified shortlist accessible. The council selects supported cases to explain, not debate winners. Buyer explicitly selects and approves exact quote terms through the existing stock/checkout path.
 
-### Initial limits and time handling
+### Buyer-facing exchanges
 
-Retain v4's safety ceilings as starting configuration: three concurrent merchants; three model/tool cycles per initial seller; 28 model calls per run; 40 tool calls; 75 seconds matching/council, 30 seconds final price, 60 seconds research, 210 seconds total. The optional verification extension is off initially; if enabled, document the exact extra allowance and material trigger. One transient retry counts toward caps. Provider credits/token accounting are measured when available, not an invented hard dollar guarantee.
+Show progress plus short **validated** public exchanges as they become available: supported advantages, acknowledged limitations and checked challenge outcomes. Do not publish a raw allegation while it awaits checking. Unsupported accusations can appear only as a safe checked outcome, not as a product fact. Keep private reasoning, pricing limits and sealed revisions hidden. The final summary names verified corrections, actual concessions, held prices, missing responses and uncertainty; progress uses actual participants/jobs, not fabricated activity.
 
-The 210-second ceiling is a safety timeout, **not the desired user experience**. Target first valid offers in 15 seconds and a useful comparison in 45 seconds after confirmation; measure rather than promise. Close final bidding early when responses arrive. Return partial results or cached real evidence honestly. At deadlines stop accepting work, cancel providers best effort, and keep only validated usable outcomes. Intake has its own bounded clarification budget.
+### Deadlines, budgets and recovery
 
-Date-only deadlines mean 23:59:59 America/Los_Angeles on the confirmed date. Store UTC milliseconds. Demo arrival adds configured calendar days in the delivery timezone from quote creation; if a refreshed quote can no longer meet the deadline, reject it. Reject past deadlines. UI clocks never authorize an expired write.
+Keep three concurrent merchants, at most three model/tool cycles per initial seller, **28 model calls, 40 tool calls and 210 seconds total**. All moderation, advocacy, replies, finals, summaries and any repair count toward those ceilings. Final bidding remains at most 30 seconds; research at most 60 seconds; phase deadlines are bounded by the run deadline. No second council or repeated auction.
+
+B must persist a bounded per-phase schedule before dispatch. Initial implementation should share the existing 75-second matching/council envelope across opening, brief, advocacy, replies and adjudication; phase allocations are configuration starting points, not measured latency promises. Reserve remaining run/call headroom for finals, research and publication. Never start all optional work if it leaves no final/publication budget. A job can return defense plus its optional challenge in one response; grouped replies prevent fan-out by incoming accusation count. If a cap is exhausted, close with usable validated offers and `partial=true`, identifying omitted work. Every participant has a final invitation record; timed-out/skipped dispatches are recorded as unavailable, never fabricated final responses. Absent/invalid final submissions never resurrect factually invalid offers.
+
+The previous 45-second complete-comparison target is withdrawn. First offers and complete comparison latency require cold/warm measurement with actual providers. Close phases early when expected responses arrive. Cancellation/version changes make all old subphase work stale; provider cancellation is best effort. Policy changes/pauses exclude unapproved offers until revalidated; locked executions retain approved snapshots. Date-only deadlines still mean 23:59:59 America/Los_Angeles, stored as UTC milliseconds; selection/approval enforce server time.
 
 ## 10. Evidence data flow (B)
 
@@ -778,7 +860,7 @@ Use the [current BuyerUnion design file](https://www.figma.com/design/anisZ6onqr
 |---|---|
 | Chat suggestion chips, live brief, “Show me options” | B persists ordered messages and suggested replies; chips submit buyer text. Live brief marks extracted values as proposed until confirmation. “Show me options” opens review; it never skips `confirmRequest`. |
 | “More battery,” “Under $850,” “Only new,” “Compare selected” | B/UI distinguish local comparison or sort from changed requirements. Budget/condition changes require a new confirmed request version and run. Side-by-side card selection stays local to current run. |
-| Live debate and evidence progress | B exposes short safe progress updates and actual participant/source counts, followed by a checked summary of material corrections, concessions and uncertainty. UI must not stream raw agent exchanges, hidden reasoning, private ceiling, unverified delivery, or fabricated forum totals. |
+| Live debate and evidence progress | B exposes actual progress plus short validated public exchanges as they become available, then a checked summary. Withhold unchecked allegations and sealed revisions until checked/closed. Never stream raw model output, hidden reasoning, private ceiling, unverified delivery or fabricated source counts. |
 | Seller catalog setup: CSV, photos, URL, import preview | S prepopulates backend catalog from prepared CSV and applicable scraped product facts, with provenance and validation before use. Disclosed sample inventory remains available. Merchant-facing CSV/photo/URL import is later work; disable or label those controls as design concepts until implemented. Scraped public pages do not prove stock, seller terms or discount authority. |
 | Seller policy: floor, fulfillment, returns, bundle, launch | S exposes listing-specific floor and versioned policy fields already in section 5.2; fulfillment uses calendar days, and bundle eligibility uses approved variant compatibility. Launch maps to enabled/paused merchant after catalog/policy validation. Reject out-of-policy agent quotes automatically; merchants do not monitor an exception queue. Remove or disable the Figma “require approval before any policy exception” control. |
 | “Reject when condition evidence is stale” | S rejects unknown mandatory condition facts and labels synthetic diagnostics. No configurable or age-based gate in the demo; remove or disable this Figma toggle. B’s web evidence freshness cannot certify a refurbished unit. |
@@ -882,8 +964,8 @@ These are local work packages, not published tracker tickets. **B and S own back
 | S2 Seller agent seam | S | S1 | Fetch or CREAO role adapter, scoped tools, job-bound output validation, one real provider proposal. No unrestricted merchant selector. |
 | B2 Thin checkout path | B | B1 + S1 | Use fixture validated offer; reserve all lines, approve exact hash, complete simulation; duplicate clicks/expiry/contention pass. |
 | G1 First integrated path | B + S | S2 + B2 | Prompt/confirmed request -> real seller job -> valid result -> selection -> approved simulation. UI team can wire against actual API without a mock backend. |
-| S3 Competition/related lines | S | G1 | One response/revision/final bid per contract; same-merchant bundles and compatibility; holds/abstentions valid. |
-| B3 Council/evidence/comparison | B | G1 | Durable phase orchestration, sealed round, real applicable evidence, stable shortlist, source failure and one refill. Integrates S3. |
+| S3 Competition/related lines | S | G1 + v5.3 contract migration | One merchant advocacy/challenge, one grouped reply and one final decision per eligible candidate; fixed basket identity, explicit service authority, policy validation and correct holds/abstentions. |
+| B3 Council/evidence/comparison | B | G1 + v5.3 contract migration | Common frozen snapshot, checked comparative briefs/outcomes, bounded advocacy/reply phases, unconditional competitive final invitations, checked live exchanges, sealed promotion, independent research and deterministic shortlist. Integrates S3. |
 | G2 Required backend acceptance | B + S | S3 + B3 | Section 16 passes; laptop plus non-tech fixture path works; actual real-source non-tech sample tested; recorded cold/cached timings and honest modes. |
 | M1 Merchant activity/analytics | S + B | G1; polish after G2 | Own catalog/policy activity, observed bidding funnel counts/rates and safe buyer preview. No projected metrics or fake trends. |
 | D1 UI integration support/config handoff | B + S with UI team | Begins F0; closes after G2 | Generated bindings, endpoint/env names, safe fixtures and reproducible backend run instructions. UI team owns frontend QA and designs. |
@@ -920,10 +1002,12 @@ Test public behavior and permission boundaries. Use deterministic fake provider 
 | Price policy | S | Below floor/cap/contribution, unsafe integer/overflow and silent service weakening fail; C holds price legitimately. |
 | Merchant configuration | S | Prepared CSV/scraped seed import validates facts and provenance; operator sees/changes only own listings and policy. Launch/pause applies after validation; merchant-facing import controls do not imply working import; no approval or condition-freshness toggle bypasses platform rules. |
 | Merchant metrics | S + B | Observed stage counts and rates derive from actual scoped records, deduplicate revisions and show reporting period/denominators. Zero-denominator rates show no value. Buyer preview excludes private costs and budget. |
-| Private affordability | B + S | Internal above-budget candidate can enter a permitted final round; only affordable current offers are selectable. Seller feedback does not expose exact ceiling. |
-| Real competition | B + S | No invented rival; one-seller case labeled correctly; invalid/missing final bid retains prior valid offer; late/replayed changed bid rejected. |
-| Buyer bidding view | B | Progress shows actual stages/participants; final summary names validated corrections or concessions and unresolved gaps. Raw agent exchanges and unvalidated claims never appear as buyer-facing facts. |
-| Rank correctness | S + B | Same snapshot/order produces same shortlist; unknown/unmet shown distinctly; seller score/prose cannot override hard requirements. |
+| Private affordability | B + S | Above-budget hard-valid candidates appear in the common seller snapshot and receive final invitations; only affordable current offers are selectable. Changing only the ceiling changes neither snapshot/brief nor final invitation selection. No public affordability flags or ceiling. |
+| Real competition | B + S | Actual independent openings, identical public snapshots, one outgoing challenge and grouped reply per merchant; every eligible candidate gets one sealed final invitation without usefulness gating. No invented rival; one-seller case labeled correctly; changed participation disclosed. Missing/invalid final retains only an eligible prior offer. Late/mismatched replay rejected. |
+| Buyer bidding view | B | Progress shows actual stages/participants and short checked public exchanges as available. Unchecked allegations and sealed prices never leak. Final summary distinguishes validated changes, held prices, missing replies and unresolved gaps. |
+| Rank correctness | S + B | Same snapshot/order produces same shortlist; unknown/unmet stay distinct. Rhetoric, unanswered accusations and council self-scores change no points; authoritative contradictions trigger deterministic revalidation. Highlights do not hide other qualified cards. |
+| Fixed final basket / service authority | S + B | Reject a substituted listing, variant, condition, unit, configuration or quantity even if it otherwise matches. Reject increased delivered total, weaker terms or ungranted service improvement. Approved service options and their costs survive into offer/quote/order snapshots. |
+| Council failure / limits | B + S | Missing advocacy/reply is not an admission; caps cover every role/tool/repair, finish with usable partial offers and recorded final invitations. Late subphase outputs cannot mutate outcomes or reopen bidding. Later research invalidation never restarts bargaining. |
 | Evidence identity | B | Wrong variant/region/size stays family-level or rejected; fictional items receive no real-brand reviews; same P3 reused across offers. |
 | Evidence failure/injection | B | Slow/blocked/injected source yields partial/cache/unavailable safely; no crawl input can approve or edit policy. |
 | Version/cancellation | B | Delayed seller/research/final-bid result cannot advance an edited, cancelled or closed run. |

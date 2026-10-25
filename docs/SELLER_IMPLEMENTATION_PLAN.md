@@ -1,10 +1,10 @@
 # BuyerUnion seller-side implementation plan
 
-Status: active working plan for `feature/seller-side`, branched from `dev` on October 24, 2026.
+Status: seller work plan updated in the `geoff/buyer` checkout on October 24, 2026; seller-branch synchronization is pending. The v5.3 council below is specified, not implemented. Earlier checkpoint notes describe the imported seller baseline, not current branch-wide acceptance.
 
 ## Source of truth
 
-The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 6, 7, 8, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan.
+The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19 and 20. The [seller council handoff](SELLER_COUNCIL_HANDOFF.md) defines the coordinated migration and branch-only documentation sync. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan.
 
 The seller-side implementation must preserve the buyer-side ownership described by the active handoff. A future buyer-side contributor will integrate through versioned contracts and Convex internal functions; this branch must not create a second workflow, buyer request store, evidence store, checkout authority or competing source of truth.
 
@@ -13,6 +13,7 @@ The seller-side implementation must preserve the buyer-side ownership described 
 This branch owns:
 
 - merchant membership and seller authorization boundaries;
+- scoped peer advocacy/challenge and grouped replies using the common frozen public snapshot, followed by one sealed final decision per eligible candidate;
 - category profiles, products, variants and provenance-aware catalog data;
 - immutable listing versions and seller pricing/service policies;
 - deterministic requirement eligibility, fit facts, delivered-price validation and seller-safe rejection reasons;
@@ -54,13 +55,15 @@ docs/
 
 The first seller-only checkpoint is now implemented on `feature/seller-side`:
 
-- `convex/lib/sellerContracts.ts` is the canonical seller contract/runtime boundary. It allowlists `SellerBrief`, rejects unknown fields, and rejects raw prompts, origins, private maximums, buyer ceilings, competitor costs and seller-private price fields from provider input.
+- `src/contracts/index.ts` is the canonical runtime schema source on the buyer branch; `convex/lib/sellerContracts.ts` derives seller wire parsing/types from it. The older imported checkpoint originally used a standalone seller parser; do not restore that duplicate implementation. It allowlists `SellerBrief`, rejects unknown fields, and rejects raw prompts, origins, private maximums, buyer ceilings, competitor costs and seller-private price fields from provider input.
 - `convex/lib/sellerValidation.ts` recomputes category/condition/profile eligibility, hard and soft fit, safe integer pricing and the documented minimum-price formula. It never consumes model-supplied totals or affordability.
 - `convex/lib/sellerInventory.ts` contains plain transactional helpers for atomic reservations, execution locks, sale/release transitions, expiration and idempotent replay. The future buyer mutation must call these helpers inside its own transaction; they are not public Convex mutations.
 - `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership; IDs supplied by a browser are not authorization.
 - `convex/sellerSeed.ts` provides an internal, revisioned fixture seed for all four profile families, P1–P6, accessories, C1/C2, H1/H2, A1/A2 and three synthetic merchants. It is empty-database-only and idempotent by seed revision; it does not make synthetic inventory or evidence look real.
 - `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
 - `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. These prove local behavior only; live Convex/provider sponsor evidence remains pending until deployment/provider configuration is supplied.
+
+The checkpoint above does not include v5.3 merchant competition; use the handoff for current gaps and target acceptance.
 
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
 
@@ -102,6 +105,15 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 - Validate all provider results against role-specific schemas, record provider run IDs/model/build/config revision, deduplicate callbacks and reconcile accepted-but-pending responses.
 - Do not claim Fetch.ai or CREAO prize eligibility until a real configured run is captured in the sponsor evidence ledger.
 
+### S3b: moderated merchant competition — required, not implemented
+
+- Implement [spec 5.7 and 9](../BUYERUNION_IMPLEMENTATION.md) through the canonical schema and generated worker export. New council envelopes are version 2; unchanged request schemas stay version 1.
+- Consume the common public snapshot and checked comparative brief. Produce one defense/optional outgoing challenge per merchant, then one grouped reply to admitted incoming challenges. No seller browsing, rhetorical rank points or extra rebuttal loops.
+- Accept one final invitation per still-eligible candidate without a usefulness gate. Hold/abstain is valid. Freeze all product/configuration/condition/quantity identities and enforce parent/version/deadline/phase ownership.
+- Support lower prices and only expressly authorized service improvements. Typed policy service options, private incremental cost checks and offer/quote/order snapshots must exist before service upgrades are enabled; current baseline policies grant none.
+- Preserve a valid prior offer on missing/invalid final output, never an invalidated one. Count all jobs/retries/tools against shared 28/40 caps and 210-second run ceiling. B owns phase closure and checked public events.
+- Add the complete [council acceptance suite](SELLER_COUNCIL_HANDOFF.md), including privacy invariance, grouped target replies, unsupported-accusation safety, fixed-basket validation, final secrecy and partial-result recovery. No v5.3 live proof is claimed.
+
 ### S4: integration handoff
 
 - Publish generated/type-checked contract usage for the buyer-side contributor.
@@ -130,11 +142,11 @@ Visa, Coinbase/x402, Mana, Apify evidence and voice/design tracks remain outside
 
 ## Required acceptance and security evidence
 
-- Merchant A cannot read, mutate or infer Merchant B's listings, policies, costs, floors, bids or jobs.
+- Merchant A may see B's approved frozen public offers during council, never arbitrary rival inventory/policies/jobs, private strategy/costs/floors or sealed final bids. No cross-merchant mutation is permitted.
 - A browser-supplied merchant ID, owner ID, role, record ID or provider run ID never grants access.
-- Raw prompts, private maximums, requirement origins and competitor information never enter seller jobs or seller logs.
+- Raw prompts, private maximums, affordability flags, requirement origins and private competitor information never enter seller provider inputs or public logs. The explicit frozen public competitor projection is allowed in council/final roles only.
 - Invalid prices, quantities, variants, conditions, policy versions, stock transitions, replay keys and stale jobs fail closed.
-- A policy-valid but over-budget offer may remain internal but is never made selectable by seller code.
+- A hard-valid policy-valid above-budget offer participates in the common seller snapshot and final invitations without a budget flag; only B decides private affordability and buyer selectability.
 - Late, duplicated, cancelled or mismatched provider results cannot reopen a job or alter a closed offer.
 - Reservations and allocation transitions are atomic, idempotent and preserve sold/held inventory.
 - `npm ci --ignore-scripts`, the seven-day dependency check, signature/audit checks, workflow checks, lint, typecheck, build and seller tests pass from a clean checkout.

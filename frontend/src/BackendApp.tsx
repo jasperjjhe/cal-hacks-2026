@@ -406,6 +406,8 @@ function Workspace() {
                     Fictional inventory and terms.{" "}
                     {run?.modes.agents === "live"
                       ? "Live agent mode."
+                      : run?.modes.agents === "mixed"
+                        ? "Live buyer agents; deterministic seller fixtures."
                       : "Deterministic agent fixtures."}{" "}
                     No payment is taken.
                   </p>
@@ -905,9 +907,13 @@ function Workspace() {
                   Convex persistence and anonymous authentication are active.
                 </p>
                 <p>
-                  CREAO agents, Apify acquisition and Visa sandbox are server
-                  adapters awaiting configuration. Current runs use disclosed
-                  deterministic agent fixtures and simulated payments.
+                  CREAO buyer agents and Apify evidence use server configuration.
+                  Seller agents remain deterministic fixtures; checkout is simulated.
+                </p>
+                <p>
+                  {run
+                    ? `Selected request: ${run.modes.agents} agents; ${run.modes.evidence} evidence.`
+                    : "Open a request to inspect its recorded agent and evidence modes."}
                 </p>
                 <p>Credentials belong in server configuration.</p>
               </>

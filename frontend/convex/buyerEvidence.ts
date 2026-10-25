@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { contracts } from "../src/contracts/index.ts";
 import { currentRun, digest, emit } from "./buyer/core.ts";
 import { startEvidence, pollEvidence } from "./integrations/buyerTools.ts";
+import { evidenceRegistry } from "./integrations/apifyBuyer.ts";
 import { z } from "zod";
 import { assessLine, weightedCoverage } from "./lib/sellerValidation";
 import { versionFor } from "./buyer/core";
@@ -11,16 +12,12 @@ import { loadSnapshots } from "./sellerInternal.ts";
 import type { WriteCtx } from "./buyer/core.ts";
 // Configure server-owned source URLs and pinned Actor build only after the
 // adapter is verified. Buyer/model strings never become crawler destinations.
-type Registry = {
-  build: string;
-  sources: { id: string; variantId: string; url: string }[];
-};
-function registry(): Registry {
+function registry(): z.infer<typeof evidenceRegistry> {
   try {
-    return JSON.parse(
+    return evidenceRegistry.parse(JSON.parse(
       process.env.BUYER_EVIDENCE_REGISTRY ??
         '{"build":"unconfigured","sources":[]}',
-    );
+    ));
   } catch {
     return { build: "unconfigured", sources: [] };
   }
@@ -98,6 +95,10 @@ async function prepare(
       sourceIds: sources.map((s) => s.id),
       urls: sources.map((s) => s.url),
       inputDigest: "",
+      actorId: reg.actorId ?? "",
+      build: reg.build,
+      buildNumber: reg.buildNumber ?? "",
+      sources,
     };
     input.inputDigest = await digest({
       variantId,
@@ -106,6 +107,8 @@ async function prepare(
       syntheticProduct: product.syntheticProduct,
       sources,
       build: reg.build,
+      actorId: reg.actorId ?? null,
+      buildNumber: reg.buildNumber ?? null,
     });
     const cachedRows = await ctx.db
       .query("buyerEvidence")

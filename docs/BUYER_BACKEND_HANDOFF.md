@@ -1,5 +1,34 @@
 # Dev B buyer backend handoff
 
+## v5.3 council revision — specified, not implemented
+
+The active [PRD/technical spec](../BUYERUNION_IMPLEMENTATION.md), sections 5.7
+and 9, replaces the old council with a common frozen public snapshot, checked
+competitive briefs, merchant defense/peer challenge, one grouped reply per target,
+checked outcomes and a sealed final invitation for every eligible candidate.
+Above-budget hard-valid offers participate without exposing affordability.
+Products/configurations/conditions/quantities stay fixed; only price reductions
+and explicitly policy-authorized service improvements are permitted. Unsupported
+accusations cannot penalize rivals. Buyers see short checked exchanges as ready;
+raw allegations and sealed terms stay hidden. Keep 210 seconds and 28/40 call/tool
+caps; the old 45-second complete-comparison target is withdrawn pending measurement.
+
+B must replace the old `ChallengePlan` orchestration, build the explicit public
+snapshot and concrete comparative feedback, persist advocacy/reply/adjudication
+subphases and remove the competitive final usefulness gate. S must implement
+scoped peer roles and parent-bound fixed-basket/service-authority validation.
+Schema/worker exports, runtime roles, fixtures, provider prompts, buyer views and
+acceptance tests change together. See [seller council handoff](SELLER_COUNCIL_HANDOFF.md)
+for exact ownership and seller-branch documentation sync. No such runtime changes
+were made by this revision; implementation descriptions below refer to the prior
+workflow. New council participation/feedback must not depend on private ceiling.
+
+The current checkout's CREAO/Apify transport adapters were subsequently filled
+in; [BUYER_INTEGRATIONS.md](BUYER_INTEGRATIONS.md) supersedes the older adapter
+fill-in checklist below. Its existing moderator role is still the earlier
+protocol, and live provider acceptance remains separate from adapter unit tests.
+
+
 The user froze the contracts and authorized a complete backend on `geoff/buyer`, followed
 by user-filled external integrations. Convex account/cloud deployment being
 postponed did not block implementation. The default interface now uses a real
@@ -20,8 +49,8 @@ still needs explicit conflict resolution rather than replacing either schema.
 - `buyerMutations.ts`, `buyer/checkout.ts`: transactional writes and exact quote
   approval. Public commands wrap one internal transaction and catch errors
   outside it, so a failed swap cannot commit an earlier release.
-- `buyerWorkflow.ts`: durable matching → optional council → one sealed final-price
-  round → research → checked results. Global/phase caps, stale-job rejection,
+- `buyerWorkflow.ts` (current baseline): durable matching → moderator-led council
+  → usefulness-gated sealed final-price round → research → checked results. Global/phase caps, stale-job rejection,
   cancellation and partial outcomes are server-owned.
 - `buyerJobs.ts`, `buyerRoles.ts`: scoped intake, moderator, seller and evidence
   summary jobs; provider reference/digest validation; one bounded retry/repair.

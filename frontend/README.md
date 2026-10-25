@@ -5,6 +5,19 @@ immutable confirmed versions, agent jobs, durable runs, evidence, quotes, stock
 allocations, approvals, execution attempts, bookmarks and orders are persisted.
 The historical browser-only prototype is available explicitly at `/mock`.
 
+## Council format: current implementation versus agreed revision
+
+[Spec v5.3](../BUYERUNION_IMPLEMENTATION.md) and the
+[seller council handoff](../docs/SELLER_COUNCIL_HANDOFF.md) now require public
+competitive snapshots, merchant peer challenges/grouped replies, checked public
+exchanges and one sealed final invitation for every eligible candidate. The
+current code still uses the earlier moderator-led council and usefulness-gated
+repricing. This documentation update implements no new council behavior.
+Products stay fixed in the proposed round; above-budget hard-valid offers may
+compete privately with respect to affordability, while only affordable offers
+are selectable. Future latency must be measured within the 210-second ceiling;
+there is no 45-second complete-comparison promise.
+
 ## Local setup
 
 Use Node 24 (`.nvmrc`) and the reviewed lockfile. From `frontend/`:
@@ -43,7 +56,7 @@ A buyer session signs in anonymously. Keep the same browser profile to return to
 its requests; cross-device recovery is outside this prototype. A request URL
 contains only the request ID; ownership is checked by the server on every call.
 
-## Working journey
+## Working journey — current baseline
 
 1. Describe a laptop, clothing item, household accessory or small appliance.
    Fixture intake proposes explicit supported details; it is not live language
@@ -69,13 +82,14 @@ shared-target consent. Pending/unknown purchases block edits and new execution.
 Seven-day cleanup removes reconciled request/research data, retaining unresolved
 executions and stock ledger entries so deletion cannot restock sold goods.
 
-## Provider configuration — last integration step
+## Provider configuration
 
-`convex/integrations/buyerTools.ts` contains the fill-in functions for CREAO,
-Apify and supported external payment lookup. They intentionally do not contain
-guessed endpoints or credentials. Fixture agent mode and simulated checkout work
-without them. See [the handoff](../docs/BUYER_BACKEND_HANDOFF.md) before enabling
-live mode. The Connections screen states the actual current modes.
+CREAO buyer roles and the pinned Apify evidence Actor have implemented adapters
+with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRATIONS.md)
+for agent creation, Actor deployment, backend variables and live acceptance.
+Credentials and live execution are still unverified. Seller jobs remain fixtures
+until the seller branch is consolidated; live buyer runs report mixed agent mode.
+External payment is deferred; fixture agents and simulated checkout need no keys.
 
 Operator accounts are provisioned only through the internal
 `buyerAdmin:provisionOperator` action. Public password signup is disabled;

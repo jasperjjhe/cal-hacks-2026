@@ -21,7 +21,7 @@
     "test:security": "node --test scripts/release-age.test.mjs",
     "security": "npm run security:dependencies && npm run security:workflows",
     "ci": "npm run test:security && npm run security && npm ci --ignore-scripts && npm audit signatures --json && npm audit --audit-level=high && npm run contracts:check && npm run test:buyer && npm run test:seller && npm run test:backend && npm run typecheck:backend && npm run lint && npm run build",
-    "test:backend": "vitest run tests/backend.test.ts",
+    "test:backend": "vitest run tests/backend.test.ts tests/buyer-integrations.test.ts",
     "test:seller": "node --test scripts/test-seller.mjs scripts/seller-schema.test.mjs",
     "typecheck:backend": "tsc --noEmit -p convex/tsconfig.json"
   },

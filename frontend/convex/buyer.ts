@@ -185,7 +185,7 @@ export const getBuyerRun = query({
               : ["cancel"],
       modes: {
         inventory: "mock",
-        agents: run.config.agents === "live" ? "live" : "fixture",
+        agents: run.config.agents === "live" ? "mixed" : "fixture",
         evidence: cards.some((c) => c.evidenceStatus === "complete")
           ? "live"
           : cards.some((c) => c.evidenceStatus === "cached")

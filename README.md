@@ -13,3 +13,14 @@ Dev B works on `geoff/buyer`; Dev S works independently. The current buyer imple
 imports seller source from `feature/seller-side` at `37d7ea5`, with the integration
 changes listed in the handoff. No public deployment is configured. All inventory,
 merchant prices and checkout are disclosed demo behavior; no payment is taken.
+
+## Agreed competition revision — not yet implemented
+
+[PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md) now requires independent
+opening bids, a frozen public comparison, merchant peer challenges and grouped
+replies, checked outcomes, then one sealed final invitation per eligible candidate.
+The council explains supported tradeoffs; deterministic rules rank valid offers
+and the buyer chooses. See [seller council handoff](docs/SELLER_COUNCIL_HANDOFF.md)
+for contract, worker, workflow, privacy and acceptance work. Current code still
+uses the earlier moderator-led council/usefulness gate. Only Markdown was updated;
+no seller branch changes, merge or live competition verification are claimed.

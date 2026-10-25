@@ -79,6 +79,23 @@ async function resultRun(context?: Awaited<ReturnType<typeof setup>>) {
   }
   throw new Error("Workflow did not finish");
 }
+test("live buyer mode keeps seller payloads local and labels the run mixed", async () => {
+  const base = await setup();
+  await base.t.mutation(internal.buyerAdmin.configureDemo, { agents: "live" });
+  const invoke = vi.spyOn(buyerTools, "invokeCreao").mockImplementation(async (job) => {
+    expect(job.role).toBe("moderator");
+    expect(JSON.stringify(job.input)).not.toContain("operatorFloorCents");
+    expect(JSON.stringify(job.input)).not.toContain("privateMaximumCents");
+    return { status: "completed", providerRunId: "live-moderator-test", model: null,
+      output: { challenges: [], summary: "No material challenge." } };
+  });
+  const state = await resultRun(base);
+  expect(state.view.stage).toBe("results");
+  expect(state.view.modes.agents).toBe("mixed");
+  expect(invoke).toHaveBeenCalled();
+  const jobs = await base.t.run(ctx => ctx.db.query("buyerJobs").collect());
+  expect(jobs.filter(job => job.role.startsWith("seller_")).every(job => job.provider === "fixture")).toBe(true);
+});
 test("request ownership, stale writes and private brief isolation", async () => {
   const { t, buyer, draft, ref } = await confirmed();
   await expect(

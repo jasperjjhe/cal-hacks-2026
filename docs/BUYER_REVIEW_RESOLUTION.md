@@ -1,3 +1,9 @@
+> Council format update (October 24, 2026): [spec v5.3](../BUYERUNION_IMPLEMENTATION.md)
+> and [seller council handoff](SELLER_COUNCIL_HANDOFF.md) supersede older council
+> descriptions. Public snapshot → merchant defense/challenge → grouped reply →
+> checked outcomes → sealed finals is specified, **not implemented**. Earlier
+> test/review results below describe the previous workflow, not v5.3 acceptance.
+
 # Buyer branch review resolution
 
 The final review of `geoff/buyer` at `ff0f4d4` found 17 actionable defects.

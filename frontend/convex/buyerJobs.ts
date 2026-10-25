@@ -168,7 +168,7 @@ export const preparePhase = internalMutation({
               brief.lines.map((l) => [l.profile.id, l.profile.version]),
             ),
             role: "seller_initial",
-            provider: run.config.agents === "live" ? "creao" : "fixture",
+            provider: "fixture", // Seller live dispatch is connected during branch consolidation.
             providerConfigRevision: run.config.revision,
             inputDigest,
             inputRef,
@@ -188,7 +188,7 @@ export const preparePhase = internalMutation({
                 state: "queued",
                 input: payload,
                 inputDigest,
-                provider: run.config.agents === "live" ? "creao" : "fixture",
+                provider: "fixture", // Seller live dispatch is connected during branch consolidation.
                 providerRunId: null,
                 outputDigest: null,
                 output: null,
@@ -291,7 +291,7 @@ export const preparePhase = internalMutation({
               state: "queued",
               input: payload,
               inputDigest: await digest(payload),
-              provider: run.config.agents === "live" ? "creao" : "fixture",
+              provider: "fixture", // Seller live dispatch is connected during branch consolidation.
               providerRunId: null,
               outputDigest: null,
               output: null,

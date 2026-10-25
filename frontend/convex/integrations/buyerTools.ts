@@ -60,25 +60,23 @@ export type ToolResult =
       model: string | null;
     }
   | { status: "failed"; providerRunId: string | null };
-// FINAL INTEGRATION POINTS: inputs are immutable and scoped by the server. These
-// intentionally contain no guessed CREAO endpoints or browser credentials.
-export async function invokeCreao(_job: ToolJob): Promise<ToolResult> {
-  void _job;
-  return { status: "failed", providerRunId: null };
-}
-export async function pollCreao(_job: ToolJob): Promise<ToolResult> {
-  void _job;
-  return { status: "failed", providerRunId: null };
-}
-export async function cancelCreao(_job: ToolJob): Promise<void> {
-  void _job; /* Fill best-effort vendor cancellation. Stale completion guards remain authoritative. */
-}
+// Buyer roles use the documented API; credentials stay in backend environment variables.
+export { invokeCreao, pollCreao, cancelCreao } from "./creaoBuyer.ts";
 export interface EvidenceInput {
   variantId: string;
   syntheticProduct: boolean;
   sourceIds: string[];
   inputDigest: string;
   urls: string[];
+  actorId?: string;
+  build?: string;
+  buildNumber?: string;
+  sources?: {
+    id: string;
+    url: string;
+    sourceType: Contract<"Evidence">["sourceType"];
+    applicability: Contract<"Evidence">["applicability"];
+  }[];
 }
 export type EvidenceResult =
   | { status: "pending"; providerRunId: string; build: string }
@@ -95,19 +93,5 @@ export type EvidenceResult =
       }[];
     }
   | { status: "unavailable" };
-// FINAL INTEGRATION POINTS: start/poll only a pinned, allowlisted Apify Actor.
-// Never take dataset IDs from an unverified webhook body or arbitrary buyer URL.
-export async function startEvidence(
-  _input: EvidenceInput,
-): Promise<EvidenceResult> {
-  void _input;
-  return { status: "unavailable" };
-}
-export async function pollEvidence(
-  _input: EvidenceInput,
-  _providerRunId: string,
-): Promise<EvidenceResult> {
-  void _providerRunId;
-  void _input;
-  return { status: "unavailable" };
-}
+// Only the pinned evidence Actor may acquire server-approved sources.
+export { startEvidence, pollEvidence } from "./apifyBuyer.ts";
