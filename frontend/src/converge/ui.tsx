@@ -121,6 +121,7 @@ export function Navbar({
             className={`cv-link ${active === link.id ? "is-active" : ""}`}
             aria-current={active === link.id ? "page" : undefined}
             disabled={disabled[link.id]}
+            title={disabled[link.id] ? "Available once you have offers" : undefined}
             onClick={() => onNav(link.id)}
           >
             {link.label}

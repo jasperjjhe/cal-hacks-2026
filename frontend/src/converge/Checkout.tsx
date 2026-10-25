@@ -95,7 +95,7 @@ function Outcome({
       <p>{execution.resultMessage}</p>
       {execution.orderId && (
         <p className="cv-footnote">
-          Order {execution.orderId} · {money(quote.totalCents)} delivered · arrives by{" "}
+          Order {execution.orderId}: {money(quote.totalCents)} delivered, arrives by{" "}
           {dayLabel(quote.arrivalAt)}
         </p>
       )}
@@ -282,9 +282,9 @@ export function Checkout({
               <dd>{dayLabel(quote.arrivalAt)}</dd>
             </div>
             <div>
-              <dt>Warranty · returns</dt>
+              <dt>Warranty and returns</dt>
               <dd>
-                {quote.warrantyMonths} mo · {quote.returnDays} days
+                {quote.warrantyMonths} months, {quote.returnDays}-day returns
               </dd>
             </div>
           </dl>

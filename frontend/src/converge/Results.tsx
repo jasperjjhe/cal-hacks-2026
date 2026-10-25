@@ -216,7 +216,7 @@ function Offer({
         <p className="cv-eyebrow">
           {highlights.length
             ? highlights.join(" · ")
-            : `${card.merchant.displayName} · fictional merchant · ${first.condition}`}
+            : `${card.merchant.displayName}, ${first.condition}`}
         </p>
         <div className="cv-offer-title">
           <h3>
@@ -238,8 +238,7 @@ function Offer({
         </div>
         {highlights.length > 0 && (
           <p className="cv-merchant">
-            {card.merchant.displayName} · fictional merchant ·{" "}
-            <span className="cv-cap">{first.condition}</span>
+            {card.merchant.displayName}, <span className="cv-cap">{first.condition}</span>
           </p>
         )}
         <ul className="cv-tags" aria-label="Offer terms">

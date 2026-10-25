@@ -92,7 +92,7 @@ export function Product({
         <header className="cv-product-head">
           <div>
             <p className="cv-eyebrow plain">
-              {card.merchant.displayName} · fictional merchant
+              {card.merchant.displayName} (fictional)
             </p>
             <h1>
               {first.title}
