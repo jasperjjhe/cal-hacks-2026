@@ -359,3 +359,6 @@
 .connection-screen form { display: grid; gap: 16px; width: min(360px, 100%); margin: 24px auto; text-align: left; }
 .connection-screen label { display: grid; gap: 6px; }
 .connection-screen input { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font: inherit; }
+
+.offer-highlights { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 0; list-style: none; }
+.offer-highlights li { padding: 4px 10px; border-radius: 999px; background: #e8f3ec; color: #14532d; font-size: 0.8rem; font-weight: 600; }

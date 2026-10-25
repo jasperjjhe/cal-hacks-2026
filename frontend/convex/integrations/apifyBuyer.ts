@@ -29,7 +29,8 @@ export function reviewQuery(productName: string) {
   // Catalog identity only: private buyer messages never enter provider searches.
   let name = productName.replace(/[^\p{L}\p{N} -]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
   const words = name.match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
-  const models = words.filter(w => /\d/.test(w));
+  // A lone digit ("Momentum 4") is a generation, not a model code; keep the full name for those.
+  const models = words.filter(w => /\d/.test(w) && w.length > 1);
   if (models.length) name = [...new Set([words[0], ...models])].join(' ');
   return `${name} review`;
 }
@@ -43,7 +44,7 @@ export function approvedReviewUrl(value: string, domains: string[]) {
 export function matchesProduct(productName: string, text: string) {
   const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   const words = productName.toLowerCase().match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
-  const models = words.filter(w => /\d/.test(w));
+  const models = words.filter(w => /\d/.test(w) && w.length > 1);
   const terms = models.length ? [words[0]!, ...models] : words.filter(w => !['black', 'white', 'silver', 'blue'].includes(w));
   const content = normalize(text);
   return terms.length > 0 && terms.every(term => content.includes(normalize(term)));
@@ -74,7 +75,7 @@ async function outcome(input: EvidenceInput, value: unknown, expectedRunId?: str
     metadata: z.object({ title: z.string().optional(), url: z.string().optional(), redirectedUrl: z.string().optional() }),
     searchResult: z.object({ url: z.string() }).optional(),
   })).max(6).parse(await providerJson(
-    `https://api.apify.com/v2/datasets/${run.defaultDatasetId}/items?format=json&clean=true&limit=7&fields=markdown,crawl,metadata.title,metadata.url,metadata.redirectedUrl,searchResult.url`, cfg.token,
+    `https://api.apify.com/v2/datasets/${run.defaultDatasetId}/items?format=json&clean=true&limit=7&fields=markdown,crawl,metadata,searchResult`, cfg.token,
   ));
   const seen = new Set<string>();
   const evidence = [];

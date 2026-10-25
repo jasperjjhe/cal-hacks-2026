@@ -14,6 +14,7 @@ import type * as buyer_checkout from "../buyer/checkout.js";
 import type * as buyer_core from "../buyer/core.js";
 import type * as buyer_council from "../buyer/council.js";
 import type * as buyer_eligibility from "../buyer/eligibility.js";
+import type * as buyer_highlights from "../buyer/highlights.js";
 import type * as buyer_intake from "../buyer/intake.js";
 import type * as buyer_inventory from "../buyer/inventory.js";
 import type * as buyer_projection from "../buyer/projection.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "buyer/core": typeof buyer_core;
   "buyer/council": typeof buyer_council;
   "buyer/eligibility": typeof buyer_eligibility;
+  "buyer/highlights": typeof buyer_highlights;
   "buyer/intake": typeof buyer_intake;
   "buyer/inventory": typeof buyer_inventory;
   "buyer/projection": typeof buyer_projection;
