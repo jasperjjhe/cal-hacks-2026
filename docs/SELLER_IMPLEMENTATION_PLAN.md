@@ -123,7 +123,7 @@ Fetch.ai must perform real seller work: a scoped seller job produces a schema-va
 
 ### CREAO — target CREAO AI tracks where eligible
 
-CREAO must perform a real seller or merchant-operations role through the same `AgentPort`, with configured agent/project identity, asynchronous run status, callback or polling deduplication, schema validation and visible safe events. Agent creation, a peripheral summary or code-generation use is not runtime proof. One-Person Company eligibility remains conditional on event rules and team eligibility.
+The current architecture reserves CREAO for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller branch keeps a provider-neutral seam and can support a seller/merchant-operations role only if the team intentionally chooses that distinct role, with configured agent/project identity, asynchronous run status, callback or polling deduplication, schema validation and visible safe events. Agent creation, a peripheral summary or code-generation use is not runtime proof. One-Person Company eligibility remains conditional on event rules and team eligibility.
 
 ### Factory Droid — deferred unless credentials and time support a real seller operation
 
@@ -148,7 +148,7 @@ Visa, Coinbase/x402, Mana, Apify evidence and voice/design tracks remain outside
 These do not block deterministic seller implementation but do block claiming live sponsor use:
 
 - Which Fetch.ai transport/agent address and supported model will be used for the seller role?
-- Which CREAO project/agent ID, run endpoint and callback/poll mechanism is enabled for the seller role?
+- Which CREAO project/agent ID, run endpoint and callback/poll mechanism is enabled for the buyer-owned role?
 - Which team-owned Convex production deployment and Auth environment will host the schema and functions?
 - Does the team want the Factory Droid seller audit in this branch, or should it remain a documented stretch target?
 

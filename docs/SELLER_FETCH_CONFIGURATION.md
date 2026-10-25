@@ -39,6 +39,10 @@ FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/by
 
 The host must be an exact HTTPS hostname allowlisted for this deployment. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The provider must return JSON with a bounded `providerRunId` and one of `pending`, `accepted`, `running`, `completed`, `succeeded`, `failed` or `cancelled`; completed responses must include `output`. The output must be the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`.
 
+## Provider allocation
+
+The planned sponsor architecture assigns Fetch.ai to the seller role: each seller job gets one isolated Fetch run against that merchant's own catalog and policy. CREAO is planned for a distinct buyer-owned role such as intake, comparison/council or bounded evidence explanation. The seller action supports the same provider-neutral port for future configuration, but do not run both providers for the same seller job or use CREAO as silent failover. If CREAO is intentionally selected for a seller/merchant-operations role, use the analogous `CREAO_SELLER_*` variables and record why the role is distinct and necessary.
+
 ## Buyer-side integration note
 
 `origin/geoff/buyer` currently has its own buyer job dispatcher and selects CREAO for live mode. When the branches are integrated, keep one provider call per seller job and choose the provider from server configuration. For a Fetch seller job, the buyer workflow must pass the `brief` to `sellerInternal.prepareSellerJob` or call `sellerInternal.attachSellerBrief` before scheduling `sellerAgent.dispatch`. It must not send the buyer job's larger input object to the seller provider.
