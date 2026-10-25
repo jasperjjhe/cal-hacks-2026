@@ -350,6 +350,43 @@ test('HTTP provider adapter reconciles an ambiguous start by application job ID'
   if (result.status === 'completed') assert.equal(result.providerRunId, 'provider-run-reconciled')
 })
 
+test('Fetch Agentverse routes use fixed POST envelopes and keep the token server-side', async () => {
+  const requests = []
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/seller/jobs',
+    pollUrlTemplate: 'https://agent.example/seller/jobs/poll',
+    reconcileUrlTemplate: 'https://agent.example/seller/jobs/reconcile',
+    cancelUrlTemplate: 'https://agent.example/seller/jobs/cancel',
+    pollMethod: 'POST',
+    reconcileMethod: 'POST',
+    sendTokenInBody: true,
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-agentverse-v1',
+  }, {
+    getToken: async () => 'shared-secret-not-logged',
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => 'fetch-seller:job_agentverse',
+    fetchImpl: async (url, init) => {
+      requests.push({ url, method: init.method, body: JSON.parse(init.body) })
+      return new Response(JSON.stringify({
+        status: 'completed',
+        providerRunId: 'fetch-seller:job_agentverse',
+        model: 'fetch-seller-deterministic-v1',
+        output: { kind: 'abstain', jobId: 'job_agentverse', reasonCode: 'NO_MATCH' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.poll('job_agentverse')
+  assert.equal(result.status, 'completed')
+  assert.equal(requests[0].url, 'https://agent.example/seller/jobs/poll')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].body.jobId, 'job_agentverse')
+  assert.equal(requests[0].body.providerRunId, 'fetch-seller:job_agentverse')
+  assert.equal(requests[0].body.providerAuthToken, 'shared-secret-not-logged')
+})
+
 test('HTTP provider adapter preserves an ambiguous timeout as a retryable failure without inventing a run ID', async () => {
   const port = createFetchAgentPort({
     provider: 'fetch',

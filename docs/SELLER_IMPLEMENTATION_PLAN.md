@@ -46,6 +46,11 @@ frontend/
       creaoAdapter.ts          # CREAO run adapter; async status/callback rules
   scripts/
     test-seller.mjs            # dependency-light contract/domain tests if needed
+agents/
+  fetch-seller/
+    agent.py                   # Agentverse-compatible Fetch seller uAgent
+    seller_logic.py            # dependency-free bounded catalog matching
+    test_seller_logic.py       # pure Python security/decision tests
 docs/
   SELLER_IMPLEMENTATION_PLAN.md
   SELLER_SPONSOR_PROOF.md
@@ -62,6 +67,7 @@ The first seller-only checkpoint is now implemented on `feature/seller-side`:
 - `convex/sellerSeed.ts` provides an internal, revisioned fixture seed for all four profile families, P1–P6, accessories, C1/C2, H1/H2, A1/A2 and three synthetic merchants. It is empty-database-only and idempotent by seed revision; it does not make synthetic inventory or evidence look real.
 - `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
 - `convex/sellerAgent.ts` now provides the server-only provider action path. It stores sanitized job input separately, claims a job before network I/O, persists provider run/model/status metadata, schedules bounded polling, preserves ambiguous starts for explicit reconciliation, best-effort cancels, and sends terminal output through deterministic seller validation. No provider payload or token is logged or persisted.
+- `agents/fetch-seller/` now provides the actual Fetch seller runtime. Its fixed typed POST routes implement start, poll, reconcile and cancel; Agent Storage preserves idempotency across hosted invocations; a shared Agent Secret authenticates requests; and the pure seller logic performs bounded category/profile/condition/stock/requirement matching without seeing private pricing fields. The agent's public reference-price proposal remains non-authoritative and is revalidated by Convex.
 - `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. The seller schema and generated bindings are now pushed to the linked Convex development deployment and the revisioned fixture catalog has been seeded there. Production/Auth configuration and live provider sponsor evidence remain pending.
 
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
@@ -102,6 +108,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 - Add one provider-neutral `AgentPort` with `start`, `poll` and best-effort `cancel`.
 - Add deterministic fixture mode for CI and explicit Fetch.ai and CREAO adapters behind the same port.
 - Validate all provider results against role-specific schemas, record provider run IDs/model/config revision, deduplicate repeated results and reconcile accepted-but-pending or ambiguous responses. The internal Convex action path is now implemented; live Fetch deployment/configuration is the next external handoff.
+- Deploy `agents/fetch-seller/` as an Agentverse Hosted Agent, set the Agent Secret and exact Convex HTTPS allowlist, then record live run evidence. The repository's pure Python tests are dependency-free; any local uAgents install must use an exact vetted release that satisfies the seven-day cooldown.
 - Do not claim Fetch.ai or CREAO prize eligibility until a real configured run is captured in the sponsor evidence ledger.
 
 ### S4: integration handoff

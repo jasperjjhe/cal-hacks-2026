@@ -15,6 +15,14 @@ export interface HttpAgentPortConfig {
   pollUrlTemplate: string
   reconcileUrlTemplate?: string
   cancelUrlTemplate: string
+  pollMethod?: 'POST' | 'GET'
+  reconcileMethod?: 'POST' | 'GET'
+  /**
+   * Hosted Agentverse REST routes do not need to expose a bearer header to
+   * the agent code. When enabled, the server-side token is copied into the
+   * POST envelope under `providerAuthToken`; it is never logged or persisted.
+   */
+  sendTokenInBody?: boolean
   allowedHosts: string[]
   requestTimeoutMs: number
   providerConfigRevision: string
@@ -103,11 +111,19 @@ export function createHttpAgentPort(
     if (body !== undefined) headers['content-type'] = 'application/json'
     if (token) headers.authorization = `Bearer ${token}`
     headers['idempotency-key'] = idempotencyKey
+    const requestBody = config.sendTokenInBody
+      && token
+      && method === 'POST'
+      && typeof body === 'object'
+      && body !== null
+      && !Array.isArray(body)
+      ? { ...(body as Record<string, unknown>), providerAuthToken: token }
+      : body
     try {
       const response = await fetchImpl(url, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: requestBody === undefined ? undefined : JSON.stringify(requestBody),
         signal: AbortSignal.timeout(config.requestTimeoutMs),
       })
       let payload: unknown = null
@@ -146,13 +162,17 @@ export function createHttpAgentPort(
         ? config.pollUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
         : config.reconcileUrlTemplate?.replace('{jobId}', encodeURIComponent(jobId))
       if (!url) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider run ID is not recorded and no reconciliation endpoint is configured', false) }
-      return request(url, 'GET', undefined, jobId)
+      const method = providerRunIdValue ? (config.pollMethod ?? 'GET') : (config.reconcileMethod ?? 'GET')
+      const body = method === 'POST'
+        ? { jobId, ...(providerRunIdValue ? { providerRunId: providerRunIdValue } : {}) }
+        : undefined
+      return request(url, method, body, jobId)
     },
     async cancel(jobId: string) {
       const providerRunIdValue = await dependencies.resolveProviderRunId(jobId)
       if (!providerRunIdValue) return
       const url = config.cancelUrlTemplate.replace('{providerRunId}', encodeURIComponent(providerRunIdValue))
-      await request(url, 'POST', { jobId }, jobId)
+      await request(url, 'POST', { jobId, providerRunId: providerRunIdValue }, jobId)
     },
   }
 }

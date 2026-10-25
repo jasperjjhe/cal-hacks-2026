@@ -1,6 +1,11 @@
 # Seller provider runtime handoff
 
-Status: implementation checkpoint on `feature/seller-side`. The Convex action path is deployed to the linked development deployment, but no real Fetch.ai endpoint or credential is committed or claimed as live evidence.
+Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
+
+The agent source is in `agents/fetch-seller/`. It can be copied into an
+Agentverse Hosted Agent or run as a local uAgent. Hosted process globals are
+not treated as durable state; the agent uses Fetch Agent Storage for the
+pending/completed job record.
 
 ## Runtime flow
 
@@ -23,21 +28,42 @@ Required:
 
 ```text
 FETCH_SELLER_START_URL=https://<verified-agent-host>/seller/jobs
-FETCH_SELLER_POLL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/{providerRunId}
-FETCH_SELLER_CANCEL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/{providerRunId}/cancel
+FETCH_SELLER_POLL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/poll
+FETCH_SELLER_CANCEL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/cancel
 FETCH_SELLER_ALLOWED_HOSTS=<verified-agent-host>
 FETCH_SELLER_REQUEST_TIMEOUT_MS=8000
-FETCH_SELLER_CONFIG_REVISION=fetch-seller-v1
-FETCH_SELLER_AGENT_TOKEN=<secret, if the deployed agent requires one>
+FETCH_SELLER_CONFIG_REVISION=fetch-seller-agentverse-v1
+FETCH_SELLER_AGENT_TOKEN=<same long random secret configured as Agentverse FETCH_SELLER_SHARED_TOKEN>
 ```
 
-Optional but strongly recommended for ambiguous-start reconciliation:
+Recommended for ambiguous-start reconciliation:
 
 ```text
-FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/by-application-id/{jobId}
+FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/reconcile
 ```
 
-The host must be an exact HTTPS hostname allowlisted for this deployment. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The provider must return JSON with a bounded `providerRunId` and one of `pending`, `accepted`, `running`, `completed`, `succeeded`, `failed` or `cancelled`; completed responses must include `output`. The output must be the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`.
+The host must be an exact HTTPS hostname allowlisted for this deployment. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The Fetch adapter uses POST for poll, reconcile and cancel and includes the application `jobId` in the typed body. It sends the server-side token as `providerAuthToken` in the POST body because the uAgents REST handler consumes a request model; the token is also sent as a bearer header and is never logged or persisted.
+
+The agent returns JSON with a bounded `providerRunId` and one of `pending`, `completed`, `failed` or `cancelled`; completed responses include the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`. A job starts pending, remains pending through the first poll, and becomes terminal on the next poll. Repeated starts with the same `jobId` and input digest replay the stored response; a different digest is rejected.
+
+## Agentverse setup
+
+1. Create a Hosted Agent in Agentverse and paste/copy `agents/fetch-seller/agent.py` and `agents/fetch-seller/seller_logic.py` into its multi-file code editor.
+2. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret. Generate a new random value for the deployment; do not reuse a source-control or personal credential.
+3. Start the agent and verify all four routes from the Agentverse logs or its HTTPS integration surface. Record the exact host and agent identity without recording the token or private payload.
+4. Set the Convex variables above with `npx convex env set NAME VALUE` from `frontend/` in a protected shell.
+5. Run one live seller job, one replay, one pending-to-completed poll sequence, one explicit reconciliation, one cancellation, and one malformed/timeout recovery. Add the non-secret evidence to `docs/SELLER_SPONSOR_PROOF.md`.
+
+The pure logic test can be run without the uAgents package:
+
+```text
+python agents/fetch-seller/test_seller_logic.py
+```
+
+For local uAgent testing, use an isolated Python 3.10–3.13 environment and a
+vetted exact uAgents release. Do not run an unbounded package upgrade. The
+repository's seven-day release-age rule applies to any locally added package;
+Agentverse's hosted allowlisted runtime is the intended submission path.
 
 ## Provider allocation
 

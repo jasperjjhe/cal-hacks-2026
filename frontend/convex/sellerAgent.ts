@@ -88,6 +88,12 @@ function livePortConfig(provider: LiveProvider): HttpAgentPortConfig {
     pollUrlTemplate: requiredEnv(`${prefix}_POLL_URL_TEMPLATE`),
     reconcileUrlTemplate: optionalEnv(`${prefix}_RECONCILE_URL_TEMPLATE`),
     cancelUrlTemplate: requiredEnv(`${prefix}_CANCEL_URL_TEMPLATE`),
+    // The Fetch implementation uses fixed Agentverse REST routes with the
+    // application job ID in a typed POST body. CREAO keeps the legacy GET
+    // polling default until its endpoint contract is configured.
+    pollMethod: provider === 'fetch' ? 'POST' : undefined,
+    reconcileMethod: provider === 'fetch' ? 'POST' : undefined,
+    sendTokenInBody: provider === 'fetch',
     allowedHosts: allowedHosts(`${prefix}_ALLOWED_HOSTS`),
     requestTimeoutMs: timeoutMs(`${prefix}_REQUEST_TIMEOUT_MS`),
     providerConfigRevision: requiredEnv(`${prefix}_CONFIG_REVISION`),
