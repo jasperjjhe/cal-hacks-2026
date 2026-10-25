@@ -41,6 +41,11 @@ use the product's private secret-entry mechanism or a protected local shell.
 
 - The current work is seller-side only. The buyer side is being developed on
   `origin/geoff/buyer` and will integrate later.
+- Final UI design is being produced separately in Figma by the design team.
+  The checked-in React operator screen is a fixture/integration harness, not
+  the final visual implementation. Future Figma-derived UI must consume the
+  authenticated seller view model and Convex functions without duplicating
+  seller authority or moving private fields into browser state.
 - `origin/geoff/buyer` is an active compatibility reference. Fetch it and
   compare shared contracts, Convex seams and generated bindings before each
   integration-sensitive seller change; do not blindly merge or copy its buyer
@@ -441,6 +446,10 @@ Pending:
   `pauseOwnMerchant` calls. Keep the fixture preview for deterministic demo
   and test mode; add operator integration tests without exposing private
   economics.
+- When the designer-owned Figma implementation is ready, replace or restyle
+  the fixture presentation through a thin UI adapter. Preserve the existing
+  typed safe projection, server-side validation, immutable-version behavior and
+  explicit fixture/live labeling.
 - Merge with the buyer branch only after contract regeneration and duplicate
   provider-dispatch review.
 - Configure and prove CREAO buyer role, Apify evidence, Visa simulation,
@@ -476,10 +485,13 @@ Pending:
    authenticated seller operator query/mutations, and add integration tests
    for merchant isolation, immutable versions and pause/resume. Keep the
    current fixture preview labeled as fixture-only.
-9. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
+9. Integrate the designer-owned Figma UI through the typed seller view-model
+   adapter after its screen/components are ready; do not make the backend
+   depend on visual component details.
+10. Cross-reference `origin/geoff/buyer`, regenerate Convex bindings once,
    integrate through `prepareSellerJob`/`attachSellerBrief`/`dispatch`, and
    verify there is exactly one provider call per seller job.
-10. After the core seller/buyer demo works, implement buyer-owned CREAO,
+11. After the core seller/buyer demo works, implement buyer-owned CREAO,
    Apify, Visa, Coinbase/x402, and Mana proof in separate small checkpoints.
 
 ## Required status wording for future turns
