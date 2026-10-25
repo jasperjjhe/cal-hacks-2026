@@ -1,6 +1,6 @@
 /* Converge buyer UI. Everything is scoped under .cv-app so it can't leak into
    (or inherit from) the classic workspace. Tokens come straight from the Figma
-   file "Calhacks 2026", FINAL FOR DEV page (BuyerUnion variables: action-primary
+   file "Calhacks 2026", FINAL FOR DEV page (design variables: action-primary
    #b45309, gradient #b45309 to #a96700, text #252647, border #eadfd2). */
 .cv-app {
   --cv-ink: #252647;

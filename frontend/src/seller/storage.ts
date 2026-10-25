@@ -9,10 +9,10 @@ export type StorageMode = "file" | "browser";
 export type SaveResult = "saved" | "backup" | "unsaved";
 
 const route = "/api/seller-inventory";
-const browserKey = "buyerunion.seller.inventory.v1";
+const browserKey = "converge.seller.inventory.v1";
 // Set when the browser copy may be newer than the file (a file save failed, or the file route was
 // unreachable and edits went to the browser); holds that copy's savedAt.
-const unsyncedKey = "buyerunion.seller.inventory.unsynced.v1";
+const unsyncedKey = "converge.seller.inventory.unsynced.v1";
 export const inventoryFilePath = "frontend/data/seller-inventory.json";
 
 function readBrowser(): InventoryState | null {

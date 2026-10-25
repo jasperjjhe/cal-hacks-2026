@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "contracts:export": "node scripts/export-contracts.mjs",
     "contracts:check": "node scripts/export-contracts.mjs --check",
-    "test:buyer": "node --test scripts/buyer-contracts.test.mjs scripts/buyer-mock.test.mjs scripts/buyer-audit.test.mjs",
+    "test:buyer": "node --test scripts/buyer-contracts.test.mjs scripts/buyer-mock.test.mjs scripts/buyer-audit.test.mjs scripts/naming.test.mjs",
     "security:dependencies": "node scripts/check-dependencies.mjs",
     "security:workflows": "node scripts/check-workflows.mjs",
     "test:security": "node --test scripts/release-age.test.mjs",

@@ -2,7 +2,7 @@
 // (It used to live in cookies, which were sent with every request and could exceed the server's header limit.)
 import type { BulkRecord } from "./inventory.ts";
 
-const storageKey = "buyerunion.seller.pendingUpload.v1";
+const storageKey = "converge.seller.pendingUpload.v1";
 const legacyCookiePrefix = "bu_seller_upload_";
 
 export type PendingUpload = { fileName: string; records: BulkRecord[] };

@@ -5,7 +5,7 @@ import type { Product } from "./inventory.ts";
 import { ProductIcon, ProductImageBox, SearchBox, StockPill } from "./ui.tsx";
 
 type View = "list" | "grid";
-const viewKey = "buyerunion.seller.view.v1";
+const viewKey = "converge.seller.view.v1";
 const pageSize: Record<View, number> = { list: 8, grid: 9 };
 
 function initialView(): View {
