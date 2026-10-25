@@ -9,6 +9,10 @@ owner split are in [BUYERUNION_IMPLEMENTATION.md](BUYERUNION_IMPLEMENTATION.md).
 The [buyer handoff](docs/BUYER_BACKEND_HANDOFF.md) describes APIs, seller integration
 and the remaining external adapter configuration.
 
+Product review research now uses Apify RAG Web Browser to automatically search and
+scrape review sources for genuine offered products. No per-product review links
+are required. See [configuration and limitations](docs/BUYER_INTEGRATIONS.md#apify-automatic-review-discovery-with-rag-web-browser).
+
 Dev B works on `geoff/buyer`; Dev S works independently. The current buyer implementation
 imports seller source from `feature/seller-side` at `37d7ea5`, with the integration
 changes listed in the handoff. No public deployment is configured. All inventory,

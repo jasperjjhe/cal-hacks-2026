@@ -66,18 +66,13 @@ export { invokeCreao, pollCreao, cancelCreao } from "./creaoBuyer.ts";
 export interface EvidenceInput {
   variantId: string;
   syntheticProduct: boolean;
-  sourceIds: string[];
   inputDigest: string;
-  urls: string[];
-  actorId?: string;
-  build?: string;
-  buildNumber?: string;
-  sources?: {
-    id: string;
-    url: string;
-    sourceType: Contract<"Evidence">["sourceType"];
-    applicability: Contract<"Evidence">["applicability"];
-  }[];
+  productName: string;
+  query: string;
+  domains: string[];
+  actorId: string;
+  build: string;
+  buildNumber: string;
 }
 export type EvidenceResult =
   | { status: "pending"; providerRunId: string; build: string }
@@ -94,5 +89,5 @@ export type EvidenceResult =
       }[];
     }
   | { status: "unavailable" };
-// Only the pinned evidence Actor may acquire server-approved sources.
+// Only the pinned RAG Actor may discover sources under the server-owned domain policy.
 export { startEvidence, pollEvidence } from "./apifyBuyer.ts";

@@ -84,66 +84,100 @@ means pending, not completed. New moderator roles reject the legacy ChallengePla
 If your account exposes a different API, supply its reference before configuring
 this adapter; developer agent-creation APIs are not interchangeable with API Trigger.
 
-## Apify: deploy the included Actor
+## Apify: automatic review discovery with RAG Web Browser
 
-Create a Docker-based Actor from `agents/apify-evidence/` in Apify. It uses only
-Python's standard library. Pin the Docker base-image digest before recording a
-verified deployment build. Build it and record the opaque Actor ID, build ID and
-numeric build number (`0.1.N`, not a mutable `latest` tag).
+The buyer backend now runs Apify's maintained `apify/rag-web-browser` Actor
+(`3ox4R101TgZz67sLr`). You do not create an Actor or supply review URLs.
+The old `agents/apify-evidence/` Python Actor is retained as a legacy utility;
+the buyer flow no longer calls it.
 
-The Actor reads platform INPUT and writes its default dataset. Input is
-`{urls: string[], allowedHosts: string[]}`. Dataset rows are
-`{url, excerpt, retrievedAt}`. It follows no links or JavaScript, limits itself to
-eight URLs/40 excerpts, rejects private or mixed DNS answers, pins public DNS
-addresses for TLS and checks every redirect. Redirected product pages are skipped
-because a changed URL could represent a different variant. Blocked/JavaScript-only
-pages may yield no evidence; no synthetic replacement is generated.
+After final offers, research uses the genuine catalog product title to generate a
+search for reviews, then filters results using a server-owned domain policy. It requests
+up to six search results with fast HTML scraping and Markdown output. Browser rendering
+is not enabled by default: the live browser-mode check exceeded the 60-second budget. Private buyer messages,
+budget and delivery details are not sent to the search engine. Search results are
+filtered by approved final URL, successful fetch, retrieval freshness and model-name
+match. This is a relevance heuristic, not independent fact verification. Pages may
+mention competing models, and an approved publication is not a guarantee of unbiased
+content. Reddit and Ars forum excerpts are labeled owner reports; other configured
+editorial domains are labeled independent tests. Discovery attaches family-level,
+unverified evidence only, never exact-variant eligibility facts or verified purchases.
+The existing evidence-summary agent receives these cited excerpts.
 
-Set `APIFY_TOKEN` and `BUYER_EVIDENCE_REGISTRY` in Convex. Registry example:
+### Configuration (Convex backend, same deployment as the demo)
+
+1. Keep `APIFY_TOKEN` in Convex Settings → Environment Variables. Never use a
+   `VITE_` variable or put the token in source control/chat. It must permit running
+   the public RAG Actor and reading its runs/datasets; your account needs credits.
+2. Replace `BUYER_EVIDENCE_REGISTRY` with this JSON (no `sources` array):
 
 ```json
 {
-  "actorId": "OPAQUE_ACTOR_ID",
-  "build": "IMMUTABLE_BUILD_ID",
-  "buildNumber": "0.1.1",
-  "sources": [
-    {
-      "id": "reviewed-source-1",
-      "variantId": "REAL_CATALOG_VARIANT_ID",
-      "url": "https://approved.example/product",
-      "sourceType": "manufacturer",
-      "applicability": "exact_variant"
-    }
-  ]
+  "actorId": "3ox4R101TgZz67sLr",
+  "build": "uhqoj67lF26kOBcwj",
+  "buildNumber": "1.0.33"
 }
 ```
 
-Example domains and IDs are placeholders. Review the page's exact model,
-configuration, size and region before labeling it `exact_variant`; use `family`
-otherwise. Supported source types are manufacturer, independent_test and
-owner_report. Unspecified applicability defaults to family. Do not label a store
-page as an independent test. Genuine product identities must exist in the catalog
-with `syntheticProduct: false`; current fictional seed aliases intentionally do
-not trigger acquisition. Coordinate genuine catalog records with the seller
-owner rather than relabeling fictional fixtures as real products.
+This build pair came from the public Actor's `version-1` build metadata on
+2026-10-25. The adapter pins the numeric version and checks the returned build ID.
+If the provider removes this version, choose another numeric build and update both
+values together from Apify's build details, then test one run.
 
-The adapter snapshots registry configuration per research job, pins the numeric
-build on start, verifies returned Actor/build/run IDs, then reads only that run's
-default dataset after SUCCEEDED. Excerpts are unverified source text, not ratings
-or authoritative facts; this initial adapter emits no structured eligibility facts.
-Existing applicability, caching and stale-run checks still apply. The Actor
-selects the first 20,000 visible characters; source-specific extraction is future
-work if boilerplate crowds out useful evidence.
+3. Deploy the changed Convex functions from `frontend/` using your existing
+   `npx convex dev` development process, or `npx convex deploy` for production.
+   Select the intended deployment before setting its variables.
+4. Ensure the seller catalog actually offers **Sony WH-1000XM5**, with a genuine
+   product title/model identity and `syntheticProduct: false`. Seller stock, prices
+   and checkout can remain disclosed simulations. Do not rename fictional laptops
+   or mark fictional products genuine. The existing seed catalog does not yet
+   contain headphones; this transport change does not migrate catalog data or add
+   a headphone requirements profile. Coordinate that separate seller/intake change.
+5. Start a **new buyer run**: jobs snapshot config, so old jobs keep old inputs.
+   Review Apify Runs and the buyer evidence panel. Empty/blocked results must
+   remain unavailable, without invented review claims.
 
-There is no documented Actor-run idempotency key. Start transport failure becomes
-unavailable without retrying; the remote run may still finish and incur usage.
-Runs have a 60-second timeout and no automatic restart. Check usage in Apify;
-do not claim exactly-once billing or a measured monetary cap.
+Optional `domains` overrides the built-in list: `rtings.com`, `soundguys.com`,
+`whathifi.com`, `techradar.com`, `tomsguide.com`, `arstechnica.com`, `reddit.com`, `headphonesty.com`,
+`headphonesaddict.com`, `hifioasis.com`.
+These are source-selection rules, not per-product link maintenance. Restrict overrides
+to editorial publications and owner communities: the current source classifier
+labels non-Reddit/non-Ars-forum pages as independent tests. Manufacturer/store pages
+need a separate classification change before inclusion.
+
+### Recorded live check (2026-10-25)
+
+Pinned build `1.0.33` completed run `ZuJ56vu39hzvUjo7C` in 42.409 seconds
+(dataset `ro8jNdWbSWRfHjzVc`), searching `Sony WH-1000XM5 review` with the
+same six-result/HTML settings as the adapter. Six pages were scraped. A local
+response-shape check fed the actual returned rows through the adapter and retained
+nine excerpts from three approved matching pages (HeadphonesAddict, HiFi Oasis,
+Headphonesty). The other domains and a WF-1000XM5 earbuds review were excluded.
+This establishes live discovery/retrieval and parser compatibility, not a deployed
+Convex buyer journey, unbiased consensus, or successful Reddit extraction. Earlier
+raw-HTML Reddit results were blocked/empty; browser mode timed out at 60 seconds.
+
+### Bounds and limitations
+
+The adapter polls the expected run and reads only its successful default dataset.
+It keeps at most 12,000 characters per accepted page in 4,000-character excerpts,
+deduplicates page URLs and retains the existing 24-hour cache. Research remains
+bounded by the workflow's 60-second research deadline; starts use a 60-second
+Actor timeout, 40-second request budget, 4096 MB memory and no automatic restart.
+There is no automatic start retry or claim of exactly-once billing. Concurrent
+products may exceed the account memory quota; check the account's limits.
+
+A general web browser cannot guarantee Reddit comments, paywalled articles or
+JavaScript-heavy content. Missing/blocked pages are discarded. Discovery may return
+no acceptable sources even when the Actor itself succeeds. Merchant reputation
+research and specialized Reddit comment extraction are not implemented in this
+product-variant research path. No real purchase or full live buyer journey is
+established by an Actor-only test.
 
 ## Verification and activation gate
 
 Before adding keys, run the normal frontend checks, including `npm run test:backend`,
-and `python3 -m unittest discover -s agents/apify-evidence -p 'test_*.py'`.
+and backend type checking. The legacy Python worker tests are optional for this RAG integration.
 Adapter tests mock fetch; they do not establish hosted API behavior or credits.
 
 After configuration, test one real run of each CREAO role, including pending to

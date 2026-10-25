@@ -4,37 +4,17 @@ import { v } from "convex/values";
 import { contracts } from "../src/contracts/index.ts";
 import { currentRun, digest, emit } from "./buyer/core.ts";
 import { startEvidence, pollEvidence } from "./integrations/buyerTools.ts";
-import { evidenceRegistry } from "./integrations/apifyBuyer.ts";
+import { evidenceRegistry, reviewQuery, approvedReviewUrl } from "./integrations/apifyBuyer.ts";
 import { z } from "zod";
 import { assessLine, weightedCoverage } from "./lib/sellerValidation";
 import { versionFor } from "./buyer/core";
 import { loadSnapshots } from "./sellerInternal.ts";
 import type { WriteCtx } from "./buyer/core.ts";
-// Configure server-owned source URLs and pinned Actor build only after the
-// adapter is verified. Buyer/model strings never become crawler destinations.
-function registry(): z.infer<typeof evidenceRegistry> {
+// Snapshot server-owned search policy and the pinned RAG build per job.
+function registry(): z.infer<typeof evidenceRegistry> | null {
   try {
-    return evidenceRegistry.parse(JSON.parse(
-      process.env.BUYER_EVIDENCE_REGISTRY ??
-        '{"build":"unconfigured","sources":[]}',
-    ));
-  } catch {
-    return { build: "unconfigured", sources: [] };
-  }
-}
-function safeUrl(value: string) {
-  try {
-    const u = new URL(value);
-    return (
-      u.protocol === "https:" &&
-      !u.username &&
-      !u.password &&
-      u.port === "" &&
-      !/^(localhost|.*\.local|\d[\d.]*|\[)/i.test(u.hostname)
-    );
-  } catch {
-    return false;
-  }
+    return evidenceRegistry.parse(JSON.parse(process.env.BUYER_EVIDENCE_REGISTRY ?? '{}'));
+  } catch { return null; }
 }
 async function prepare(
   ctx: WriteCtx,
@@ -86,29 +66,22 @@ async function prepare(
     const snapshots = await loadSnapshots(ctx, row.merchantId);
     const product = snapshots.find((s) => s.variant.id === variantId)?.variant;
     if (!product) continue;
-    const sources = reg.sources
-      .filter((s) => s.variantId === variantId && safeUrl(s.url))
-      .slice(0, 8);
     const input = {
       variantId,
       syntheticProduct: product.syntheticProduct,
-      sourceIds: sources.map((s) => s.id),
-      urls: sources.map((s) => s.url),
+      productName: product.title,
+      query: reviewQuery(product.title),
+      domains: reg?.domains ?? [],
       inputDigest: "",
-      actorId: reg.actorId ?? "",
-      build: reg.build,
-      buildNumber: reg.buildNumber ?? "",
-      sources,
+      actorId: reg?.actorId ?? "",
+      build: reg?.build ?? "unconfigured",
+      buildNumber: reg?.buildNumber ?? "",
     };
     input.inputDigest = await digest({
-      variantId,
+      ...input,
       profile: product.profile,
       identity: product.manufacturerPartNumber,
-      syntheticProduct: product.syntheticProduct,
-      sources,
-      build: reg.build,
-      actorId: reg.actorId ?? null,
-      buildNumber: reg.buildNumber ?? null,
+      policyVersion: 'rag-discovery-v1',
     });
     const cachedRows = await ctx.db
       .query("buyerEvidence")
@@ -128,11 +101,11 @@ async function prepare(
       digest: input.inputDigest,
       state: cached.length
         ? "cached"
-        : product.syntheticProduct || !sources.length
+        : product.syntheticProduct || !reg
           ? "unavailable"
           : "queued",
       providerRunId: null,
-      providerBuild: reg.build,
+      providerBuild: input.build,
       input,
       deadlineAt: researchDeadlineAt,
       createdAt: Date.now(),
@@ -148,7 +121,7 @@ async function prepare(
           facts: source.facts ?? [],
           retrievedAt: source.retrievedAt,
         });
-    if (cached.length || product.syntheticProduct || !sources.length)
+    if (cached.length || product.syntheticProduct || !reg)
       await attach(
         ctx,
         runId,
@@ -286,14 +259,12 @@ export const complete = internalMutation({
         throw new Error("Fact is not an authoritative exact-product source");
     }
     const seen = new Set<string>();
-    const allowed = job.input.urls as string[];
     for (const e of evidence) {
       if (
         e.variantId !== job.variantId ||
         e.providerRunId !== result.providerRunId ||
         e.providerBuild !== job.providerBuild ||
-        !safeUrl(e.url) ||
-        !allowed.includes(e.url) ||
+        !approvedReviewUrl(e.url, job.input.domains ?? []) ||
         e.retrievedAt > Date.now() ||
         e.retrievedAt < Date.now() - 86400000 ||
         (job.input.syntheticProduct && e.sourceType === "owner_report")
@@ -473,7 +444,7 @@ async function attach(
           mainConcern: contradicted
             ? "An authoritative exact-product fact contradicts this offer; revalidation is required."
             : status === "unavailable"
-              ? "Applicable independent and owner evidence is unavailable. Demo product facts are synthetic."
+              ? "Applicable independent and owner evidence is unavailable; no review was invented."
               : "Read exact-variant and family source applicability before deciding.",
         },
       });
