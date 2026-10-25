@@ -4,6 +4,9 @@ Status: active working plan for `feature/seller-side`, branched from `dev` on Oc
 
 ## Source of truth
 
+Per-turn project state, compliance checks, branch/deployment status, sponsor
+decisions, and next steps are maintained in [`LOCAL_CONTEXT.md`](LOCAL_CONTEXT.md).
+
 The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 6, 7, 8, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan.
 
 The seller-side implementation must preserve the buyer-side ownership described by the active handoff. A future buyer-side contributor will integrate through versioned contracts and Convex internal functions; this branch must not create a second workflow, buyer request store, evidence store, checkout authority or competing source of truth.
