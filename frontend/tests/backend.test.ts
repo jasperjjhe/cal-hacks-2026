@@ -9,6 +9,8 @@ import * as buyerTools from "../convex/integrations/buyerTools";
 import { contracts } from "../src/contracts";
 import { fixtureCouncil, envelope } from "../convex/buyer/council";
 import { makeValidProposal } from "../convex/lib/sellerFixtures";
+import { fixtureIntake } from "../convex/buyer/intake";
+import { computeHighlights } from "../convex/buyer/highlights";
 import { api, internal } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
 beforeEach(() => vi.useFakeTimers());
@@ -728,10 +730,10 @@ test("all non-tech categories and a related-item basket complete through the act
     expect(stage).toBe("results");
   }
 });
-test("fixture demo: three merchants bid on black ANC headphones through the full council to a persisted order", async () => {
+test("fixture demo: three merchants each offer a different real black ANC headphone with comparative labels", async () => {
   const { t, buyer } = await setup();
   const draft = await buyer.mutation(internal.buyerMutations.saveDraft, {
-    input: { requestId: null, expectedDraftVersion: null, message: "black over-ear noise cancelling headphones under $400 by 2026-11-30" },
+    input: { requestId: null, expectedDraftVersion: null, message: "black noise cancelling headphones under $450 by 2026-11-30" },
   });
   const ref = await buyer.mutation(internal.buyerMutations.confirmRequest, {
     input: {
@@ -747,14 +749,14 @@ test("fixture demo: three merchants bid on black ANC headphones through the full
           allowedConditions: ["new"],
           requirements: [
             { id: "color", fieldId: "color", operator: "equals", value: "black", unit: null, strength: "hard", weight: 1 },
-            { id: "type", fieldId: "headphoneType", operator: "equals", value: "over-ear", unit: null, strength: "hard", weight: 1 },
             { id: "anc", fieldId: "noiseCancelling", operator: "equals", value: true, unit: null, strength: "hard", weight: 1 },
+            { id: "battery", fieldId: "batteryHours", operator: "min", value: 20, unit: "h", strength: "hard", weight: 1 },
           ],
-          useCaseSummary: "Black over-ear noise-cancelling headphones.",
+          useCaseSummary: "Black noise-cancelling headphones with at least 20 hours of battery.",
         },
       ],
       deliveryDeadline: Date.now() + 20 * 86400000,
-      privateMaximumCents: 40000,
+      privateMaximumCents: 45000,
       sharedTargetCents: null,
       shareTarget: false,
       sort: "best_fit",
@@ -769,21 +771,40 @@ test("fixture demo: three merchants bid on black ANC headphones through the full
     if (["results", "no_match", "failed"].includes(view.stage)) break;
   }
   expect(view?.stage).toBe("results");
-  const offers = view!.offers;
-  // Every merchant lists the black ANC model; only the matching variant may be offered.
-  expect(offers.length).toBe(3);
-  const merchants = new Set(offers.map((offer) => JSON.stringify(offer).match(/merchant_[abc]/)?.[0]));
-  expect(merchants.size).toBe(3);
-  // Sealed finals: discounting merchants lower their price; merchant C's policy allows no discount.
-  const byMerchant = Object.fromEntries(offers.map((offer) => [offer.merchant.id, offer]));
+  const byMerchant = Object.fromEntries(view!.offers.map((offer) => [offer.merchant.id, offer]));
+  expect(Object.keys(byMerchant).sort()).toEqual(["merchant_a", "merchant_b", "merchant_c"]);
+  expect(byMerchant.merchant_a.products[0].title).toBe("Sony WH-1000XM5");
+  expect(byMerchant.merchant_b.products[0].title).toBe("Bose QuietComfort Ultra Headphones");
+  expect(byMerchant.merchant_c.products[0].title).toBe("Sennheiser Momentum 4 Wireless");
+  // Sealed finals: merchants with discount room lower their price; merchant C's policy allows none.
   expect(byMerchant.merchant_a.totalCents).toBeLessThan(byMerchant.merchant_a.initialTotalCents);
   expect(byMerchant.merchant_b.totalCents).toBeLessThan(byMerchant.merchant_b.initialTotalCents);
   expect(byMerchant.merchant_c.totalCents).toBe(byMerchant.merchant_c.initialTotalCents);
-  for (const offer of offers) {
-    expect(JSON.stringify(offer)).toContain("WH-1000XM5 (Black)");
-    expect(JSON.stringify(offer)).not.toContain("Silver");
-    expect(JSON.stringify(offer)).not.toContain("no ANC");
-  }
+  // Each product earns its own comparative label from real specs.
+  expect(byMerchant.merchant_c.highlights).toContain("Longest battery life (60 h rated)");
+  expect(byMerchant.merchant_b.highlights).toContain("Strongest noise cancelling (reviewer consensus)");
+  expect(byMerchant.merchant_a.highlights).toContain("Lightest (250 g)");
+  for (const offer of view!.offers) expect(offer.selectable).toBe(true);
+});
+test("fixture intake asks headphone-specific clarifying questions", async () => {
+  const draft = { draftVersion: 1, messages: [{ id: "m1", role: "buyer", text: "black noise cancelling headphones" }] } as never;
+  const result = fixtureIntake(draft);
+  expect(result.proposedLines?.[0].category).toBe("headphones");
+  expect(result.clarificationQuestions.join(" ")).toMatch(/spend/);
+  expect(result.clarificationQuestions.join(" ")).toMatch(/battery/);
+  expect(result.suggestedReplies.length).toBeGreaterThan(0);
+});
+test("comparative highlights only label unique winners", () => {
+  const input = (variantId: string, totalCents: number, attrs: Record<string, unknown>) => ({
+    variantId, totalCents, attributes: Object.fromEntries(Object.entries(attrs).map(([k, value]) => [k, { value }])),
+  });
+  const labels = computeHighlights([
+    input("a", 100, { batteryHours: 30, weightG: 250 }),
+    input("b", 120, { batteryHours: 30, weightG: 260 }),
+  ]);
+  expect(labels.get("a")).toEqual(["Lightest (250 g)", "Lowest delivered price"]);
+  expect(labels.get("b")).toEqual([]);
+  expect(computeHighlights([input("solo", 1, { batteryHours: 9 })]).get("solo")).toEqual([]);
 });
 test("authoritative exact-product contradictions invoke shared assessment and prevent selection", async () => {
   const state = await resultRun();

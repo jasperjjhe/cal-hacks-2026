@@ -7910,6 +7910,14 @@
               "type": "null"
             }
           ]
+        },
+        "highlights": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          }
         }
       },
       "required": [
@@ -9326,6 +9334,14 @@
                     "type": "null"
                   }
                 ]
+              },
+              "highlights": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 4000
+                }
               }
             },
             "required": [

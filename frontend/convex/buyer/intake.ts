@@ -135,6 +135,9 @@ export function fixtureIntake(
       const style = raw.match(/\b(over|on|in)[- ]ear\b/i);
       if (style)
         add("headphoneType", "equals", `${style[1].toLowerCase()}-ear`, null, /\b(over|on|in)[- ]ear\b/i);
+      const battery = raw.match(/(\d{1,3})\+?\s*(?:h\b|hr|hrs|hours?)/i);
+      if (battery)
+        add("batteryHours", "min", Number(battery[1]), "h", /(\d{1,3})\+?\s*(?:h\b|hr|hrs|hours?)/i);
       if (/noise[- ]cancel|\banc\b/i.test(raw))
         add("noiseCancelling", "equals", true, null, /noise[- ]cancel|\banc\b/i);
     }
@@ -175,13 +178,28 @@ export function fixtureIntake(
     proposedPrivateMaximumCents: maximum,
     proposedSharedTargetCents: null,
     origins,
-    clarificationQuestions: unresolved.length
-      ? [
-          "Please confirm the missing category, private maximum and delivery deadline in your brief.",
-        ]
-      : [],
+    clarificationQuestions:
+      category === "headphones"
+        ? [
+            ...(maximum ? [] : ["What is the most you want to spend, delivered?"]),
+            ...(lines[0]?.requirements.some((r) => r.fieldId === "batteryHours")
+              ? []
+              : ["How many hours of battery life do you need?"]),
+            ...(deadline ? [] : ["By what date do you need them?"]),
+          ]
+        : unresolved.length
+          ? [
+              "Please confirm the missing category, private maximum and delivery deadline in your brief.",
+            ]
+          : [],
     suggestedReplies:
-      category === "laptop"
+      category === "headphones"
+        ? [
+            { id: "battery20", label: "20+ hours", text: "At least 20 hours of battery" },
+            { id: "battery30", label: "30+ hours", text: "At least 30 hours of battery" },
+            { id: "budget450", label: "Up to $450", text: "Budget is $450" },
+          ]
+        : category === "laptop"
         ? [
             { id: "battery", label: "Battery first", text: "Battery first" },
             { id: "new", label: "Only new", text: "Only new" },

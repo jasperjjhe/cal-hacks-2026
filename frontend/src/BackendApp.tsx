@@ -1537,6 +1537,13 @@ function Offer({
           <h3>{card.products[0].title}</h3>
           <strong>{money(card.totalCents)}</strong>
         </div>
+        {card.highlights?.length ? (
+          <ul className="offer-highlights" aria-label="Why this offer stands out">
+            {card.highlights.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+        ) : null}
         <p className="price-caption">
           Delivered total ·{" "}
           {card.products.map((p) => `${p.quantity} × ${p.title}`).join(" + ")}

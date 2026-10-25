@@ -20,6 +20,21 @@ const synthetic = (value: Attribute['value'], unit: string | null = null): Attri
   sourceId: null,
 })
 
+const manufacturer = (value: Attribute['value'], unit: string | null = null): Attribute => ({
+  value,
+  unit,
+  provenance: 'manufacturer',
+  sourceId: null,
+})
+
+// Editorial consensus from independent reviews, not a manufacturer spec or our own measurement.
+const reviewed = (value: Attribute['value']): Attribute => ({
+  value,
+  unit: null,
+  provenance: 'real_report',
+  sourceId: null,
+})
+
 const ref = (id: Id, version = 1): Ref => ({ id, version })
 
 const requirement = (
@@ -169,10 +184,10 @@ export const headphonesBrief: SellerBrief = buildSellerBrief(
         allowedConditions: ['new'],
         requirements: [
           requirement('hp_color', 'color', 'equals', 'black', null),
-          requirement('hp_type', 'headphoneType', 'equals', 'over-ear', null),
           requirement('hp_anc', 'noiseCancelling', 'equals', true, null),
+          requirement('hp_battery', 'batteryHours', 'min', 20, 'h'),
         ],
-        useCaseSummary: 'New black over-ear noise-cancelling headphones.',
+        useCaseSummary: 'New black noise-cancelling headphones with at least 20 hours of battery.',
       },
     ],
     sharedTarget: null,
@@ -346,53 +361,61 @@ export const variants: CatalogVariant[] = [
     },
     syntheticProduct: true,
   },
+  // Real products with manufacturer-published specs (battery is the rated hours with ANC on).
+  // Merchants, prices and stock are fictional demo inputs.
   {
     id: 'HP1',
     productId: 'product_HP1',
-    title: 'Sony WH-1000XM5 (Black)',
-    category: 'headphones',
-    profile: profiles.headphones,
-    manufacturerPartNumber: 'WH1000XM5/B',
-    attributes: {
-      brand: synthetic('Sony'),
-      headphoneType: synthetic('over-ear'),
-      color: synthetic('black'),
-      noiseCancelling: synthetic(true),
-      batteryHours: synthetic(30, 'h'),
-    },
-    syntheticProduct: true,
-  },
-  {
-    id: 'HP2',
-    productId: 'product_HP2',
-    title: 'Sony WH-1000XM5 (Silver)',
-    category: 'headphones',
-    profile: profiles.headphones,
-    manufacturerPartNumber: 'WH1000XM5/S',
-    attributes: {
-      brand: synthetic('Sony'),
-      headphoneType: synthetic('over-ear'),
-      color: synthetic('silver'),
-      noiseCancelling: synthetic(true),
-      batteryHours: synthetic(30, 'h'),
-    },
-    syntheticProduct: true,
-  },
-  {
-    id: 'HP3',
-    productId: 'product_HP3',
-    title: 'Demo Studio Over-Ear (Black, no ANC)',
+    title: 'Sony WH-1000XM5',
     category: 'headphones',
     profile: profiles.headphones,
     manufacturerPartNumber: null,
     attributes: {
-      brand: synthetic('DemoAudio'),
-      headphoneType: synthetic('over-ear'),
-      color: synthetic('black'),
-      noiseCancelling: synthetic(false),
-      batteryHours: synthetic(40, 'h'),
+      brand: manufacturer('Sony'),
+      headphoneType: manufacturer('over-ear'),
+      color: manufacturer('black'),
+      noiseCancelling: manufacturer(true),
+      batteryHours: manufacturer(30, 'h'),
+      weightG: manufacturer(250, 'g'),
+      ancTier: reviewed('excellent'),
     },
-    syntheticProduct: true,
+    syntheticProduct: false,
+  },
+  {
+    id: 'HP2',
+    productId: 'product_HP2',
+    title: 'Bose QuietComfort Ultra Headphones',
+    category: 'headphones',
+    profile: profiles.headphones,
+    manufacturerPartNumber: null,
+    attributes: {
+      brand: manufacturer('Bose'),
+      headphoneType: manufacturer('over-ear'),
+      color: manufacturer('black'),
+      noiseCancelling: manufacturer(true),
+      batteryHours: manufacturer(24, 'h'),
+      weightG: manufacturer(254, 'g'),
+      ancTier: reviewed('best_in_class'),
+    },
+    syntheticProduct: false,
+  },
+  {
+    id: 'HP3',
+    productId: 'product_HP3',
+    title: 'Sennheiser Momentum 4 Wireless',
+    category: 'headphones',
+    profile: profiles.headphones,
+    manufacturerPartNumber: null,
+    attributes: {
+      brand: manufacturer('Sennheiser'),
+      headphoneType: manufacturer('over-ear'),
+      color: manufacturer('black'),
+      noiseCancelling: manufacturer(true),
+      batteryHours: manufacturer(60, 'h'),
+      weightG: manufacturer(293, 'g'),
+      ancTier: reviewed('good'),
+    },
+    syntheticProduct: false,
   },
 ]
 
@@ -444,11 +467,12 @@ const nonTechListings: Record<Id, Array<[Id, number]>> = {
   merchant_c: [['C1', 2_500], ['C2', 3_000], ['H1', 8_000], ['H2', 10_000], ['A1', 4_500], ['A2', 4_000]],
 }
 
-// [variantId, reference cents, operator floor cents, quantity]
+// Each merchant stocks a different black ANC headphone so the council compares products, not just prices.
+// [variantId, reference cents, operator floor cents, quantity]; references sit near real US list prices.
 const headphoneListings: Record<Id, Array<[Id, number, number, number]>> = {
-  merchant_a: [['HP1', 34_900, 31_500, 3], ['HP2', 34_900, 31_500, 2], ['HP3', 14_900, 13_500, 4]],
-  merchant_b: [['HP1', 35_900, 33_000, 3], ['HP2', 35_900, 33_000, 2], ['HP3', 15_900, 14_500, 4]],
-  merchant_c: [['HP1', 33_900, 33_900, 3], ['HP2', 33_900, 33_900, 2], ['HP3', 14_500, 14_500, 4]],
+  merchant_a: [['HP1', 39_999, 34_900, 3]],
+  merchant_b: [['HP2', 42_900, 37_900, 3]],
+  merchant_c: [['HP3', 34_995, 34_995, 3]],
 }
 
 export interface SellerFixtureSet {

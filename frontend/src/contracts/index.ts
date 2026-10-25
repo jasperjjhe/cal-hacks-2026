@@ -70,6 +70,7 @@ const card = z.strictObject({
   fit, fitArgument: text, mainConcern: text.nullable(), evidenceStatus,
   evidenceIds: z.array(id).max(200), expiresAt: ms, selectable: z.boolean(),
   unavailableReason: text.nullable(),
+  highlights: z.array(text).max(6).optional(),
 })
 const apiError = z.strictObject({
   code: z.enum(['INVALID_INPUT', 'FORBIDDEN', 'STALE_VERSION', 'NO_MATCH', 'POLICY_REJECTED',

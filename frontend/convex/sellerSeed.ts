@@ -108,7 +108,9 @@ const profileRows = [
       field('headphoneType', 'Headphone type', 'string', null, ['equals', 'in'], ['over-ear', 'on-ear', 'in-ear']),
       field('color', 'Color', 'string', null, ['equals', 'in']),
       field('noiseCancelling', 'Active noise cancelling', 'boolean', null, ['equals']),
-      field('batteryHours', 'Battery life', 'number', 'h', ['min', 'max'], null, 1, 500),
+      field('batteryHours', 'Battery life with noise cancelling on', 'number', 'h', ['min', 'max'], null, 1, 500),
+      field('weightG', 'Weight', 'number', 'g', ['min', 'max'], null, 1, 2_000),
+      field('ancTier', 'Noise cancelling strength (reviewer consensus)', 'string', null, ['equals', 'in'], ['best_in_class', 'excellent', 'good']),
     ],
     variantKeyFields: ['manufacturerPartNumber', 'color'],
     compatibilityRuleId: null,
@@ -228,81 +230,87 @@ export const seedSellerDemo = internalMutation({
   },
 })
 
-// Additive, idempotent migration for databases seeded before the headphones
-// category existed. Never touches existing rows other than publishing a new
-// policy version that adds the headphone listings' cost and contribution floors.
+// Idempotent migration that converges an already-seeded database to the headphone fixtures:
+// upserts the profile, products and variants, publishes new listing/policy versions only when
+// values changed, and disables headphone listings that are no longer part of the fixtures.
 export const seedHeadphoneCatalog = internalMutation({
   args: {},
   handler: async (ctx: SellerMutationCtx) => {
     const fixtures = makeSellerFixtures()
     const createdAt = Date.now()
     const row = profileRows.find((candidate) => candidate.category === 'headphones')!
-    const summary = { profile: false, variants: 0, listings: 0, policies: 0 }
+    const summary = { profile: 'unchanged', variantsWritten: 0, listingsPublished: 0, listingsDisabled: 0, policiesPublished: 0 }
+    // Convex does not preserve object key order, so compare with sorted keys.
+    const stable = (value: unknown): string =>
+      JSON.stringify(value, (_key, nested) =>
+        nested && typeof nested === 'object' && !Array.isArray(nested)
+          ? Object.fromEntries(Object.entries(nested as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)))
+          : nested,
+      )
+    const same = (left: unknown, right: unknown) => stable(left) === stable(right)
 
-    const profileExists = await ctx.db
+    const profileDoc = await ctx.db
       .query('categoryProfiles')
       .withIndex('by_profileId_and_version', (query) => query.eq('profileId', row.profile.id).eq('version', row.profile.version))
       .first()
-    if (!profileExists) {
-      await ctx.db.insert('categoryProfiles', {
-        profileId: row.profile.id,
-        version: row.profile.version,
-        category: row.category,
-        allowedConditions: [...row.allowedConditions],
-        fields: row.fields,
-        variantKeyFields: row.variantKeyFields,
-        compatibilityRuleId: row.compatibilityRuleId,
-        evidenceRuleId: row.evidenceRuleId,
-        createdAt,
-      })
-      summary.profile = true
+    const profileValue = {
+      allowedConditions: [...row.allowedConditions],
+      fields: row.fields,
+      variantKeyFields: row.variantKeyFields,
+      compatibilityRuleId: row.compatibilityRuleId,
+      evidenceRuleId: row.evidenceRuleId,
+    }
+    if (!profileDoc) {
+      await ctx.db.insert('categoryProfiles', { profileId: row.profile.id, version: row.profile.version, category: row.category, ...profileValue, createdAt })
+      summary.profile = 'created'
+    } else if (!same(profileDoc.fields, row.fields)) {
+      await ctx.db.patch(profileDoc._id, profileValue)
+      summary.profile = 'updated'
     }
 
-    for (const variant of fixtures.variants.filter((candidate) => candidate.category === 'headphones')) {
-      const product = await ctx.db.query('products').withIndex('by_productId', (query) => query.eq('productId', variant.productId)).first()
-      if (!product) {
-        await ctx.db.insert('products', {
-          productId: variant.productId,
-          title: variant.title,
-          category: variant.category,
-          profile: variant.profile,
-          manufacturerPartNumber: variant.manufacturerPartNumber,
-          syntheticProduct: variant.syntheticProduct,
-          createdAt,
-        })
+    const headphoneVariants = fixtures.variants.filter((candidate) => candidate.category === 'headphones')
+    for (const variant of headphoneVariants) {
+      const productValue = {
+        title: variant.title,
+        category: variant.category,
+        profile: variant.profile,
+        manufacturerPartNumber: variant.manufacturerPartNumber,
+        syntheticProduct: variant.syntheticProduct,
       }
+      const product = await ctx.db.query('products').withIndex('by_productId', (query) => query.eq('productId', variant.productId)).first()
+      if (!product) await ctx.db.insert('products', { productId: variant.productId, ...productValue, createdAt })
+      else if (!same({ ...productValue }, { title: product.title, category: product.category, profile: product.profile, manufacturerPartNumber: product.manufacturerPartNumber, syntheticProduct: product.syntheticProduct })) await ctx.db.patch(product._id, productValue)
+      const variantValue = { ...productValue, productId: variant.productId, attributes: variant.attributes }
       const existing = await ctx.db.query('variants').withIndex('by_variantId', (query) => query.eq('variantId', variant.id)).first()
       if (!existing) {
-        await ctx.db.insert('variants', {
-          variantId: variant.id,
-          productId: variant.productId,
-          title: variant.title,
-          category: variant.category,
-          profile: variant.profile,
-          manufacturerPartNumber: variant.manufacturerPartNumber,
-          attributes: variant.attributes,
-          syntheticProduct: variant.syntheticProduct,
-          createdAt,
-        })
-        summary.variants += 1
+        await ctx.db.insert('variants', { variantId: variant.id, ...variantValue, createdAt })
+        summary.variantsWritten += 1
+      } else if (!same(variant.attributes, existing.attributes) || existing.title !== variant.title || existing.syntheticProduct !== variant.syntheticProduct) {
+        await ctx.db.patch(existing._id, variantValue)
+        summary.variantsWritten += 1
       }
     }
 
+    const headphoneVariantIds = new Set(headphoneVariants.map((variant) => variant.id))
     for (const merchantId of ['merchant_a', 'merchant_b', 'merchant_c']) {
       const merchant = await ctx.db.query('merchants').withIndex('by_merchantId', (query) => query.eq('merchantId', merchantId)).first()
       if (!merchant) continue
-      const snapshots = fixtures.snapshotsByMerchant[merchantId].filter((snapshot) => snapshot.variant.category === 'headphones')
-      for (const snapshot of snapshots) {
+      const desired = fixtures.snapshotsByMerchant[merchantId].filter((snapshot) => snapshot.variant.category === 'headphones')
+      const desiredIds = new Set(desired.map((snapshot) => snapshot.listing.listing.id))
+
+      const allListings = await ctx.db.query('listingVersions').filter((query) => query.eq(query.field('merchantId'), merchantId)).collect()
+      for (const stale of allListings.filter((doc) => headphoneVariantIds.has(doc.variantId) && doc.enabled && !desiredIds.has(doc.listingId))) {
+        await ctx.db.patch(stale._id, { enabled: false })
+        summary.listingsDisabled += 1
+      }
+
+      for (const snapshot of desired) {
         const listingRef = snapshot.listing.listing
-        const existing = await ctx.db
-          .query('listingVersions')
-          .withIndex('by_listingId_and_version', (query) => query.eq('listingId', listingRef.id).eq('version', listingRef.version))
-          .first()
-        if (existing) continue
-        await ctx.db.insert('listingVersions', {
+        const versions = allListings.filter((doc) => doc.listingId === listingRef.id).sort((left, right) => right.version - left.version)
+        const latest = versions[0]
+        const value = {
           listingId: listingRef.id,
           merchantId,
-          version: listingRef.version,
           variantId: snapshot.listing.variantId,
           condition: snapshot.listing.condition,
           unitId: snapshot.listing.unitId,
@@ -312,8 +320,15 @@ export const seedHeadphoneCatalog = internalMutation({
           diagnosticAttributes: snapshot.listing.diagnosticAttributes,
           enabled: true,
           createdAt,
-        })
-        summary.listings += 1
+        }
+        if (!latest) {
+          await ctx.db.insert('listingVersions', { ...value, version: listingRef.version })
+          summary.listingsPublished += 1
+        } else if (!latest.enabled || latest.referenceUnitCents !== value.referenceUnitCents || latest.operatorFloorCents !== value.operatorFloorCents || latest.initialQuantity !== value.initialQuantity) {
+          await ctx.db.patch(latest._id, { enabled: false })
+          await ctx.db.insert('listingVersions', { ...value, version: latest.version + 1 })
+          summary.listingsPublished += 1
+        }
       }
 
       const current = await ctx.db
@@ -322,19 +337,18 @@ export const seedHeadphoneCatalog = internalMutation({
         .first()
       if (!current) continue
       const seeded = fixtures.policiesByMerchant[merchantId]
-      const missing = snapshots.map((snapshot) => snapshot.listing.listing.id).filter((id) => !(id in current.unitCostByListing))
-      if (missing.length === 0) continue
+      const changed = [...desiredIds].filter(
+        (id) => current.unitCostByListing[id] !== seeded.unitCostByListing[id] || current.minimumContributionByListing[id] !== seeded.minimumContributionByListing[id],
+      )
+      if (changed.length === 0) continue
       const next = {
         policyId: current.policyId,
         merchantId: current.merchantId,
         version: current.version + 1,
         enabled: current.enabled,
         maxDiscountBps: current.maxDiscountBps,
-        unitCostByListing: { ...current.unitCostByListing, ...Object.fromEntries(missing.map((id) => [id, seeded.unitCostByListing[id]])) },
-        minimumContributionByListing: {
-          ...current.minimumContributionByListing,
-          ...Object.fromEntries(missing.map((id) => [id, seeded.minimumContributionByListing[id]])),
-        },
+        unitCostByListing: { ...current.unitCostByListing, ...Object.fromEntries(changed.map((id) => [id, seeded.unitCostByListing[id]])) },
+        minimumContributionByListing: { ...current.minimumContributionByListing, ...Object.fromEntries(changed.map((id) => [id, seeded.minimumContributionByListing[id]])) },
         costsAreSynthetic: current.costsAreSynthetic,
         shippingCents: current.shippingCents,
         arrivalCalendarDays: current.arrivalCalendarDays,
@@ -345,7 +359,7 @@ export const seedHeadphoneCatalog = internalMutation({
       }
       await ctx.db.insert('policyVersions', next)
       await ctx.db.patch(merchant._id, { currentPolicyId: next.policyId, currentPolicyVersion: next.version, updatedAt: createdAt })
-      summary.policies += 1
+      summary.policiesPublished += 1
     }
     return summary
   },
