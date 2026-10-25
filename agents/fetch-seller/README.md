@@ -150,8 +150,12 @@ receives) and the merchant's own price authority:
 1. **No authority, no price change.** Without a valid `sellerAuthority` the
    worker holds. The authority must match the frozen offer exactly (job,
    candidate, offer, lines, quantities, unit prices summing to the total) and
-   carries only `lowestAuthorizedUnitCents` per line, never costs, operator
-   floors, discount caps or contribution inputs.
+   carries one number per line, `lowestAuthorizedUnitCents` = max(operator
+   floor, discount bound, unit cost + minimum contribution). No separate cost,
+   cap or contribution fields are sent, but the value equals whichever term
+   binds, so it can reveal the merchant's own floor or cost-plus-contribution
+   basis to that merchant's own agent (permitted by spec §4: a seller job holds
+   only its own policy). It never reaches the buyer or another merchant.
 2. **Concede only against concrete pressure.** A *comparable rival* is another
    merchant's snapshot offer for the same request lines whose checked soft-fit
    coverage is at least this offer's (computed like the backend's

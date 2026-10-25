@@ -205,12 +205,62 @@ def final_input():
     }
 
 
+def headphone_input(minimum_hours):
+    value = sample_input()
+    value["brief"]["lines"] = [{
+        "lineId": "line_main",
+        "role": "primary",
+        "category": "headphones",
+        "profile": {"id": "profile_headphones", "version": 1},
+        "quantity": 1,
+        "allowedConditions": ["new"],
+        "requirements": [
+            {"id": "r_color", "fieldId": "color", "operator": "equals", "value": "black", "unit": None, "strength": "hard", "weight": 1},
+            {"id": "r_anc", "fieldId": "noiseCancelling", "operator": "equals", "value": True, "unit": None, "strength": "hard", "weight": 1},
+            {"id": "r_battery", "fieldId": "batteryHours", "operator": "min", "value": minimum_hours, "unit": "h", "strength": "hard", "weight": 1},
+        ],
+        "useCaseSummary": "Black noise-cancelling headphones.",
+    }]
+    entry = snapshot("HP2", "Bose QuietComfort Ultra Headphones", 0, 0, 42_900)
+    entry["variant"]["category"] = "headphones"
+    entry["variant"]["profile"] = {"id": "profile_headphones", "version": 1}
+    entry["variant"]["syntheticProduct"] = False
+    entry["variant"]["attributes"] = {
+        "color": attribute("black"),
+        "noiseCancelling": attribute(True),
+        "batteryHours": attribute(24, "h"),
+        "weightG": attribute(254, "g"),
+    }
+    value["catalog"] = [entry]
+    return value
+
+
 class SellerLogicTests(unittest.TestCase):
     def test_embedded_schema_matches_generated_json(self):
         import json
         from pathlib import Path
         from seller_schema_data import SCHEMA_JSON
         self.assertEqual(json.loads(SCHEMA_JSON), json.loads(Path(__file__).with_name("seller.schema.json").read_text()))
+
+    def test_hour_based_battery_requirement_matches_real_headphone_catalog(self):
+        decision = build_decision(headphone_input(20), "seller_initial")
+        self.assertEqual(decision["kind"], "propose")
+        self.assertEqual(decision["proposal"]["lines"][0]["listing"]["id"], "merchant_a:HP2")
+        # A bound above the product's rated battery life must reject it rather than read as unknown.
+        self.assertEqual(build_decision(headphone_input(30), "seller_initial")["kind"], "abstain")
+
+    def test_unit_table_matches_the_typescript_validator(self):
+        import pathlib
+        import re
+        from seller_logic import NUMERIC_UNITS
+        source = (pathlib.Path(__file__).resolve().parents[2] / "frontend/convex/lib/sellerValidation.ts").read_text()
+        table = source[source.index("const NUMERIC_UNITS"):]
+        table = table[:table.index("\n}\n")]
+        typescript = {
+            match.group(1).strip("'"): (match.group(2).strip("'"), float(match.group(3).replace("_", "")))
+            for match in re.finditer(r"^\s*('?[A-Za-z%]+'?): \{ family: ('[a-z]+'), multiplier: ([0-9_.]+) \}", table, re.M)
+        }
+        self.assertEqual(typescript, dict(NUMERIC_UNITS))
 
     def test_agent_dispatch_accepts_explicit_opening_role(self):
         value = sample_input()

@@ -9,7 +9,7 @@ const ms = z.int().nonnegative()
 const version = z.int().min(1)
 const quantity = z.int().min(1).max(10)
 const ref = z.strictObject({ id, version })
-const category = z.enum(['laptop', 'tech_accessory', 'clothing', 'household_accessory', 'small_appliance'])
+const category = z.enum(['laptop', 'tech_accessory', 'clothing', 'household_accessory', 'small_appliance', 'headphones'])
 const condition = z.enum(['new', 'refurbished'])
 const sort = z.enum(['best_fit', 'cheapest', 'soonest', 'warranty'])
 const value = z.union([text, z.number().finite(), z.boolean(), z.array(text).max(100)])
@@ -70,6 +70,7 @@ const card = z.strictObject({
   fit, fitArgument: text, mainConcern: text.nullable(), evidenceStatus,
   evidenceIds: z.array(id).max(200), expiresAt: ms, selectable: z.boolean(),
   unavailableReason: text.nullable(),
+  highlights: z.array(text).max(6).optional(),
 })
 const apiError = z.strictObject({
   code: z.enum(['INVALID_INPUT', 'FORBIDDEN', 'STALE_VERSION', 'NO_MATCH', 'POLICY_REJECTED',
@@ -211,8 +212,9 @@ export const contracts = {
   // Seller-private sibling of SellerFinalJobInput. Convex derives it at dispatch from the
   // merchant's own frozen opening offer and policy, sends it only to that merchant's
   // provider, and never stores it in buyer records. It states the merchant's own lowest
-  // authorized unit price per frozen line (equal to the operator floor when that binds),
-  // never raw cost, discount-cap or contribution inputs.
+  // authorized unit price per frozen line: max(operator floor, discount bound, unit cost +
+  // minimum contribution). No separate cost/cap/contribution fields, but the value equals the
+  // binding term, so it can reveal the merchant's own cost basis to its own agent (spec §4).
   SellerFinalAuthority: z.strictObject({
     schemaVersion: z.literal(2), jobId: id, candidateId: id, offer: ref,
     lines: z.array(z.strictObject({

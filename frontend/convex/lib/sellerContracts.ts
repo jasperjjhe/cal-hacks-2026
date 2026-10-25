@@ -11,6 +11,7 @@ export type Category =
   | 'clothing'
   | 'household_accessory'
   | 'small_appliance'
+  | 'headphones'
 
 export type Condition = 'new' | 'refurbished'
 export type Value = string | number | boolean | string[]
