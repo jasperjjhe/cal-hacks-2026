@@ -1,6 +1,9 @@
-"""Canonical typed messages shared by the seller agent and its HTTP gateway."""
+"""Canonical typed messages shared by the seller agent and its HTTP gateway.
 
-from __future__ import annotations
+No `from __future__ import annotations` here: Agentverse's hosted runtime
+builds these models with pydantic v1, where postponed (string) annotations
+stay unresolved ForwardRefs and every envelope fails to process.
+"""
 
 from typing import Any, Dict, Optional
 

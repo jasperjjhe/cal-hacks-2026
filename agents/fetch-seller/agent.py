@@ -333,5 +333,67 @@ async def seller_query(ctx: Context, sender: str, request: SellerMessage) -> Non
     await ctx.send(sender, _mailbox_response(response))
 
 
+# --- Agent Chat Protocol (public discoverability surface) -------------------
+# ASI:One and other agents can ask this agent what it does. Chat never starts,
+# polls or cancels a seller job and never accepts buyer data, budgets, rival
+# records or secrets: the typed SellerMessage/REST contract above remains the
+# only job path, and Convex remains authoritative for every offer.
+try:
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from uagents import Protocol
+    from uagents_core.contrib.protocols.chat import (
+        ChatAcknowledgement,
+        ChatMessage,
+        EndSessionContent,
+        TextContent,
+        chat_protocol_spec,
+    )
+
+    CHAT_AVAILABLE = True
+except ImportError:  # pragma: no cover - runtimes without uagents-core chat
+    CHAT_AVAILABLE = False
+
+CHAT_REPLY = (
+    "I am the Converge seller agent. Converge is an agent-negotiated shopping "
+    "marketplace: a buyer confirms a private brief, and merchant agents like me "
+    "compete for it. For each job I receive a sanitized brief plus one "
+    "merchant's own catalog and policy, then I (1) match listings against the "
+    "buyer's hard requirements and propose an offer at a policy-valid price, "
+    "(2) defend my merchant's offers and may challenge one rival fact in the "
+    "moderated council, (3) answer admitted challenges, and (4) submit one "
+    "sealed final offer (hold, abstain or a parent-bound revision). I never see "
+    "the buyer's budget, raw conversation, rivals' costs or sealed bids, and "
+    "Converge revalidates everything I return. Jobs arrive only through the "
+    "authenticated Converge backend, not through chat."
+)
+
+if CHAT_AVAILABLE:
+    chat_protocol = Protocol(spec=chat_protocol_spec)
+
+    @chat_protocol.on_message(ChatMessage)
+    async def handle_chat(ctx: Context, sender: str, msg: ChatMessage) -> None:
+        await ctx.send(
+            sender,
+            ChatAcknowledgement(timestamp=datetime.now(timezone.utc), acknowledged_msg_id=msg.msg_id),
+        )
+        # Message text is deliberately not parsed, stored or logged.
+        await ctx.send(
+            sender,
+            ChatMessage(
+                timestamp=datetime.now(timezone.utc),
+                msg_id=uuid4(),
+                content=[TextContent(type="text", text=CHAT_REPLY), EndSessionContent(type="end-session")],
+            ),
+        )
+
+    @chat_protocol.on_message(ChatAcknowledgement)
+    async def handle_chat_ack(ctx: Context, sender: str, msg: ChatAcknowledgement) -> None:
+        return None
+
+    agent.include(chat_protocol, publish_manifest=True)
+
+
 if __name__ == "__main__":
     agent.run()

@@ -19,8 +19,12 @@ import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 
-from uagents.envelope import Envelope
+try:  # uagents >= 0.20 moved the envelope model into uagents-core.
+    from uagents_core.envelope import Envelope
+except ImportError:  # pragma: no cover - older uagents releases
+    from uagents.envelope import Envelope
 from uagents.query import query
+from uagents.resolver import RulesBasedResolver
 
 from protocol import (
     CancelRequest,
@@ -89,10 +93,26 @@ def _authorization_value(headers: Any) -> str:
     return value.removeprefix("Bearer ").strip()
 
 
-def _authorized(headers: Any) -> bool:
+def _authorized(headers: Any, payload: Optional[Dict[str, Any]] = None) -> bool:
+    """Accept the gateway token from the bearer header or, when an edge proxy
+    consumes Authorization, from the typed body field Convex also sends."""
     expected = _gateway_token()
+    if not expected:
+        return False
     supplied = _authorization_value(headers)
-    return bool(expected) and secrets.compare_digest(supplied, expected)
+    if not supplied and isinstance(payload, dict):
+        body_token = payload.get("providerAuthToken")
+        supplied = body_token if isinstance(body_token, str) else ""
+    return bool(supplied) and secrets.compare_digest(supplied, expected)
+
+
+def _resolver() -> Optional[RulesBasedResolver]:
+    """Optional fixed endpoint for the destination agent (local testing or a
+    pinned Agentverse submit URL). Never taken from a request."""
+    endpoint = os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip()
+    if not endpoint:
+        return None
+    return RulesBasedResolver({_agent_address(): endpoint})
 
 
 def _message_for(path: str, payload: Dict[str, Any]) -> SellerMessage:
@@ -164,7 +184,14 @@ async def _query_agent(message: SellerMessage) -> ProviderResponse:
     if not address:
         raise RuntimeError("FETCH_SELLER_AGENT_ADDRESS is not configured")
     timeout = float(os.getenv("FETCH_SELLER_QUERY_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
-    response = await query(destination=address, message=message, timeout=timeout)
+    kwargs: Dict[str, Any] = {}
+    resolver = _resolver()
+    if resolver is not None:
+        kwargs["resolver"] = resolver
+    response = await asyncio.wait_for(
+        query(destination=address, message=message, timeout=timeout, **kwargs),
+        timeout=timeout + 2.0,
+    )
     if isinstance(response, ProviderResponse):
         return response
     if isinstance(response, Envelope):
@@ -240,11 +267,15 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if self.path not in ROUTES:
             self._write_json(404, {"error": "not_found"})
             return
-        if not _authorized(self.headers):
+        try:
+            payload = self._read_json()
+        except Exception:
+            self._write_json(400, {"error": "invalid_request"})
+            return
+        if not _authorized(self.headers, payload):
             self._write_json(401, {"error": "unauthorized"})
             return
         try:
-            payload = self._read_json()
             message = _message_for(self.path, payload)
         except Exception:
             self._write_json(400, {"error": "invalid_request"})
@@ -256,6 +287,10 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._write_json(502, {"error": "provider_protocol"})
 
     def do_GET(self) -> None:
+        # Unauthenticated liveness only: no agent address, tokens or job data.
+        if self.path in ("/health", "/healthz"):
+            self._write_json(200, {"ok": True, "configured": bool(_gateway_token() and _shared_agent_token() and _agent_address())})
+            return
         self._write_json(404, {"error": "not_found"})
 
 
