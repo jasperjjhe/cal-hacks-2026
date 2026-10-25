@@ -18,6 +18,7 @@
   --cv-chip: #eaeff5;
   --cv-cell: #fbfcfe;
   --cv-pro: #0b6e69;
+  --cv-con: #9c341f;
   --cv-shadow-soft: 0 0 6px rgba(47, 47, 47, 0.11);
   --cv-shadow-input: 0 1px 17.4px rgba(47, 47, 47, 0.11);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -155,8 +156,8 @@
 }
 .cv-secondary {
   background: #fff;
-  border: 1px solid var(--cv-border);
-  color: var(--cv-ink);
+  border: 1px solid var(--cv-coral);
+  color: var(--cv-coral);
 }
 .cv-secondary[aria-pressed="true"] {
   border-color: var(--cv-coral);
@@ -174,8 +175,7 @@
     filter: brightness(1.05) saturate(1.05);
   }
   .cv-secondary:not(:disabled):hover {
-    border-color: #d9c4ae;
-    background: #fffaf6;
+    background: var(--cv-select);
   }
 }
 .cv-linkish {
@@ -620,6 +620,7 @@ a.cv-primary {
 .cv-strip-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  align-items: start;
   gap: 26px;
 }
 .cv-mini {
@@ -1315,7 +1316,7 @@ a.cv-primary {
   color: var(--cv-pro);
 }
 .is-con {
-  color: var(--cv-coral);
+  color: var(--cv-con);
 }
 .cv-points {
   display: grid;
@@ -1338,7 +1339,7 @@ a.cv-primary {
   color: var(--cv-pro);
 }
 .cv-points.is-con .cv-point-icon {
-  color: var(--cv-coral);
+  color: var(--cv-con);
 }
 .cv-offer .cv-proscons {
   animation: cv-rise 280ms var(--ease-out) both;

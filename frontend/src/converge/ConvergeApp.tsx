@@ -13,7 +13,7 @@ import { AuthScreen } from "./Auth";
 import { Chat } from "./Chat";
 import { Checkout } from "./Checkout";
 import { Home } from "./Home";
-import type { SavedOffer } from "./Home";
+import type { SavedOffer, Suggested } from "./Home";
 import { EvidenceView, OrdersView, SavedView } from "./Pages";
 import { Product } from "./Product";
 import { CompareTable, Converging, EndedState, Offers } from "./Results";
@@ -89,6 +89,16 @@ function Workspace() {
     api.buyer.getBuyerRun,
     requestId && activeRun ? { requestId } : "skip",
   );
+  // The home screen suggests the offers from the most recent run that has any.
+  const latest = requests?.find((r) => r.activeRunId);
+  const latestRun = useQuery(
+    api.buyer.getBuyerRun,
+    view === "home" && latest ? { requestId: latest.requestId } : "skip",
+  );
+  const suggested: Suggested | null =
+    latest && latestRun?.stage === "results" && latestRun.offers.length
+      ? { requestId: latest.requestId, runId: latestRun.runId, cards: latestRun.offers }
+      : null;
   const purchase = useQuery(api.buyer.getPurchase, requestId ? { requestId } : "skip");
   const orders = useQuery(api.buyer.listOrders, view === "orders" ? {} : "skip");
 
@@ -399,8 +409,18 @@ function Workspace() {
           busy={busy}
           requests={requests}
           saved={saved}
+          suggested={suggested}
           onOpenRequest={(id) => openRequest(id, "flow")}
           onOpenSaved={openSaved}
+          onOpenSuggested={(card, index, from) => {
+            if (from.requestId !== requestId) openRequest(from.requestId, "flow");
+            setView("flow");
+            setDetail({
+              card,
+              index,
+              origin: { requestId: from.requestId, runId: from.runId },
+            });
+          }}
         />
       );
     if (view === "saved")

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "../../convex/_generated/api";
+import type { OfferCard } from "../contracts";
 import { Chip, PromptBox } from "./ui";
 import { fullDayLabel, price } from "./format";
 import { photoClass, productVisual } from "./visuals";
@@ -34,6 +35,30 @@ const steps = [
   ["You decide", "Compare the evidence, then approve exact terms. Nothing is bought without you."],
 ];
 
+export type Suggested = { requestId: string; runId: string; cards: OfferCard[] };
+
+function MiniOffer({ card, index, onOpen }: { card: OfferCard; index: number; onOpen: () => void }) {
+  const product = card.products[0];
+  const visual = productVisual(product.title, index);
+  return (
+    <button className="cv-mini" onClick={onOpen} style={{ "--i": index } as CSSProperties}>
+      <span className="cv-mini-visual">
+        {visual ? (
+          <img src={visual.src} alt={visual.alt} className={photoClass(visual.src)} />
+        ) : (
+          <span className="cv-mini-placeholder" aria-hidden="true">
+            {product.title.slice(0, 1)}
+          </span>
+        )}
+      </span>
+      <span className="cv-mini-row">
+        <strong>{product.title}</strong>
+        <span>{price(card.totalCents)}</span>
+      </span>
+    </button>
+  );
+}
+
 export function Home({
   greeting,
   message,
@@ -42,8 +67,10 @@ export function Home({
   busy,
   requests,
   saved,
+  suggested,
   onOpenRequest,
   onOpenSaved,
+  onOpenSuggested,
 }: {
   greeting: string;
   message: string;
@@ -52,12 +79,15 @@ export function Home({
   busy: boolean;
   requests: Request[] | undefined;
   saved: SavedOffer[] | undefined;
+  /** the latest run's offers, shown as the "Suggested offers" strip */
+  suggested: Suggested | null;
   onOpenRequest: (id: string) => void;
   onOpenSaved: (offer: SavedOffer) => void;
+  onOpenSuggested: (card: OfferCard, index: number, from: Suggested) => void;
 }) {
   const [engaged, setEngaged] = useState(false);
   const showStarters = engaged || message.length > 0;
-  const hasHistory = !!requests?.length || !!saved?.length;
+  const hasHistory = !!requests?.length || !!saved?.length || !!suggested;
 
   return (
     <div className="cv-home">
@@ -105,37 +135,31 @@ export function Home({
 
       {hasHistory ? (
         <section className="cv-strip" aria-label="Pick up where you left off">
+          {!!suggested && (
+            <>
+              <h2>Suggested offers from merchant agents</h2>
+              <div className="cv-strip-card">
+                <div className="cv-strip-grid">
+                  {suggested.cards.slice(0, 3).map((card, i) => (
+                    <MiniOffer
+                      key={card.offer.id}
+                      card={card}
+                      index={i}
+                      onOpen={() => onOpenSuggested(card, i, suggested)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           {!!saved?.length && (
             <>
               <h2>Your saved offers</h2>
               <div className="cv-strip-card">
                 <div className="cv-strip-grid">
-                  {saved.slice(0, 3).map((s, i) => {
-                    const product = s.card.products[0];
-                    const visual = productVisual(product.title, i);
-                    return (
-                      <button
-                        key={s.id}
-                        className="cv-mini"
-                        onClick={() => onOpenSaved(s)}
-                        style={{ "--i": i } as CSSProperties}
-                      >
-                        <span className="cv-mini-visual">
-                          {visual ? (
-                            <img src={visual.src} alt={visual.alt} className={photoClass(visual.src)} />
-                          ) : (
-                            <span className="cv-mini-placeholder" aria-hidden="true">
-                              {product.title.slice(0, 1)}
-                            </span>
-                          )}
-                        </span>
-                        <span className="cv-mini-row">
-                          <strong>{product.title}</strong>
-                          <span>{price(s.card.totalCents)}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {saved.slice(0, 3).map((s, i) => (
+                    <MiniOffer key={s.id} card={s.card} index={i} onOpen={() => onOpenSaved(s)} />
+                  ))}
                 </div>
               </div>
             </>
