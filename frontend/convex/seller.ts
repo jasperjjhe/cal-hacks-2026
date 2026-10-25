@@ -1,5 +1,5 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { getAuthUserId } from '@convex-dev/auth/server'
+import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 
 import {
@@ -47,6 +47,14 @@ const policyChangesValidator = v.object({
   arrivalCalendarDays: v.optional(v.number()),
   warrantyMonths: v.optional(v.number()),
   returnDays: v.optional(v.number()),
+  finalServiceOptions: v.optional(v.array(v.object({
+    id: v.string(),
+    shippingCents: v.number(),
+    arrivalCalendarDays: v.number(),
+    warrantyMonths: v.number(),
+    returnDays: v.number(),
+    incrementalCostCents: v.number(),
+  }))),
 })
 
 function isSafeInteger(value: unknown, minimum = 0): value is number {
@@ -116,6 +124,7 @@ function projectPolicy(policy: {
   arrivalCalendarDays: number
   warrantyMonths: number
   returnDays: number
+  finalServiceOptions?: PricingPolicy['finalServiceOptions']
 }): PricingPolicy {
   return {
     policy: { id: policy.policyId, version: policy.version },
@@ -129,6 +138,7 @@ function projectPolicy(policy: {
     arrivalCalendarDays: policy.arrivalCalendarDays,
     warrantyMonths: policy.warrantyMonths,
     returnDays: policy.returnDays,
+    finalServiceOptions: policy.finalServiceOptions?.map((option) => ({ ...option })) ?? [],
   }
 }
 
@@ -136,7 +146,21 @@ async function recordEvent(
   ctx: SellerMutationCtx,
   event: {
     merchantId: string
-    eventType: 'listing_published' | 'policy_published' | 'merchant_paused' | 'merchant_resumed' | 'proposal_received' | 'proposal_rejected' | 'offer_accepted' | 'allocation_changed'
+    eventType:
+      | 'listing_published'
+      | 'policy_published'
+      | 'merchant_paused'
+      | 'merchant_resumed'
+      | 'proposal_received'
+      | 'proposal_rejected'
+      | 'offer_accepted'
+      | 'allocation_changed'
+      | 'provider_started'
+      | 'provider_pending'
+      | 'provider_completed'
+      | 'provider_failed'
+      | 'provider_ambiguous'
+      | 'provider_cancelled'
     jobId?: string | null
     candidateId?: string | null
     offerId?: string | null
@@ -156,7 +180,7 @@ async function recordEvent(
   })
 }
 
-export const getMerchantView = queryGeneric({
+export const getMerchantView = query({
   args: {},
   handler: async (ctx: SellerQueryCtx) => {
     const membership = await requireSellerMembership(ctx)
@@ -227,7 +251,7 @@ export const getMerchantView = queryGeneric({
   },
 })
 
-export const updateOwnListing = mutationGeneric({
+export const updateOwnListing = mutation({
   args: { listing: refValidator, patch: listingPatchValidator },
   handler: async (ctx: SellerMutationCtx, args: { listing: Ref; patch: Record<string, unknown> }) => {
     const membership = await requireSellerMembership(ctx)
@@ -235,9 +259,14 @@ export const updateOwnListing = mutationGeneric({
     if (current.merchantId !== membership.merchantId) throwSellerError('WRONG_MERCHANT_SCOPE', 'listing is not owned by the authenticated merchant')
     const patch = args.patch
     const { _id, _creationTime, ...fields } = current
+    void _id
     void _creationTime
-    const latest = await ctx.db.query("listingVersions").withIndex("by_listingId_and_version", (q) => q.eq("listingId", current.listingId)).order("desc").first()
-    if (latest?.version !== current.version) throwSellerError("LISTING_VERSION_STALE", "listing version is stale")
+    const latest = await ctx.db
+      .query('listingVersions')
+      .withIndex('by_listingId_and_version', (q) => q.eq('listingId', current.listingId))
+      .order('desc')
+      .first()
+    if (latest?.version !== current.version) throwSellerError('LISTING_VERSION_STALE', 'listing version is stale')
     const next = {
       ...fields,
       version: current.version + 1,
@@ -284,7 +313,7 @@ export const updateOwnListing = mutationGeneric({
   },
 })
 
-export const publishOwnPolicy = mutationGeneric({
+export const publishOwnPolicy = mutation({
   args: { expectedPolicy: v.union(refValidator, v.null()), changes: policyChangesValidator },
   handler: async (ctx: SellerMutationCtx, args: { expectedPolicy: Ref | null; changes: PolicyChanges }) => {
     const membership = await requireSellerMembership(ctx)
@@ -315,6 +344,7 @@ export const publishOwnPolicy = mutationGeneric({
       arrivalCalendarDays: next.arrivalCalendarDays,
       warrantyMonths: next.warrantyMonths,
       returnDays: next.returnDays,
+      finalServiceOptions: next.finalServiceOptions,
       createdAt: Date.now(),
     })
     await ctx.db.patch(merchant._id, {
@@ -331,7 +361,7 @@ export const publishOwnPolicy = mutationGeneric({
   },
 })
 
-export const pauseOwnMerchant = mutationGeneric({
+export const pauseOwnMerchant = mutation({
   args: { paused: v.boolean() },
   handler: async (ctx: SellerMutationCtx, args: { paused: boolean }) => {
     const membership = await requireSellerMembership(ctx)
@@ -348,7 +378,75 @@ export const pauseOwnMerchant = mutationGeneric({
   },
 })
 
-export const getOwnOfferEvents = queryGeneric({
+// Bind a newly authenticated session to an internally provisioned merchant grant.
+// The grant, not a user-controlled subject prefix, is the authority boundary.
+export const bindOperatorSession = mutation({
+  args: {},
+  handler: async (ctx: SellerMutationCtx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    const userId = await getAuthUserId(ctx)
+    if (!identity?.tokenIdentifier || !userId) throwSellerError('UNAUTHENTICATED', 'operator login required')
+    const grants = await ctx.db
+      .query('operatorAccounts')
+      .withIndex('by_user', (q) => q.eq('userId', String(userId)))
+      .collect()
+    const active = grants.filter((grant) => grant.enabled)
+    if (active.length !== 1) throwSellerError('UNAUTHORIZED', 'operator account is missing or ambiguous')
+    const memberships = await ctx.db
+      .query('memberships')
+      .withIndex('by_authTokenIdentifier', (q) => q.eq('authTokenIdentifier', identity.tokenIdentifier))
+      .collect()
+    if (memberships.some((membership) => membership.merchantId !== active[0].merchantId)) {
+      throwSellerError('UNAUTHORIZED', 'session membership conflicts with account grant')
+    }
+    if (memberships.length === 0) {
+      await ctx.db.insert('memberships', {
+        authTokenIdentifier: identity.tokenIdentifier,
+        merchantId: active[0].merchantId,
+        role: 'operator',
+        enabled: true,
+        createdAt: Date.now(),
+      })
+    }
+    return { merchantId: active[0].merchantId }
+  },
+})
+
+export const getOwnAgentJobs = query({
+  args: {},
+  handler: async (ctx: SellerQueryCtx) => {
+    const membership = await requireSellerMembership(ctx)
+    const jobs = await ctx.db
+      .query('sellerJobs')
+      .withIndex('by_merchantId_and_status', (query) => query.eq('merchantId', membership.merchantId))
+      .collect()
+    return jobs
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, 50)
+      .map((job) => ({
+        jobId: job.jobId,
+        requestId: job.requestId,
+        requestVersion: job.requestVersion,
+        runId: job.runId,
+        phaseId: job.phaseId,
+        role: job.role,
+        provider: job.provider,
+        providerConfigRevision: job.providerConfigRevision,
+        status: job.status,
+        providerRunId: job.providerRunId,
+        providerModel: job.providerModel,
+        providerElapsedMs: job.providerElapsedMs,
+        attemptCount: job.attemptCount,
+        lastErrorCode: job.lastErrorCode,
+        lastErrorRetryable: job.lastErrorRetryable,
+        deadlineAt: job.deadlineAt,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      }))
+  },
+})
+
+export const getOwnOfferEvents = query({
   args: { cursor: v.union(v.string(), v.null()) },
   handler: async (ctx: SellerQueryCtx, args: { cursor: string | null }) => {
     const membership = await requireSellerMembership(ctx)
@@ -407,23 +505,3 @@ export function normalizeExpectedPolicy(value: unknown): Ref | null {
   if (typeof record.id !== 'string' || typeof record.version !== 'number') throw new SellerContractError('INVALID_INPUT', 'expected policy is invalid')
   return { id: record.id, version: record.version }
 }
-
-// Call once after password sign-in, before querying the seller workspace.
-// The merchant comes only from an internally provisioned account grant.
-export const bindOperatorSession = mutationGeneric({
-  args: {},
-  handler: async (ctx: SellerMutationCtx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    const userId = await getAuthUserId(ctx);
-    if (!identity || !userId) throwSellerError("UNAUTHENTICATED", "Operator login required");
-    const grants = await ctx.db.query("operatorAccounts").withIndex("by_user", q => q.eq("userId", String(userId))).collect();
-    const active = grants.filter(g => g.enabled);
-    if (active.length !== 1) throwSellerError("UNAUTHORIZED", "Operator account is missing or ambiguous");
-    const memberships = await ctx.db.query("memberships").withIndex("by_authTokenIdentifier", q => q.eq("authTokenIdentifier", identity.tokenIdentifier)).collect();
-    for (const membership of memberships) {
-      if (membership.merchantId !== active[0].merchantId) throwSellerError("UNAUTHORIZED", "Session membership conflicts with account grant");
-    }
-    if (memberships.length === 0) await ctx.db.insert("memberships", { authTokenIdentifier: identity.tokenIdentifier, merchantId: active[0].merchantId, role: "operator", enabled: true, createdAt: Date.now() });
-    return { merchantId: active[0].merchantId };
-  },
-});

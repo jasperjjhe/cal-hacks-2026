@@ -93,6 +93,25 @@ export interface PricingPolicy {
   arrivalCalendarDays: number
   warrantyMonths: number
   returnDays: number
+  finalServiceOptions: FinalServiceOption[]
+}
+
+export interface FinalServiceOption {
+  id: Id
+  shippingCents: Cents
+  arrivalCalendarDays: number
+  warrantyMonths: number
+  returnDays: number
+  incrementalCostCents: Cents
+}
+
+export interface FinalServiceTerms {
+  serviceOptionId: Id | null
+  shippingCents: Cents
+  arrivalCalendarDays: number
+  warrantyMonths: number
+  returnDays: number
+  incrementalCostCents: Cents
 }
 
 export type OfferLine = SellerProposal['lines'][number]
@@ -102,6 +121,12 @@ export type Claim = SellerProposal['claims'][number]
 export type SellerProposal = Contract<'SellerProposal'>
 
 export type SellerDecision = Contract<'SellerDecision'>
+
+export type CouncilJobInput = Contract<'CouncilJobInput'>
+export type SellerAdvocacy = Contract<'SellerAdvocacy'>
+export type SellerReply = Contract<'SellerReply'>
+export type SellerFinalJobInput = Contract<'SellerFinalJobInput'>
+export type SellerFinalDecision = Contract<'SellerFinalDecision'>
 
 export type SellerSafeReasonCode =
   | 'UNAUTHENTICATED'
@@ -122,6 +147,11 @@ export type SellerSafeReasonCode =
   | 'PRICE_BELOW_FLOOR'
   | 'PRICE_ABOVE_REFERENCE'
   | 'CONTRIBUTION_TOO_LOW'
+  | 'PARENT_OFFER_MISMATCH'
+  | 'FROZEN_BASKET_CHANGED'
+  | 'FINAL_LINE_PRICE_INCREASED'
+  | 'FINAL_TOTAL_INCREASED'
+  | 'FINAL_TERM_WEAKENED'
   | 'QUANTITY_INVALID'
   | 'QUANTITY_UNAVAILABLE'
   | 'DUPLICATE_LINE'
@@ -160,6 +190,7 @@ export interface OfferVersion {
   merchantId: Id
   parentOffer: Ref | null
   policy: Ref
+  serviceOptionId: Id | null
   lines: OfferLine[]
   itemsCents: Cents
   shippingCents: Cents
@@ -187,6 +218,27 @@ export interface SellerValidationContext {
   policy: PricingPolicy
   candidates: Id[]
   catalog: CatalogSnapshot[]
+  now: Ms
+  mode?: OfferVersion['mode']
+}
+
+export interface FinalOfferCandidate {
+  candidateId: Id
+  parentOffer: Ref
+  policy: Ref
+  serviceOptionId: Id | null
+  lines: OfferLine[]
+}
+
+export interface FinalOfferValidationContext {
+  jobId: Id
+  merchantId: Id
+  candidateId: Id
+  brief: SellerBrief
+  openingOffer: OfferVersion
+  openingCatalog: CatalogSnapshot[]
+  currentCatalog: CatalogSnapshot[]
+  policy: PricingPolicy
   now: Ms
   mode?: OfferVersion['mode']
 }

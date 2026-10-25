@@ -1,0 +1,5 @@
+[agent]
+address = "agent1q0w22k9rrkfe7xv7q8lg7la7m0nfas2uyrv8mu2qwcfe7puwyhmyklas80e"
+include = ""
+readme_path = "README.md"
+description = "Bounded seller-side catalog matching for BuyerUnion; Convex remains authoritative."

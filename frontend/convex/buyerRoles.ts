@@ -1,7 +1,9 @@
 import { buyerTiming } from "./buyer/timing.ts";
 import { snapshotCreaoConfig } from "./integrations/creaoBuyer.ts";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import type { FunctionReference } from "convex/server";
 import { contracts, type Contract } from "../src/contracts/index.ts";
 import { currentRun, versionFor, digest, emit, fail, canonical, type ReadCtx, type WriteCtx } from "./buyer/core.ts";
 import { buildSellerBrief } from "../src/backend/buyer/requests.ts";
@@ -9,6 +11,25 @@ import { councilPhases, publiclyEligible, publicOffer, factsFor, comparison, sou
 import type { Doc } from "./_generated/dataModel";
 
 const phaseValidator = v.union(v.literal("brief"), v.literal("advocacy"), v.literal("reply"), v.literal("adjudication"));
+type SellerJobPreparation = {
+  jobId: string;
+  requestId: string;
+  requestVersion: number;
+  runId: string;
+  phaseId: string;
+  merchantId: string;
+  candidateIds: string[];
+  policy: { id: string; version: number };
+  profileVersions: Record<string, number>;
+  role: "seller_initial" | "seller_response" | "seller_final" | "seller_advocacy" | "seller_reply";
+  provider: "fixture" | "fetch" | "creao";
+  providerConfigRevision: string;
+  inputDigest: string;
+  inputRef: string;
+  deadlineAt: number;
+};
+const prepareSellerJob = internal.sellerInternal.prepareSellerJob as unknown as FunctionReference<"mutation", "internal", SellerJobPreparation, unknown>;
+const attachSellerProviderInput = internal.sellerInternal.attachSellerProviderInput as unknown as FunctionReference<"mutation", "internal", { jobId: string; input: unknown }, unknown>;
 export async function councilFor(ctx: ReadCtx, runId: string) {
   return ctx.db.query("buyerCouncils").withIndex("by_run", q => q.eq("runId", runId)).unique();
 }
@@ -66,24 +87,54 @@ export const prepareCouncilJobs = internalMutation({
     const snapshot = contracts.CompetitionSnapshot.parse(council.snapshot);
     const role = ({ brief: "moderator_brief", advocacy: "seller_advocacy", reply: "seller_reply", adjudication: "moderator_adjudication" } as const)[phase];
     const challenges = contracts.AdmittedChallenge.array().parse(council.challenges);
-    const merchants: (string | null)[] = phase === "brief" ? [null] : phase === "adjudication" ? (challenges.length ? [null] : [])
+    const merchants: (string | null)[] = phase === "brief" ? [null] : phase === "adjudication" ? [null]
       : phase === "advocacy" ? [...new Set(snapshot.offers.map(o => o.merchantId))] : [...new Set(challenges.map(c => c.targetMerchantId))];
+    const sellerProvider = process.env.FETCH_SELLER_START_URL?.trim() ? "fetch" as const : "fixture" as const;
     const deadlineAt = Math.min((council.statuses as Contract<"BuyerRunView">["councilStatus"]).find(s => s.phase === phase)!.deadlineAt, Date.now() + (phase === "brief" || phase === "adjudication" ? buyerTiming.creaoMs : 30000));
     const ids: string[] = [];
     for (const merchantId of merchants) {
+      const sellerJobId = merchantId && role !== "moderator_brief" && role !== "moderator_adjudication"
+        ? "seller:" + runId + ":" + phase + ":" + merchantId
+        : null;
       const id = await ctx.db.insert("buyerJobs", { runId, requestId: run.requestId, version: run.version, phase: "council", role,
-        merchantId, candidateId: null, sellerJobId: null, state: "queued", input: null, inputDigest: "",
-        provider: merchantId ? "fixture" : run.config.agents === "live" ? "creao" : "fixture",
-        providerConfig: merchantId ? null : snapshotCreaoConfig(role),
+        merchantId, candidateId: null, sellerJobId, state: "queued", input: null, inputDigest: "",
+        provider: sellerJobId ? sellerProvider : merchantId ? "fixture" : run.config.agents === "live" ? "creao" : "fixture",
+        providerConfig: sellerJobId && sellerProvider === "fetch" ? { revision: run.config.revision + ":fetch-seller-v2" } : merchantId ? null : snapshotCreaoConfig(role),
         providerRunId: null, outputDigest: null, output: null, deadlineAt, createdAt: Date.now(), completedAt: null });
       const input = contracts.CouncilJobInput.parse({ schemaVersion: 2, jobId: String(id), councilId: String(council._id),
         request: snapshot.request, runId, snapshot: snapshot.snapshot, snapshotDigest: council.snapshotDigest,
         phase, deadlineAt, role, merchantId, competition: snapshot, facts: council.facts,
         ownOffers: snapshot.offers.filter(o => o.merchantId === merchantId).map(o => o.offer),
         comparisons: merchantId ? council.comparisons.filter((c: {merchantId:string}) => c.merchantId === merchantId) : council.comparisons,
-        challenges: phase === "reply" ? challenges.filter(c => c.targetMerchantId === merchantId) : phase === "adjudication" ? challenges : [],
+         challenges: phase === "reply" ? challenges.filter(c => c.targetMerchantId === merchantId).slice(0, 2) : phase === "adjudication" ? challenges : [],
         defenses: phase === "adjudication" ? council.defenses : [], replies: phase === "adjudication" ? council.replies : [] });
       await ctx.db.patch(id, { input, inputDigest: await digest(input) });
+      if (sellerJobId && merchantId) {
+        const merchant = await ctx.db.query("merchants").withIndex("by_merchantId", q => q.eq("merchantId", merchantId)).unique();
+        if (!merchant?.currentPolicyId) fail("STALE_VERSION", "Seller policy is unavailable for the council role.");
+        const ownOffers = input.ownOffers;
+        if (!ownOffers.length) fail("FORBIDDEN", "Seller council job has no owned offer.");
+        const sellerInput = contracts.CouncilJobInput.parse({ ...input, jobId: sellerJobId });
+        const sellerInputDigest = await digest(sellerInput);
+        await ctx.runMutation(prepareSellerJob, {
+          jobId: sellerJobId,
+          requestId: run.requestId,
+          requestVersion: run.version,
+          runId,
+          phaseId: phase,
+          merchantId,
+          candidateIds: [...new Set(snapshot.offers.filter(o => o.merchantId === merchantId).map(o => o.candidateId))],
+          policy: { id: merchant.currentPolicyId, version: merchant.currentPolicyVersion },
+          profileVersions: Object.fromEntries(input.competition.brief.lines.map(line => [line.profile.id, line.profile.version])),
+          role: role as "seller_advocacy" | "seller_reply",
+          provider: sellerProvider,
+          providerConfigRevision: sellerProvider === "fetch" ? run.config.revision + ":fetch-seller-v2" : run.config.revision,
+          inputDigest: sellerInputDigest,
+          inputRef: sellerJobId + ":input",
+          deadlineAt,
+        });
+        await ctx.runMutation(attachSellerProviderInput, { jobId: sellerJobId, input: sellerInput });
+      }
       ids.push(String(id));
     }
     await ctx.db.patch(council._id, { statuses: council.statuses.map((s: Contract<"BuyerRunView">["councilStatus"][number]) => s.phase === phase ? { ...s, expected: ids.length } : s) });

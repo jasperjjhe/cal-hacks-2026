@@ -12,8 +12,9 @@ The historical browser-only prototype is available explicitly at `/mock`.
 competitive snapshots, merchant peer challenges/grouped replies, checked public
 exchanges and one sealed final invitation for every eligible candidate. The
 buyer now implements those phases, canonical v2 envelopes and validation with
-fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md)
-for the exact seller boundary. Live seller work and service authority are pending.
+fixture sellers and the integrated configured Fetch dispatcher. See
+[the integrated audit](../docs/INTEGRATED_MVP_AUDIT.md) for verified behavior and
+remaining deployment, headphone-profile and service-option gaps.
 Products stay fixed in the proposed round; above-budget hard-valid offers may
 compete privately with respect to affordability, while only affordable offers
 are selectable. User-approved MVP waits allow 90 seconds per CREAO role and eight minutes overall;
@@ -94,8 +95,10 @@ Apify no longer requires deploying the custom Python Actor or selecting product 
 configure the maintained RAG Actor/build and use genuine catalog product identities.
 Optional `reddit` configuration enables dedicated comment search alongside editorial
 reviews; both use `APIFY_TOKEN`. See the linked setup guide for the XM5 example.
-Credentials and live execution are still unverified. Seller jobs remain fixtures
-until the seller branch is consolidated; live buyer runs report mixed agent mode.
+Configured Fetch seller jobs now use the seller dispatcher; without gateway
+configuration the flow explicitly falls back to fixture sellers. Combined live
+execution remains unverified. See `../docs/SELLER_FETCH_CONFIGURATION.md`.
+
 Stripe test checkout is available; see the setup below. Simulation still needs no payment keys.
 
 Operator accounts are provisioned only through the internal

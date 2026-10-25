@@ -1,6 +1,6 @@
 import type { Id, Ms } from '../lib/sellerContracts.ts'
 
-export type AgentRole = 'seller_initial' | 'seller_response' | 'seller_final'
+export type AgentRole = 'seller_initial' | 'seller_response' | 'seller_final' | 'seller_advocacy' | 'seller_reply'
 export type AgentProvider = 'fixture' | 'fetch' | 'creao'
 
 export interface AgentJob {

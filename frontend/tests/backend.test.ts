@@ -2,6 +2,8 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { convexTest } from "convex-test";
 import workflow from "@convex-dev/workflow/test";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import schema from "../convex/schema";
 import * as buyerTools from "../convex/integrations/buyerTools";
 import { contracts } from "../src/contracts";
@@ -64,14 +66,14 @@ async function confirmed(context?: Awaited<ReturnType<typeof setup>>, noRequirem
   });
   return { t, buyer, draft, ref };
 }
-async function resultRun(context?: Awaited<ReturnType<typeof setup>>) {
+async function resultRun(context?: Awaited<ReturnType<typeof setup>>, tickMs = 100) {
   const state = await confirmed(context);
   await state.buyer.mutation(internal.buyerMutations.startRun, {
     input: { request: state.ref, clientKey: "start" },
   });
   for (let i = 0; i < 150; i++) {
     await state.t.finishInProgressScheduledFunctions();
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(tickMs);
     const view = await state.buyer.query(api.buyer.getBuyerRun, {
       requestId: state.ref.id,
     });
@@ -1507,4 +1509,48 @@ test("operator provisioning verifies an existing account before granting access"
   const verified = await t.action(internal.buyerAdmin.provisionOperator, { merchantId: "merchant_a", email, password });
   expect(verified.userId).toBe(account.userId);
   expect(await t.run(ctx => ctx.db.query("operatorAccounts").collect())).toHaveLength(1);
+});
+
+test("configured Fetch worker runs through council and a persisted simulated purchase", async () => {
+  for (const [key, value] of Object.entries({
+    START_URL: 'https://seller-test.example/seller/jobs',
+    POLL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/poll',
+    RECONCILE_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/reconcile',
+    CANCEL_URL_TEMPLATE: 'https://seller-test.example/seller/jobs/cancel',
+    ALLOWED_HOSTS: 'seller-test.example', REQUEST_TIMEOUT_MS: '8000',
+    CONFIG_REVISION: 'local-worker-e2e', AGENT_TOKEN: 'local-test-token'
+  })) vi.stubEnv(`FETCH_SELLER_${key}`, value);
+  const pending = new Map<string, unknown>();
+  const roles = new Set<string>();
+  const workerDir = fileURLToPath(new URL('../../agents/fetch-seller/', import.meta.url));
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    expect(new URL(String(url)).hostname).toBe('seller-test.example');
+    const body = JSON.parse(String(options?.body));
+    if (String(url).endsWith('/jobs')) {
+      roles.add(body.role);
+      const output = JSON.parse(execFileSync('python3', ['-c',
+        'import sys,json;sys.path.insert(0,sys.argv[1]);from seller_logic import build_decision;r=json.load(sys.stdin);print(json.dumps(build_decision(r["input"],r["role"])))', workerDir
+      ], { input: JSON.stringify(body), encoding: 'utf8' }));
+      pending.set(body.jobId, output);
+      return new Response(JSON.stringify({ status: 'pending', providerRunId: body.jobId }));
+    }
+    return new Response(JSON.stringify({ status: 'completed', providerRunId: body.jobId, output: pending.get(body.jobId), model: 'local-python-policy-worker' }));
+  }));
+  try {
+    const state = await resultRun(undefined, 1000);
+    expect(state.view.stage).toBe('results');
+    expect(state.view.offers.length).toBeGreaterThan(0);
+    expect(roles.has('seller_initial')).toBe(true);
+    expect(roles.has('seller_advocacy')).toBe(true);
+    expect(roles.has('seller_final')).toBe(true);
+    const quote = await reserve(state);
+    const approval = await approveQuote(state, quote);
+    const repeated = await approveQuote(state, quote);
+    expect(repeated.executionId).toBe(approval.executionId);
+    await state.t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(1);
+    await state.t.finishInProgressScheduledFunctions();
+    expect((await state.buyer.query(api.buyer.getPurchase, { requestId: state.ref.id })).execution?.status).toBe('succeeded');
+    expect(await state.buyer.query(api.buyer.listOrders, {})).toHaveLength(1);
+  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
 });
