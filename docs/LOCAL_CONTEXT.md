@@ -41,6 +41,11 @@ use the product's private secret-entry mechanism or a protected local shell.
 
 - The current work is seller-side only. The buyer side is being developed on
   `origin/geoff/buyer` and will integrate later.
+- The hackathon demo will use pre-provisioned merchant accounts and does not
+  require a signup/onboarding flow. Keep Convex authentication and membership
+  guards in the backend, but do not make production Auth wiring or signup a
+  demo blocker. Use the explicit fixture/demo path or a controlled
+  pre-authenticated development session when live Convex data is useful.
 - Final UI design is being produced separately in Figma by the design team.
   The checked-in React operator screen is a fixture/integration harness, not
   the final visual implementation. Future Figma-derived UI must consume the
@@ -136,10 +141,11 @@ use the product's private secret-entry mechanism or a protected local shell.
 - `frontend/convex/integrations/` contains the provider-neutral port, fixture
   provider, Fetch adapter, CREAO adapter, HTTPS host allowlists, bounded
   timeouts, idempotency keys, and provider-run provenance.
-- v5.3 seller council participation is specified but not implemented. The
-  seller branch must consume the buyer-owned canonical v2 council envelopes
-  for the immutable public snapshot, advocacy/challenge, grouped reply,
-  checked-outcome references and sealed final invitation. It must not create a
+- v5.3 seller council participation is specified but not yet enabled on this
+  seller branch. The buyer branch now publishes the canonical v2 council
+  envelopes for the immutable public snapshot, advocacy/challenge, grouped
+  reply, checked-outcome references and sealed final invitation. The seller
+  branch must derive its worker/parser from that source and must not create a
   second TypeScript/Python council schema.
 
 ### Fetch seller agent
@@ -204,16 +210,18 @@ When integrating `origin/geoff/buyer`:
 6. Generated Convex bindings are regenerated once after the unified schema is
    merged; `_generated` files must not be hand-written or duplicated.
 
-For v5.3, B first publishes the canonical schema/fixtures and coordinates the
-snapshot, checked council phases, invitation records and sealed promotion. S
-then migrates seller parsing/fixtures and validates seller authorship, frozen
-basket, policy authority and economics. No new seller role is enabled against
-the current baseline buyer contract.
+For v5.3, B has now published the canonical schema/fixtures and coordinates
+the snapshot, checked council phases, invitation records and sealed promotion
+on `origin/geoff/buyer` at `53e49dc`. S must now migrate seller
+parsing/fixtures and validate seller authorship, frozen basket, policy
+authority and economics before enabling new seller roles. The buyer branch's
+seller execution remains fixture-backed until this seller migration and live
+Fetch integration are complete.
 
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
 must not also be started by that generic buyer dispatcher. At fetched ref
-`64884dc`, it also uses fixture seller dispatch, passes unsupported
+`53e49dc`, it still uses fixture seller dispatch, passes unsupported
 `deferPromotion` to seller validation, and drops seller provider lifecycle and
 final-service fields from shared files. The exact drift is recorded in
 `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
@@ -333,8 +341,10 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
-- Latest compatibility audit: buyer ref `64884dc`; v2 council envelopes are
-  still absent and shared-file drift is recorded in
+- Latest compatibility audit: buyer ref `53e49dc`; the buyer branch now
+  publishes the canonical v2 council contracts and fixture-backed council
+  integration. Seller worker migration, shared schema reconciliation and live
+  Fetch wiring remain pending; drift is recorded in
   `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
@@ -371,9 +381,10 @@ specific proof criteria.
 
 Status at this context update: **seller runtime baseline, seller-owned v5.3
 final validation core, and a fixture-safe seller operator surface implemented;
-canonical council contract migration, authenticated frontend Convex wiring,
-sealed Convex final-invitation persistence, hosted deployment, live route
-verification and buyer integration pending.**
+canonical council contract migration, optional live Convex UI wiring, sealed
+Convex final-invitation persistence, hosted deployment, live route
+verification and buyer integration pending. Signup/onboarding is intentionally
+out of demo scope.**
 
 Completed:
 
@@ -396,7 +407,8 @@ Completed:
   private nonnegative incremental bundle costs; `resolveFinalServiceTerms`
   rejects unapproved IDs and provides baseline terms for `null`; accepted
   offer versions record `serviceOptionId`. The v1 provider wire contract is
-  intentionally unchanged until the buyer-owned canonical v2 envelopes land.
+  intentionally unchanged until the seller migrates to the buyer-owned
+  canonical v2 envelopes and the shared Convex seams are reconciled.
 - `validateFinalOfferRevision` is implemented as a pure seller-owned seam. It
   rechecks accepted opening status, candidate/parent/policy scope, frozen
   listing identity/economics, current brief fit, quantity/stock, price floors,
@@ -414,6 +426,11 @@ Completed:
   guardrails, authorized service options, merchant pause/resume, activity and
   agent-readiness status. It is explicitly labeled fixture preview and does
   not pretend to be authenticated Convex data.
+- The latest buyer compatibility reference is `origin/geoff/buyer` at
+  `53e49dc`; it now contains the canonical v2 council contracts and a
+  fixture-backed council path. This seller branch still has the legacy v1
+  provider boundary and must migrate from the buyer-owned source before
+  enabling v5.3 roles.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -440,11 +457,12 @@ Pending:
 - Add the Convex sealed-invitation/final-version persistence and buyer-owned
   atomic promotion around the existing pure parent-bound frozen-basket,
   monotonic-total/term and bundle-contribution checks.
-- Configure a frontend Auth provider and `ConvexProviderWithAuth`, then replace
-  the fixture source in the operator surface with authenticated
+- Keep the fixture operator path as the primary short-demo path using
+  pre-provisioned merchant data. If live Convex data materially improves the
+  demo, add only a controlled pre-authenticated development session and wire
   `seller.getMerchantView`, `updateOwnListing`, `publishOwnPolicy` and
-  `pauseOwnMerchant` calls. Keep the fixture preview for deterministic demo
-  and test mode; add operator integration tests without exposing private
+  `pauseOwnMerchant`; do not build signup/onboarding or add an unauthenticated
+  production bypass. Add operator integration tests without exposing private
   economics.
 - When the designer-owned Figma implementation is ready, replace or restyle
   the fixture presentation through a thin UI adapter. Preserve the existing
@@ -458,13 +476,15 @@ Pending:
 
 ## Immediate next steps
 
-1. Review the buyer-owned canonical v5.3 contract revision and agree the
-   generated schema/fixtures before enabling new seller roles.
+1. Review the published buyer-owned v5.3 contract and generated worker schema
+   at `origin/geoff/buyer` `53e49dc`; reconcile shared schemas and fixtures
+   before enabling new seller roles.
 2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
    snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the
    change dependency-free and test deterministic privacy/parent-scope gates.
-3. Once the buyer-owned v2 envelope lands, derive its parser and fixtures and
-   route the seller-owned fields through the existing final validator:
+3. Derive the seller parser and fixtures from the now-published buyer-owned v2
+   envelopes and route the seller-owned fields through the existing final
+   validator:
    parent candidate, frozen goods/configuration/condition/quantity, policy
    option authority, incremental contribution, no weaker terms and no higher
    delivered total. Then add golden fixtures and sealed Convex persistence
@@ -481,10 +501,9 @@ Pending:
    replay with same digest, replay with changed digest, pending-to-completed
    polling, ambiguous-start reconciliation, cancellation, malformed output,
    timeout, auth rejection, and one v5.3 council-role run after migration.
-8. Configure frontend Auth/`ConvexProviderWithAuth`, wire the already
-   authenticated seller operator query/mutations, and add integration tests
-   for merchant isolation, immutable versions and pause/resume. Keep the
-   current fixture preview labeled as fixture-only.
+8. Keep the fixture operator path as the short-demo default. Only if live
+   Convex data is needed, use a pre-authenticated development session and add
+   merchant-isolation/version/pause tests; signup is out of scope.
 9. Integrate the designer-owned Figma UI through the typed seller view-model
    adapter after its screen/components are ready; do not make the backend
    depend on visual component details.

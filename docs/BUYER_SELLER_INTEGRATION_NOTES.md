@@ -4,19 +4,23 @@ This note records the boundary observed while cross-referencing `origin/geoff/bu
 
 ## Latest compatibility audit
 
-The latest fetched buyer reference is `origin/geoff/buyer` at `64884dc`
-(`feat: add buyer provider adapters and specify council v5.3`). It is tracked
-as a compatibility reference, not a merge target to apply wholesale. The
-branch still has the v1 `SellerProposal`/`SellerDecision` contracts and legacy
-`ChallengePlan`, `PriceRound` and `FinalSubmission` shapes; it does not yet
-publish the canonical v2 council envelopes required by the active spec.
+The latest fetched buyer reference is `origin/geoff/buyer` at `53e49dc`
+(`feat: implement buyer council v2 with fixture seller integration`). It is
+tracked as a compatibility reference, not a merge target to apply wholesale.
+The branch now publishes the canonical v2 council source in
+`frontend/src/contracts/index.ts`, the generated seller worker schema in
+`frontend/convex/lib/seller.schema.json`, persisted council/invitation records,
+and fixture-backed role execution. The seller branch still uses its legacy v1
+provider boundary and has not enabled the new roles.
 
 The current shared-file drift is material:
 
-- `frontend/convex/buyerJobs.ts` currently runs seller fixture work directly
-  and calls `internal.sellerInternal.validateAndStoreProposal` with
-  `deferPromotion`; the seller branch's validated internal seam does not yet
-  accept that argument. This call must be resolved before integration.
+- The buyer branch now runs fixture-backed `seller_advocacy`, `seller_reply`
+  and final roles directly in `buyerJobs.ts` and calls
+  `internal.sellerInternal.validateAndStoreProposal` with `deferPromotion`.
+  The seller branch's validated internal seam does not yet accept that
+  argument. Replace the fixture invocation with the consolidated seller
+  dispatcher and reconcile the promotion boundary before integration.
 - The buyer branch removes `sellerAgent.ts`, `sellerJobInputs`, provider
   lifecycle metadata and the `starting`/`polling`/`ambiguous` states. A direct
   schema merge would remove Fetch dispatch, polling, reconciliation and
@@ -31,9 +35,11 @@ The current shared-file drift is material:
   seller authorization and generated API; do not overwrite seller ownership
   or hand-edit generated bindings.
 
-Until the buyer branch publishes v2 contracts and these seam differences are
-resolved, the seller branch must keep its v1 Fetch worker and must not enable
-new council role names.
+Until these seam differences are resolved, the seller branch must keep its v1
+Fetch worker and must not enable new council role names against the current
+seller wire contract. The seller migration must derive TypeScript/Python
+parsing and fixtures from the buyer-owned canonical source, not copy the
+fixture implementation or create a parallel council schema.
 
 The active Markdown specification remains normative while the buyer developer
 continues implementation. If `origin/geoff/buyer` lags, contradicts or omits
@@ -56,11 +62,11 @@ sealed final invitation per still-eligible candidate -> independent research.
 The buyer workflow remains the sole coordinator and the seller branch remains
 the sole owner of seller-scoped catalog, policy and final-decision validation.
 
-The buyer-owned canonical contract source must add the v5.3 schema-versioned
-envelopes before either worker enables the new roles. Request schemas remain
-version 1; council envelopes use version 2. The seller branch must derive its
-Python parsing, fixtures and provider input from that source rather than adding
-a second handwritten interpretation.
+The buyer-owned canonical contract source now provides the v5.3
+schema-versioned envelopes. Request schemas remain version 1; council
+envelopes use version 2. The seller branch must derive its Python parsing,
+fixtures and provider input from that source rather than adding a second
+handwritten interpretation.
 
 Seller jobs may receive the immutable `CompetitionSnapshot`, checked public
 comparative points/outcomes, the seller's own frozen candidates and private
