@@ -41,6 +41,10 @@ use the product's private secret-entry mechanism or a protected local shell.
 
 - The current work is seller-side only. The buyer side is being developed on
   `origin/geoff/buyer` and will integrate later.
+- `origin/geoff/buyer` is an active compatibility reference. Fetch it and
+  compare shared contracts, Convex seams and generated bindings before each
+  integration-sensitive seller change; do not blindly merge or copy its buyer
+  workflow/provider implementation.
 - Seller work owns merchant catalog, policy, inventory, seller jobs, seller
   proposals, seller validation, and the provider seam. Buyer work owns buyer
   requests, raw buyer messages, private budgets, council/workflow state,
@@ -193,7 +197,11 @@ the current baseline buyer contract.
 
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
-must not also be started by that generic buyer dispatcher.
+must not also be started by that generic buyer dispatcher. At fetched ref
+`64884dc`, it also uses fixture seller dispatch, passes unsupported
+`deferPromotion` to seller validation, and drops seller provider lifecycle and
+final-service fields from shared files. The exact drift is recorded in
+`docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 
 ## Sponsor strategy and evidence status
 
@@ -309,6 +317,9 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
+- Latest compatibility audit: buyer ref `64884dc`; v2 council envelopes are
+  still absent and shared-file drift is recorded in
+  `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
   conversation resolution, no force pushes/deletions, and **zero required

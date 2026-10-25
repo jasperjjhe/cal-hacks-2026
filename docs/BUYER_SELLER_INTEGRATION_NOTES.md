@@ -2,6 +2,39 @@
 
 This note records the boundary observed while cross-referencing `origin/geoff/buyer` with the seller branch. It is a merge aid, not a second product specification; `BUYERUNION_IMPLEMENTATION.md` remains authoritative.
 
+## Latest compatibility audit
+
+The latest fetched buyer reference is `origin/geoff/buyer` at `64884dc`
+(`feat: add buyer provider adapters and specify council v5.3`). It is tracked
+as a compatibility reference, not a merge target to apply wholesale. The
+branch still has the v1 `SellerProposal`/`SellerDecision` contracts and legacy
+`ChallengePlan`, `PriceRound` and `FinalSubmission` shapes; it does not yet
+publish the canonical v2 council envelopes required by the active spec.
+
+The current shared-file drift is material:
+
+- `frontend/convex/buyerJobs.ts` currently runs seller fixture work directly
+  and calls `internal.sellerInternal.validateAndStoreProposal` with
+  `deferPromotion`; the seller branch's validated internal seam does not yet
+  accept that argument. This call must be resolved before integration.
+- The buyer branch removes `sellerAgent.ts`, `sellerJobInputs`, provider
+  lifecycle metadata and the `starting`/`polling`/`ambiguous` states. A direct
+  schema merge would remove Fetch dispatch, polling, reconciliation and
+  failure recovery. Preserve the seller provider path and reconcile the buyer
+  workflow to it instead.
+- Its `policyVersions` and `offerVersions` projections omit the seller
+  branch's `finalServiceOptions` and `serviceOptionId`. Those fields must
+  survive the unified schema; old policies remain valid with an empty option
+  list.
+- The buyer branch changes seller functions to generic Convex APIs and adds
+  auth/operator binding. Those changes need a deliberate merge with the
+  seller authorization and generated API; do not overwrite seller ownership
+  or hand-edit generated bindings.
+
+Until the buyer branch publishes v2 contracts and these seam differences are
+resolved, the seller branch must keep its v1 Fetch worker and must not enable
+new council role names.
+
 ## Required handoff
 
 The buyer workflow owns the request, run, phase and provider-call budget. For each participating merchant it must build an allowlisted `SellerBrief`, prepare one seller job, attach the brief if preparation and input storage are separate, and invoke one internal seller action. The seller action returns status/provenance; the buyer workflow decides when to continue the phase or create the one permitted repair.
