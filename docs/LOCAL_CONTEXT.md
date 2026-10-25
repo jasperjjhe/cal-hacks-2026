@@ -134,6 +134,13 @@ use the product's private secret-entry mechanism or a protected local shell.
 - The agent source is implemented and tested locally, but no real Agentverse
   URL, agent address, secret, or live provider run has been configured or
   claimed yet.
+- Transport caveat: official Agentverse hosting documentation exposes hosted
+  agent identity/control metadata and message-envelope submission, while the
+  uAgents custom REST documentation demonstrates direct routes on the running
+  agent. A hosted-agent address/control-plane URL must not be assumed to proxy
+  arbitrary custom REST routes. Verify that explicitly; otherwise run the same
+  agent on the team's public Mana HTTPS endpoint (optionally with mailbox
+  registration) and point Convex at that exact endpoint.
 
 ### Buyer-side boundary
 
@@ -281,6 +288,9 @@ specific proof criteria.
 - Fetch Agentverse URL, Agent Secret, Convex Fetch environment variables,
   production Convex/Auth, Mana runtime, CREAO project/agent, Visa operation,
   and buyer-side live proof remain external handoffs.
+- The Fetch transport decision is pending direct-route verification: Hosted
+  Agent direct REST if the dashboard exposes it; otherwise Mana/public HTTPS
+  runtime plus Agentverse mailbox/discovery.
 
 ## Current implementation status
 
@@ -309,7 +319,9 @@ Completed:
 Pending:
 
 - Create and start the Agentverse Hosted Agent; set its private shared secret;
-  obtain the exact HTTPS host and agent identity.
+  obtain the agent identity and verify whether it exposes direct HTTPS custom
+  REST routes. If not, deploy the same source on Mana/public HTTPS with
+  mailbox registration.
 - Configure Convex `FETCH_SELLER_*` variables in the target deployment without
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the

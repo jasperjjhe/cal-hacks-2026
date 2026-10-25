@@ -11,6 +11,15 @@ Create a Hosted Agent in Agentverse and copy the files in this directory into
 the hosted code editor. Hosted Agents reset process globals between invocations,
 so this implementation stores job state with `ctx.storage`.
 
+Agentverse hosting and direct REST reachability are separate checks. The
+Agentverse control-plane address is not automatically a substitute for the
+`FETCH_SELLER_*_URL` values. Confirm that the dashboard exposes a public HTTPS
+base URL for these custom REST routes before configuring Convex. If it does
+not, run the same source on the team's public Mana endpoint, set
+`FETCH_SELLER_AGENT_ENDPOINT` and `FETCH_SELLER_AGENT_MAILBOX=true`, and use
+that exact HTTPS host for Convex while Agentverse provides discovery/mailbox
+connectivity.
+
 Configure `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret. The value must be a
 long random token shared only with the Convex deployment's
 `FETCH_SELLER_AGENT_TOKEN` environment variable. The agent fails closed if the

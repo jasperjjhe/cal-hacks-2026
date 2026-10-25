@@ -179,6 +179,10 @@ if port:
 endpoint = os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip()
 if endpoint:
     agent_kwargs["endpoint"] = [endpoint]
+if os.getenv("FETCH_SELLER_AGENT_MAILBOX", "").strip().lower() == "true":
+    # Useful for a local/Mana deployment that should also register with
+    # Agentverse. Hosted Agentverse runs do not need this flag.
+    agent_kwargs["mailbox"] = True
 
 agent = Agent(**agent_kwargs)
 
