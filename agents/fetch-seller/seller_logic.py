@@ -637,11 +637,13 @@ def build_decision(value: Any, role: Optional[str] = None) -> Dict[str, Any]:
         return _build_reply(value)
     if role == "seller_final":
         return _build_final(value)
-    if role is not None:
+    if role not in (None, "seller_initial", "seller_response"):
         raise SellerInputError("unsupported seller role")
 
     root = validate_provider_input(value)
     job = root["job"]
+    if role is not None and job["role"] != role:
+        raise SellerInputError("seller role does not match the input")
     job_id = job["jobId"]
     policy = root["policy"]
     if policy is None:
@@ -686,4 +688,3 @@ def build_decision(value: Any, role: Optional[str] = None) -> Dict[str, Any]:
             "privatePriceRationale": "Submitted the public reference price; Convex recomputes the merchant floor and delivered total.",
         },
     }
-

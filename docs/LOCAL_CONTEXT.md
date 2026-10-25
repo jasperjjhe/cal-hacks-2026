@@ -7,8 +7,8 @@ deployment state, sponsor claim, or next step changes. It is a project context
 record, not a substitute for the authoritative implementation specification.
 
 Last reviewed: 2026-10-25
-Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
-Current branch: `feature/seller-side`  
+Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`
+Current branch: `feature/seller-side`
 Current implementation checkpoint: the current buyer tip `9f150fa` is
 reconciled locally (its resolved tree includes `df26d70` and the agreed
 `origin/dev` documentation merge). The seller v2 migration, unified schema,
@@ -542,4 +542,3 @@ Use these distinctions explicitly:
 - **Blocked:** only when the same external condition has prevented meaningful
   progress for three consecutive turns; otherwise call it pending or an
   external handoff.
-

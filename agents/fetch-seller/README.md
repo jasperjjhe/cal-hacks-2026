@@ -148,4 +148,3 @@ The Fetch sponsor claim remains pending until the team records an actual
 Agentverse URL, non-secret provider run ID, pending-to-terminal transition,
 accepted proposal, and malformed/timeout recovery in
 `docs/SELLER_SPONSOR_PROOF.md`.
-

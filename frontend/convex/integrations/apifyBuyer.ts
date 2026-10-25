@@ -6,7 +6,15 @@ import type { EvidenceInput, EvidenceResult } from './buyerTools.ts';
 const id = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
 export const RAG_ACTOR_ID = '3ox4R101TgZz67sLr';
 const domain = z.string().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/);
+export const REDDIT_ACTOR_ID = '9sHOY9RzPYGjmTHo8';
+export const redditConfig = z.object({
+  actorId: z.literal(REDDIT_ACTOR_ID).default(REDDIT_ACTOR_ID),
+  build: id,
+  buildNumber: z.string().regex(/^\d+\.\d+\.\d+$/),
+  community: z.string().regex(/^[A-Za-z0-9_]{1,50}$/).optional(),
+});
 export const evidenceRegistry = z.object({
+  reddit: redditConfig.optional(),
   actorId: z.literal(RAG_ACTOR_ID).default(RAG_ACTOR_ID),
   build: id,
   buildNumber: z.string().regex(/^\d+\.\d+\.\d+$/),
@@ -14,6 +22,7 @@ export const evidenceRegistry = z.object({
     'rtings.com', 'soundguys.com', 'whathifi.com', 'techradar.com',
     'tomsguide.com', 'arstechnica.com', 'reddit.com',
     'headphonesty.com', 'headphonesaddict.com', 'hifioasis.com',
+    'soundphilereview.com', 'techgearlab.com',
   ]),
 });
 export function reviewQuery(productName: string) {

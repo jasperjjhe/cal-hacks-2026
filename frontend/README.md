@@ -12,8 +12,9 @@ The historical browser-only prototype is available explicitly at `/mock`.
 competitive snapshots, merchant peer challenges/grouped replies, checked public
 exchanges and one sealed final invitation for every eligible candidate. The
 buyer now implements those phases, canonical v2 envelopes and validation with
-fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md)
-for the exact seller boundary. Live seller work and service authority are pending.
+fixture sellers and the integrated configured Fetch dispatcher. See
+[the integrated audit](../docs/INTEGRATED_MVP_AUDIT.md) for verified behavior and
+remaining deployment, headphone-profile and service-option gaps.
 Products stay fixed in the proposed round; above-budget hard-valid offers may
 compete privately with respect to affordability, while only affordable offers
 are selectable. User-approved MVP waits allow 90 seconds per CREAO role and eight minutes overall;
@@ -90,11 +91,12 @@ with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRA
 for agent creation, automatic Apify RAG review discovery, backend variables and live acceptance.
 Apify no longer requires deploying the custom Python Actor or selecting product URLs;
 configure the maintained RAG Actor/build and use genuine catalog product identities.
-Credentials and live execution are still unverified. On the standalone buyer
-branch seller jobs remain fixtures; this merged seller checkout routes
-configured Fetch seller jobs through the single seller dispatcher and keeps an
-explicit fixture fallback for CI/demo. Live buyer runs still report mixed
-agent mode until provider credentials and gateway deployment are configured.
+Optional `reddit` configuration enables dedicated comment search alongside editorial
+reviews; both use `APIFY_TOKEN`. See the linked setup guide for the XM5 example.
+Configured Fetch seller jobs now use the seller dispatcher; without gateway
+configuration the flow explicitly falls back to fixture sellers. Combined live
+execution remains unverified. See `../docs/SELLER_FETCH_CONFIGURATION.md`.
+
 External payment is deferred; fixture agents and simulated checkout need no keys.
 
 Operator accounts are provisioned only through the internal

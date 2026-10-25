@@ -206,6 +206,12 @@ def final_input():
 
 
 class SellerLogicTests(unittest.TestCase):
+    def test_agent_dispatch_accepts_explicit_opening_role(self):
+        value = sample_input()
+        self.assertEqual(build_decision(value, "seller_initial"), build_decision(value))
+        with self.assertRaises(SellerInputError):
+            build_decision(value, "seller_response")
+
     def test_selects_hard_requirement_match_and_public_reference_price(self):
         decision = build_decision(sample_input())
         self.assertEqual(decision["kind"], "propose")
@@ -274,4 +280,3 @@ class SellerLogicTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

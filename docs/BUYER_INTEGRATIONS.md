@@ -115,11 +115,17 @@ The existing evidence-summary agent receives these cited excerpts.
 {
   "actorId": "3ox4R101TgZz67sLr",
   "build": "uhqoj67lF26kOBcwj",
-  "buildNumber": "1.0.33"
+  "buildNumber": "1.0.33",
+  "reddit": {
+    "actorId": "9sHOY9RzPYGjmTHo8",
+    "build": "CRe97GdwtyWSg49fB",
+    "buildNumber": "0.0.750",
+    "community": "SonyHeadphones"
+  }
 }
 ```
 
-This build pair came from the public Actor's `version-1` build metadata on
+The RAG build pair came from the public Actor's `version-1` build metadata on
 2026-10-25. The adapter pins the numeric version and checks the returned build ID.
 If the provider removes this version, choose another numeric build and update both
 values together from Apify's build details, then test one run.
@@ -139,11 +145,41 @@ values together from Apify's build details, then test one run.
 
 Optional `domains` overrides the built-in list: `rtings.com`, `soundguys.com`,
 `whathifi.com`, `techradar.com`, `tomsguide.com`, `arstechnica.com`, `reddit.com`, `headphonesty.com`,
-`headphonesaddict.com`, `hifioasis.com`.
+`headphonesaddict.com`, `hifioasis.com`, `soundphilereview.com`, `techgearlab.com`.
 These are source-selection rules, not per-product link maintenance. Restrict overrides
 to editorial publications and owner communities: the current source classifier
 labels non-Reddit/non-Ars-forum pages as independent tests. Manufacturer/store pages
 need a separate classification change before inclusion.
+
+### Dedicated Reddit comments (optional, enabled by the example above)
+
+`reddit` starts a separate `harshmaur/reddit-scraper` job alongside editorial
+research, using the same backend `APIFY_TOKEN`. No Reddit login/key is required.
+The Actor searches comments by product brand/model; you do not select thread URLs.
+The example restricts search to `SonyHeadphones` for the XM5 demo. Omit `community`
+for a broader search when using other product categories, or set another community.
+Omit the entire `reddit` object to keep the editorial-only flow.
+
+Pinned build metadata was read on 2026-10-25. The dedicated Actor starts with
+256 MB, a 45-second timeout, up to 12 searched comments, no post/thread expansion,
+no paid AI analysis, and a $0.20 per-run maximum-charge parameter. Provider billing
+and account quotas still apply; bounded result counts and time are separate limits.
+No extra paid sentiment/model provider is introduced: the existing CREAO summary
+receives both editorial excerpts and owner comments with their citations.
+
+Accept only fresh retrieved public Reddit comment permalinks, model-relevant text,
+at least 80 characters, and the configured community if any. Drop removed/deleted,
+duplicate and malformed comments. Store comment body/date/link/run/build, not user
+names or profiles. All comments remain unverified `owner_report` family evidence;
+neither ownership nor a population-wide failure rate is established. Other products
+mentioned in a comparison can still confuse automatic relevance: summaries must
+remain conservative and attributed. Web/Reddit cache and build identities are kept
+separate. A failed/empty provider preserves the other's evidence as partial.
+
+The two providers share the existing research deadline and 40-tool-call ceiling.
+There are at most ten jobs for five product identities; adding Reddit may exhaust
+the shared tool budget sooner for multi-product runs. A missing optional source
+never fabricates evidence or invalidates an otherwise valid demo offer.
 
 ### Recorded live check (2026-10-25)
 
@@ -156,6 +192,26 @@ Headphonesty). The other domains and a WF-1000XM5 earbuds review were excluded.
 This establishes live discovery/retrieval and parser compatibility, not a deployed
 Convex buyer journey, unbiased consensus, or successful Reddit extraction. Earlier
 raw-HTML Reddit results were blocked/empty; browser mode timed out at 60 seconds.
+The dedicated Reddit run `WPIcvZbi8o8fzeL83` (dataset
+`PFT8QEQXTNb1zmOJ1`, build `0.0.750`) then returned 12 comments in 4.79 seconds
+using the XM5 community search. The local parser retained 11 comments from 11
+threads (one short comment discarded). Comments include ANC experiences, EQ discussion,
+and hinge/headband complaints. These are anecdotes, not measured reliability rates.
+
+A fresh editorial run `dejwZpTLQPd2cbKOW` (dataset `jL7fSQzuwY531QbcI`)
+completed in 17.707 seconds. Its real output passed through the local adapter as
+six excerpts from Soundphile Review and TechGearLab; retail, YouTube and empty
+Reddit pages were excluded. Combined with the dedicated Reddit test, the current
+parsers produced six editorial excerpts plus eleven cited owner comments. These
+were separate live Actor runs followed by local response-shape checks, not a
+live deployed Convex/CREAO end-to-end test.
+
+Example useful, attributed findings: TechGearLab praises ANC while noting fit
+limitations; Soundphile Review raises comfort/bass concerns; Reddit commenters
+report both useful ANC in noisy environments and hinge/headband problems. These
+support a buyer-facing pros/concerns summary, not a verified failure percentage or
+a promise of comfort for every buyer. The live CREAO summary itself remains to be
+verified in the deployed buyer journey.
 
 ### Bounds and limitations
 
@@ -169,9 +225,9 @@ products may exceed the account memory quota; check the account's limits.
 
 A general web browser cannot guarantee Reddit comments, paywalled articles or
 JavaScript-heavy content. Missing/blocked pages are discarded. Discovery may return
-no acceptable sources even when the Actor itself succeeds. Merchant reputation
-research and specialized Reddit comment extraction are not implemented in this
-product-variant research path. No real purchase or full live buyer journey is
+no acceptable sources even when the Actor itself succeeds. Merchant reputation research remains deferred. Dedicated Reddit comment search
+is implemented through the optional configuration above; scraping every reply in
+a full thread is intentionally outside this bounded demo flow. No real purchase or full live buyer journey is
 established by an Actor-only test.
 
 ## Verification and activation gate
