@@ -364,7 +364,7 @@ def _validate_line(value: Any, label: str) -> None:
     bounded_id(line["lineId"], f"{label}.lineId")
     if line["role"] not in ("primary", "related"):
         raise SellerInputError(f"{label}.role is invalid")
-    if line["category"] not in ("laptop", "tech_accessory", "clothing", "household_accessory", "small_appliance"):
+    if line["category"] not in ("laptop", "tech_accessory", "clothing", "household_accessory", "small_appliance", "headphones"):
         raise SellerInputError(f"{label}.category is invalid")
     _ref(line["profile"], f"{label}.profile")
     quantity = _safe_integer(line["quantity"], f"{label}.quantity", 1)
@@ -407,7 +407,7 @@ def _validate_snapshot(value: Any, label: str) -> None:
     bounded_id(variant["id"], f"{label}.variant.id")
     bounded_id(variant["productId"], f"{label}.variant.productId")
     _bounded_text(variant["title"], f"{label}.variant.title", 500)
-    if variant["category"] not in ("laptop", "tech_accessory", "clothing", "household_accessory", "small_appliance"):
+    if variant["category"] not in ("laptop", "tech_accessory", "clothing", "household_accessory", "small_appliance", "headphones"):
         raise SellerInputError(f"{label}.variant.category is invalid")
     _ref(variant["profile"], f"{label}.variant.profile")
     if variant["manufacturerPartNumber"] is not None:

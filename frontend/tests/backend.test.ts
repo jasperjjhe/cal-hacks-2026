@@ -728,6 +728,63 @@ test("all non-tech categories and a related-item basket complete through the act
     expect(stage).toBe("results");
   }
 });
+test("fixture demo: three merchants bid on black ANC headphones through the full council to a persisted order", async () => {
+  const { t, buyer } = await setup();
+  const draft = await buyer.mutation(internal.buyerMutations.saveDraft, {
+    input: { requestId: null, expectedDraftVersion: null, message: "black over-ear noise cancelling headphones under $400 by 2026-11-30" },
+  });
+  const ref = await buyer.mutation(internal.buyerMutations.confirmRequest, {
+    input: {
+      requestId: draft.requestId,
+      expectedDraftVersion: 1,
+      lines: [
+        {
+          lineId: "main",
+          role: "primary",
+          category: "headphones",
+          profile: { id: "profile_headphones", version: 1 },
+          quantity: 1,
+          allowedConditions: ["new"],
+          requirements: [
+            { id: "color", fieldId: "color", operator: "equals", value: "black", unit: null, strength: "hard", weight: 1 },
+            { id: "type", fieldId: "headphoneType", operator: "equals", value: "over-ear", unit: null, strength: "hard", weight: 1 },
+            { id: "anc", fieldId: "noiseCancelling", operator: "equals", value: true, unit: null, strength: "hard", weight: 1 },
+          ],
+          useCaseSummary: "Black over-ear noise-cancelling headphones.",
+        },
+      ],
+      deliveryDeadline: Date.now() + 20 * 86400000,
+      privateMaximumCents: 40000,
+      sharedTargetCents: null,
+      shareTarget: false,
+      sort: "best_fit",
+    },
+  });
+  await buyer.mutation(internal.buyerMutations.startRun, { input: { request: ref, clientKey: "start" } });
+  let view: Awaited<ReturnType<typeof buyer.query<typeof api.buyer.getBuyerRun>>> | undefined;
+  for (let i = 0; i < 150; i++) {
+    await t.finishInProgressScheduledFunctions();
+    await vi.advanceTimersByTimeAsync(100);
+    view = await buyer.query(api.buyer.getBuyerRun, { requestId: ref.id });
+    if (["results", "no_match", "failed"].includes(view.stage)) break;
+  }
+  expect(view?.stage).toBe("results");
+  const offers = view!.offers;
+  // Every merchant lists the black ANC model; only the matching variant may be offered.
+  expect(offers.length).toBe(3);
+  const merchants = new Set(offers.map((offer) => JSON.stringify(offer).match(/merchant_[abc]/)?.[0]));
+  expect(merchants.size).toBe(3);
+  // Sealed finals: discounting merchants lower their price; merchant C's policy allows no discount.
+  const byMerchant = Object.fromEntries(offers.map((offer) => [offer.merchant.id, offer]));
+  expect(byMerchant.merchant_a.totalCents).toBeLessThan(byMerchant.merchant_a.initialTotalCents);
+  expect(byMerchant.merchant_b.totalCents).toBeLessThan(byMerchant.merchant_b.initialTotalCents);
+  expect(byMerchant.merchant_c.totalCents).toBe(byMerchant.merchant_c.initialTotalCents);
+  for (const offer of offers) {
+    expect(JSON.stringify(offer)).toContain("WH-1000XM5 (Black)");
+    expect(JSON.stringify(offer)).not.toContain("Silver");
+    expect(JSON.stringify(offer)).not.toContain("no ANC");
+  }
+});
 test("authoritative exact-product contradictions invoke shared assessment and prevent selection", async () => {
   const state = await resultRun();
   const row = await state.t.run(async (ctx) => {

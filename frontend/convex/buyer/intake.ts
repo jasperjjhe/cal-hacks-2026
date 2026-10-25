@@ -8,7 +8,9 @@ export function fixtureIntake(
   const raw = buyers.map((m) => m.text).join("\n");
   const category = /laptop|macbook|thinkpad|computer/i.test(raw)
     ? "laptop"
-    : /shirt|tee|cotton/i.test(raw)
+    : /headphone|earbud|earphone|\bxm5\b|wh-1000/i.test(raw)
+      ? "headphones"
+      : /shirt|tee|cotton/i.test(raw)
       ? "clothing"
       : /shelf|household/i.test(raw)
         ? "household_accessory"
@@ -126,6 +128,16 @@ export function fixtureIntake(
           /(?:under|max(?:imum)?(?:\s+width)?|at most)\s*(\d+)\s*mm/i,
         );
     }
+    if (category === "headphones") {
+      const color = raw.match(/\b(black|silver|white|blue)\b/i);
+      if (color)
+        add("color", "equals", color[1].toLowerCase(), null, /\b(black|silver|white|blue)\b/i);
+      const style = raw.match(/\b(over|on|in)[- ]ear\b/i);
+      if (style)
+        add("headphoneType", "equals", `${style[1].toLowerCase()}-ear`, null, /\b(over|on|in)[- ]ear\b/i);
+      if (/noise[- ]cancel|\banc\b/i.test(raw))
+        add("noiseCancelling", "equals", true, null, /noise[- ]cancel|\banc\b/i);
+    }
     if (category === "small_appliance" && /\bUS\b|120\s*V/i.test(raw)) {
       add("voltage", "equals", 120, "V", /\bUS\b|120\s*V/i);
       add("frequency", "equals", 60, "Hz", /\bUS\b|120\s*V/i);
@@ -138,7 +150,9 @@ export function fixtureIntake(
           ? profiles.clothing
           : category === "household_accessory"
             ? profiles.household
-            : profiles.appliance;
+            : category === "headphones"
+              ? profiles.headphones
+              : profiles.appliance;
     lines.push({
       lineId: "line-main",
       role: "primary",

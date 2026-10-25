@@ -38,6 +38,7 @@ export const profiles = {
   clothing: ref('profile_clothing'),
   household: ref('profile_household_accessory'),
   appliance: ref('profile_small_appliance'),
+  headphones: ref('profile_headphones'),
 }
 
 export const demoSellerBrief: SellerBrief = buildSellerBrief(
@@ -149,6 +150,34 @@ export const applianceBrief: SellerBrief = buildSellerBrief(
     sharedTarget: null,
   },
   'run_demo_appliance',
+)
+
+export const headphonesBrief: SellerBrief = buildSellerBrief(
+  {
+    schemaVersion: 1,
+    request: ref('req_demo_headphones'),
+    currency: 'USD',
+    deliveryRegion: 'US-CA-SAN_FRANCISCO',
+    deliveryDeadline: Date.parse('2026-11-20T23:59:59.000Z'),
+    lines: [
+      {
+        lineId: 'line_headphones',
+        role: 'primary',
+        category: 'headphones',
+        profile: profiles.headphones,
+        quantity: 1,
+        allowedConditions: ['new'],
+        requirements: [
+          requirement('hp_color', 'color', 'equals', 'black', null),
+          requirement('hp_type', 'headphoneType', 'equals', 'over-ear', null),
+          requirement('hp_anc', 'noiseCancelling', 'equals', true, null),
+        ],
+        useCaseSummary: 'New black over-ear noise-cancelling headphones.',
+      },
+    ],
+    sharedTarget: null,
+  },
+  'run_demo_headphones',
 )
 
 const laptopVariant = (id: Id, title: string, attributes: Record<string, Attribute>): CatalogVariant => ({
@@ -317,6 +346,54 @@ export const variants: CatalogVariant[] = [
     },
     syntheticProduct: true,
   },
+  {
+    id: 'HP1',
+    productId: 'product_HP1',
+    title: 'Sony WH-1000XM5 (Black)',
+    category: 'headphones',
+    profile: profiles.headphones,
+    manufacturerPartNumber: 'WH1000XM5/B',
+    attributes: {
+      brand: synthetic('Sony'),
+      headphoneType: synthetic('over-ear'),
+      color: synthetic('black'),
+      noiseCancelling: synthetic(true),
+      batteryHours: synthetic(30, 'h'),
+    },
+    syntheticProduct: true,
+  },
+  {
+    id: 'HP2',
+    productId: 'product_HP2',
+    title: 'Sony WH-1000XM5 (Silver)',
+    category: 'headphones',
+    profile: profiles.headphones,
+    manufacturerPartNumber: 'WH1000XM5/S',
+    attributes: {
+      brand: synthetic('Sony'),
+      headphoneType: synthetic('over-ear'),
+      color: synthetic('silver'),
+      noiseCancelling: synthetic(true),
+      batteryHours: synthetic(30, 'h'),
+    },
+    syntheticProduct: true,
+  },
+  {
+    id: 'HP3',
+    productId: 'product_HP3',
+    title: 'Demo Studio Over-Ear (Black, no ANC)',
+    category: 'headphones',
+    profile: profiles.headphones,
+    manufacturerPartNumber: null,
+    attributes: {
+      brand: synthetic('DemoAudio'),
+      headphoneType: synthetic('over-ear'),
+      color: synthetic('black'),
+      noiseCancelling: synthetic(false),
+      batteryHours: synthetic(40, 'h'),
+    },
+    syntheticProduct: true,
+  },
 ]
 
 const variantById = new Map(variants.map((variant) => [variant.id, variant]))
@@ -367,6 +444,13 @@ const nonTechListings: Record<Id, Array<[Id, number]>> = {
   merchant_c: [['C1', 2_500], ['C2', 3_000], ['H1', 8_000], ['H2', 10_000], ['A1', 4_500], ['A2', 4_000]],
 }
 
+// [variantId, reference cents, operator floor cents, quantity]
+const headphoneListings: Record<Id, Array<[Id, number, number, number]>> = {
+  merchant_a: [['HP1', 34_900, 31_500, 3], ['HP2', 34_900, 31_500, 2], ['HP3', 14_900, 13_500, 4]],
+  merchant_b: [['HP1', 35_900, 33_000, 3], ['HP2', 35_900, 33_000, 2], ['HP3', 15_900, 14_500, 4]],
+  merchant_c: [['HP1', 33_900, 33_900, 3], ['HP2', 33_900, 33_900, 2], ['HP3', 14_500, 14_500, 4]],
+}
+
 export interface SellerFixtureSet {
   variants: CatalogVariant[]
   snapshotsByMerchant: Record<Id, CatalogSnapshot[]>
@@ -376,6 +460,7 @@ export interface SellerFixtureSet {
     clothing: SellerBrief
     household: SellerBrief
     appliance: SellerBrief
+    headphones: SellerBrief
   }
 }
 
@@ -383,6 +468,7 @@ function makePolicy(merchantId: Id, shippingCents: number, arrivalCalendarDays: 
   const listings = [
     ...(laptopListings[merchantId] ?? []).map(([variantId, reference]) => [`${merchantId}:${variantId}`, reference] as const),
     ...(nonTechListings[merchantId] ?? []).map(([variantId, reference]) => [`${merchantId}:${variantId}`, reference] as const),
+    ...(headphoneListings[merchantId] ?? []).map(([variantId, reference]) => [`${merchantId}:${variantId}`, reference] as const),
     [`${merchantId}:MOUSE`, 2_500] as const,
     [`${merchantId}:HUB`, 3_500] as const,
   ]
@@ -417,6 +503,10 @@ function makeSnapshots(merchantId: Id): CatalogSnapshot[] {
     const variant = variantById.get(variantId)
     if (variant) snapshots.push({ variant, listing: listing(merchantId, variantId, reference, Math.floor(reference * 0.9), 5), availableQuantity: 5 })
   }
+  for (const [variantId, reference, floor, quantity] of headphoneListings[merchantId] ?? []) {
+    const variant = variantById.get(variantId)
+    if (variant) snapshots.push({ variant, listing: listing(merchantId, variantId, reference, floor, quantity), availableQuantity: quantity })
+  }
   const mouse = variantById.get('MOUSE')
   const hub = variantById.get('HUB')
   if (mouse) snapshots.push({ variant: mouse, listing: listing(merchantId, 'MOUSE', 2_500, merchantId === 'merchant_c' ? 2_500 : 2_300, 10), availableQuantity: 10 })
@@ -442,6 +532,7 @@ export function makeSellerFixtures(): SellerFixtureSet {
       clothing: clothingBrief,
       household: householdBrief,
       appliance: applianceBrief,
+      headphones: headphonesBrief,
     },
   }
 }

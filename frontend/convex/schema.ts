@@ -92,6 +92,7 @@ const sellerTables = {
       v.literal('clothing'),
       v.literal('household_accessory'),
       v.literal('small_appliance'),
+      v.literal('headphones'),
     ),
     allowedConditions: v.array(v.union(v.literal('new'), v.literal('refurbished'))),
     fields: v.array(v.object({
@@ -121,6 +122,7 @@ const sellerTables = {
       v.literal('clothing'),
       v.literal('household_accessory'),
       v.literal('small_appliance'),
+      v.literal('headphones'),
     ),
     profile: ref,
     manufacturerPartNumber: nullableString,
@@ -140,6 +142,7 @@ const sellerTables = {
       v.literal('clothing'),
       v.literal('household_accessory'),
       v.literal('small_appliance'),
+      v.literal('headphones'),
     ),
     profile: ref,
     manufacturerPartNumber: nullableString,
