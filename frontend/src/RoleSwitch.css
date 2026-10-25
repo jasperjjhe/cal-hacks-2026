@@ -36,10 +36,27 @@
   background: #5d64be;
 }
 
+/* The Figma buyer screens have no role switch, so over the buyer UI it sits in the
+   bottom-left corner instead of covering the navbar. */
+.role-switch.is-buyer {
+  top: auto;
+  bottom: 16px;
+  left: 16px;
+  transform: none;
+  border-color: #eadfd2;
+  box-shadow: 0 0 6px rgba(47, 47, 47, 0.11);
+}
+.role-switch.is-buyer button.is-active {
+  background: #b45309;
+}
+
 /* The mobile top bar is full-width; float the switch at the bottom instead. */
 @media (max-width: 760px) {
   .role-switch {
     top: auto;
     bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .role-switch.is-buyer {
+    left: 12px;
   }
 }
