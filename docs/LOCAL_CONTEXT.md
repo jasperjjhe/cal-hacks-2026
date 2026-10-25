@@ -45,6 +45,11 @@ use the product's private secret-entry mechanism or a protected local shell.
   compare shared contracts, Convex seams and generated bindings before each
   integration-sensitive seller change; do not blindly merge or copy its buyer
   workflow/provider implementation.
+- The active Markdown specification is normative while the buyer developer is
+  still implementing. A lagging or conflicting buyer branch is incomplete
+  work, not a product decision. Implement documented seller-owned behavior
+  without creating a second buyer schema; consume the buyer-owned canonical v2
+  source when the final wire migration is integrated.
 - Seller work owns merchant catalog, policy, inventory, seller jobs, seller
   proposals, seller validation, and the provider seam. Buyer work owns buyer
   requests, raw buyer messages, private budgets, council/workflow state,
@@ -399,9 +404,10 @@ Pending:
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
   sponsor ledger.
-- Review and consume the buyer-owned canonical v5.3 contract revision when it
-  lands. Migrate seller worker/parser/fixtures to advocacy, grouped reply and
-  parent-bound final roles without adding a duplicate council schema.
+- Implement documented seller-owned v5.3 deterministic behavior now; when the
+  buyer-owned canonical v2 contract lands, derive the final seller worker,
+  parser and fixture wire migration from it without adding a duplicate council
+  schema.
 - Consume the buyer-owned v2 final envelope, then add parent-bound frozen
   basket, monotonic delivered-total/term and bundle-contribution validation;
   policy allowlist groundwork is complete but service concessions remain

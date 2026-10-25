@@ -35,6 +35,14 @@ Until the buyer branch publishes v2 contracts and these seam differences are
 resolved, the seller branch must keep its v1 Fetch worker and must not enable
 new council role names.
 
+The active Markdown specification remains normative while the buyer developer
+continues implementation. If `origin/geoff/buyer` lags, contradicts or omits
+documented v5.3 behavior, treat that branch state as incomplete work—not as a
+change to product requirements. Seller work may implement documented,
+seller-owned deterministic rules now, but the seller branch must still consume
+the buyer-owned canonical v2 source for the final wire migration rather than
+creating a parallel schema.
+
 ## Required handoff
 
 The buyer workflow owns the request, run, phase and provider-call budget. For each participating merchant it must build an allowlisted `SellerBrief`, prepare one seller job, attach the brief if preparation and input storage are separate, and invoke one internal seller action. The seller action returns status/provenance; the buyer workflow decides when to continue the phase or create the one permitted repair.
