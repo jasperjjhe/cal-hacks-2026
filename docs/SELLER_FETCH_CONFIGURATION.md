@@ -48,12 +48,19 @@ The agent returns JSON with a bounded `providerRunId` and one of `pending`, `com
 
 ## Agentverse setup
 
-1. Create a Hosted Agent in Agentverse and paste/copy `agents/fetch-seller/agent.py` and `agents/fetch-seller/seller_logic.py` into its multi-file code editor.
-2. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret. Generate a new random value for the deployment; do not reuse a source-control or personal credential.
-3. Start the agent and record its Agentverse address and compiled/running status. Confirm whether the dashboard exposes a public HTTPS base URL for the custom REST routes. The Agentverse hosting control-plane URL or agent address alone is not a valid `FETCH_SELLER_START_URL`.
-4. If direct custom REST is exposed, verify all four routes and use that exact HTTPS host. If it is not exposed, deploy the same source on the team's public Mana endpoint with `FETCH_SELLER_AGENT_ENDPOINT` and optional `FETCH_SELLER_AGENT_MAILBOX=true`; use the Mana HTTPS host for Convex and keep the Agentverse address as discovery/provenance evidence.
-5. Set the Convex variables above with `npx convex env set NAME VALUE` from `frontend/` in a protected shell only after the route host has been verified.
-6. Run one live seller job, one replay, one pending-to-completed poll sequence, one explicit reconciliation, one cancellation, and one malformed/timeout recovery. Add the non-secret evidence to `docs/SELLER_SPONSOR_PROOF.md`.
+1. Authenticate AVCTL with `avctl auth login` and check `avctl auth status`. The checked-in `agents/fetch-seller/.avctl/config.toml` links this repository to the existing Agentverse agent; do not create a second agent or use `hosting sync` as the source of truth.
+2. From `agents/fetch-seller/`, run `avctl hosting deploy -f agent.py,seller_logic.py,README.md,pyproject.toml`. The deployment uses the pinned Agentverse-supported `uagents==0.25.5` dependency.
+3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret with `avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN`. Generate a new random value for the deployment; do not reuse a source-control or personal credential. Start/restart the agent and record its compiled/running status.
+4. Confirm whether the dashboard exposes a public HTTPS base URL for the custom REST routes. The Agentverse hosting control-plane URL or agent address alone is not a valid `FETCH_SELLER_START_URL`.
+5. If direct custom REST is exposed, verify all four routes and use that exact HTTPS host. If it is not exposed, deploy the same source on the team's public Mana endpoint with `FETCH_SELLER_AGENT_ENDPOINT` and optional `FETCH_SELLER_AGENT_MAILBOX=true`; use the Mana HTTPS host for Convex and keep the Agentverse address as discovery/provenance evidence.
+6. Set the Convex variables above with `npx convex env set NAME VALUE` from `frontend/` in a protected shell only after the route host has been verified.
+7. Run one live seller job, one replay, one pending-to-terminal poll sequence, one explicit reconciliation, one cancellation, and one malformed/timeout recovery. Add the non-secret evidence to `docs/SELLER_SPONSOR_PROOF.md`.
+
+AVCTL device-login credentials are short-lived by design. The CLI exposes no
+documented lifetime-extension or refresh-duration flag. Re-authenticate when
+`avctl auth status` reports expiry; use an Agentverse-provided automation/API
+token only if its account permissions and lifetime are explicitly confirmed,
+and keep it outside the repository.
 
 The current official Agentverse API documents hosted-agent identity/control
 operations and signed message-envelope submission; it does not establish that

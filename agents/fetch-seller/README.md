@@ -7,9 +7,37 @@ origins, private maximum, competitor data, seller cost, or operator floor.
 
 ## Agentverse deployment
 
-Create a Hosted Agent in Agentverse and copy the files in this directory into
-the hosted code editor. Hosted Agents reset process globals between invocations,
-so this implementation stores job state with `ctx.storage`.
+The checked-in `.avctl/config.toml` points at the existing Agentverse Hosted
+Agent. The Git repository is the source of truth; deploy from this directory
+after review with:
+
+```text
+avctl auth status
+avctl hosting deploy -f agent.py,seller_logic.py,README.md,pyproject.toml
+```
+
+`hosting deploy` updates and restarts the configured Agentverse agent. Do not
+use the hosted editor as an untracked source of truth. If a hosted-editor
+change is made for an emergency, reconcile it back into Git immediately.
+Hosted Agents reset process globals between invocations, so this implementation
+stores job state with `ctx.storage`.
+
+AVCTL device authentication is intentionally short-lived. The current CLI has
+no documented flag to extend the device-token lifetime; run `avctl auth login`
+again when it expires. If Agentverse provides an account/API token suitable for
+automation, load it with `avctl auth token` only in a protected local or CI
+secret store. Never commit it, put it in `.env`, or place it in deployment
+metadata.
+
+Set the shared runtime secret in Agentverse, not in source control:
+
+```text
+avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN
+```
+
+The command prompts for the value. Use a new random secret and configure the
+same value in the protected Convex environment as
+`FETCH_SELLER_AGENT_TOKEN`.
 
 Agentverse hosting and direct REST reachability are separate checks. The
 Agentverse control-plane address is not automatically a substitute for the

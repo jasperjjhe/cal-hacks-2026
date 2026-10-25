@@ -1,0 +1,9 @@
+[project]
+name = "buyerunion-fetch-seller"
+version = "0.1.0"
+description = "BuyerUnion's bounded seller-side Fetch.ai agent"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "uagents==0.25.5",
+]

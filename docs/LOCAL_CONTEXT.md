@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current pushed commit: `66b9a27` (`docs: define Chat Protocol boundary`)  
+Current pushed commit: pending this turn
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`
 
@@ -131,9 +131,17 @@ use the product's private secret-entry mechanism or a protected local shell.
   request envelope.
 - The shared Agentverse secret is required and fails closed when missing or
   incorrect. Convex sends it only from the server-created provider envelope.
-- The agent source is implemented and tested locally, but no real Agentverse
-  URL, agent address, secret, or live provider run has been configured or
-  claimed yet.
+- `agents/fetch-seller/.avctl/config.toml` links the repository to the existing
+  blank Agentverse agent address, and `pyproject.toml` pins the
+  Agentverse-supported `uagents==0.25.5` dependency. The repository remains
+  the source of truth; deploy with AVCTL after checks rather than editing the
+  hosted editor as an independent implementation.
+- Agentverse authentication is currently logged in through AVCTL, but the
+  device credential is short-lived. The current CLI exposes no documented
+  lifetime-extension flag; re-authentication or an explicitly supported
+  protected automation token is required for unattended deployment.
+- No shared Agent Secret, verified public Agentverse/Mana HTTPS route, or live
+  provider run has been configured or claimed yet.
 - Transport caveat: official Agentverse hosting documentation exposes hosted
   agent identity/control metadata and message-envelope submission, while the
   uAgents custom REST documentation demonstrates direct routes on the running
@@ -302,8 +310,9 @@ specific proof criteria.
 
 ## Current implementation status
 
-Status at this context update: **seller runtime implemented; external Fetch
-deployment and buyer integration pending.**
+Status at this context update: **seller runtime implemented; Agentverse repo
+linkage configured; hosted deployment, live route verification and buyer
+integration pending.**
 
 Completed:
 
@@ -312,6 +321,9 @@ Completed:
 - Agentverse-compatible Fetch seller source, fixed typed REST routes, shared
   secret authentication, Agent Storage state, replay protection, bounded
   matching, and pure Python tests.
+- AVCTL v0.1.18 is installed and authenticated; the existing blank Agentverse
+  agent is linked in checked-in `.avctl/config.toml`, with a pinned
+  `pyproject.toml` for hosted deployment.
 - Fetch configuration, sponsor proof, seller implementation plan, and buyer/
   seller integration notes updated.
 - Branch protection policy checked in with no required second approval.
@@ -326,10 +338,10 @@ Completed:
 
 Pending:
 
-- Create and start the Agentverse Hosted Agent; set its private shared secret;
-  obtain the agent identity and verify whether it exposes direct HTTPS custom
-  REST routes. If not, deploy the same source on Mana/public HTTPS with
-  mailbox registration.
+- Deploy the checked-in seller project to the linked Agentverse Hosted Agent
+  with AVCTL; set its private shared secret; and verify whether it exposes
+  direct HTTPS custom REST routes. If not, deploy the same source on
+  Mana/public HTTPS with mailbox registration.
 - Configure Convex `FETCH_SELLER_*` variables in the target deployment without
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
@@ -344,9 +356,10 @@ Pending:
 
 ## Immediate next steps
 
-1. In Agentverse, create a Hosted Agent, copy `agents/fetch-seller/agent.py`
-   and `seller_logic.py`, add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret,
-   and start it. Do not paste the secret into chat.
+1. From `agents/fetch-seller/`, run `avctl hosting deploy -f
+   agent.py,seller_logic.py,README.md,pyproject.toml` for the linked agent, then
+   add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret and start it. Do not
+   paste the secret into chat.
 2. Verify the four agent routes and record the exact public HTTPS host, agent
    address, runtime version, and non-secret test run IDs.
 3. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
