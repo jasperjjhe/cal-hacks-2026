@@ -64,6 +64,7 @@ FETCH_SELLER_AGENT_ADDRESS=<this Agentverse address>
 FETCH_SELLER_GATEWAY_TOKEN=<Convex-to-gateway secret>
 FETCH_SELLER_SHARED_TOKEN=<gateway-to-agent secret, also the hosted Agent Secret>
 FETCH_SELLER_GATEWAY_SEED=<random seed for the gateway's own agent identity>
+FETCH_SELLER_GATEWAY_IDENTITIES=16   # optional; parallel queries to the hosted agent
 FETCH_SELLER_QUERY_TIMEOUT_SECONDS=22
 FETCH_SELLER_GATEWAY_HOST=127.0.0.1
 FETCH_SELLER_GATEWAY_PORT=8787
@@ -230,3 +231,18 @@ The Fetch sponsor claim remains pending until the team records an actual
 Agentverse URL, non-secret provider run ID, pending-to-terminal transition,
 accepted proposal, and malformed/timeout recovery in
 `docs/SELLER_SPONSOR_PROOF.md`.
+
+## Gateway concurrency
+
+Agentverse's hosted submit endpoint fails overlapping sync queries from one sender:
+with two or more in flight it returns 500s or times out, while queries from distinct
+senders run in parallel. A buyer run opens about ten seller jobs at once, so the
+gateway leases a separate identity per in-flight query, all derived from
+`FETCH_SELLER_GATEWAY_SEED` (index 0 is the original identity). The pool size is
+`FETCH_SELLER_GATEWAY_IDENTITIES` (default 16, max 64). If every identity is busy
+for the full query timeout, the job fails with a retryable `PROVIDER_TIMEOUT`.
+
+Convex keeps the gateway's error code and retry flag: `PROVIDER_TIMEOUT` and
+`PROVIDER_UNAVAILABLE` are retried within the seller attempt budget (by polling,
+which recovers a slow start the agent did receive), and agent decisions such as
+`INVALID_INPUT` stay non-retryable rejections.

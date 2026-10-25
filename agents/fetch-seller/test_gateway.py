@@ -108,6 +108,40 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual((body["status"], body["errorCode"], body["errorRetryable"]), ("failed", "PROVIDER_TIMEOUT", True))
 
 
+    def test_concurrent_queries_use_distinct_gateway_identities(self):
+        import threading
+        senders, barrier = [], threading.Barrier(4)
+        def post(endpoint, body, timeout):
+            senders.append(Envelope.model_validate_json(body).sender)
+            barrier.wait(timeout=5)  # all four are in flight at once
+            return agent_reply()(endpoint, body, timeout)
+        with mock.patch.object(gateway, "_post_envelope", post):
+            threads = [threading.Thread(target=self.call, args=("/seller/jobs/poll", POLL)) for _ in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(10)
+        self.assertEqual(len(senders), 4)
+        self.assertEqual(len(set(senders)), 4)
+        self.assertIn(gateway._gateway_identity(0).address, senders)
+
+    def test_identity_lease_is_returned_after_a_failure(self):
+        seen = []
+        def flaky(endpoint, body, timeout):
+            seen.append(Envelope.model_validate_json(body).sender)
+            raise TimeoutError()
+        with mock.patch.object(gateway, "_post_envelope", flaky):
+            self.call("/seller/jobs/poll", POLL)
+            self.call("/seller/jobs/poll", POLL)
+        self.assertEqual(seen[0], seen[1])
+        self.assertEqual(seen[0], gateway._gateway_identity(0).address)
+
+    def test_exhausted_identity_pool_is_a_retryable_timeout(self):
+        env = {**ENV, "FETCH_SELLER_GATEWAY_IDENTITIES": "1", "FETCH_SELLER_QUERY_TIMEOUT_SECONDS": "0.2"}
+        with mock.patch.dict(os.environ, env, clear=False), gateway._IDENTITIES.lease(1, 1):
+            body = self.call("/seller/jobs/poll", POLL).json()
+        self.assertEqual((body["status"], body["errorCode"], body["errorRetryable"]), ("failed", "PROVIDER_TIMEOUT", True))
+
     def test_start_message_forwards_authority_beside_input(self):
         start = {"jobId": "job_1", "runId": "run_1", "phaseId": "final", "role": "seller_final", "inputRef": "ref",
                  "inputDigest": "d", "input": {"a": 1}, "sellerAuthority": {"schemaVersion": 2}}

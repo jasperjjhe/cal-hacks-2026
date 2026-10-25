@@ -93,6 +93,24 @@ function providerRunId(value: unknown): string | null {
   return typeof record.providerRunId === 'string' && record.providerRunId.length > 0 && record.providerRunId.length <= 256 ? record.providerRunId : null
 }
 
+// The gateway reports why a job failed. Transport problems between the gateway and the
+// hosted agent (timeouts, an unavailable or overloaded endpoint) are retryable; the
+// seller pipeline retries those within its attempt budget instead of dropping the merchant.
+// Only the code and flag are read; provider text never reaches buyer records.
+const providerFailureCodes: Record<string, ProviderApiError['code']> = {
+  PROVIDER_TIMEOUT: 'PROVIDER_TIMEOUT',
+  PROVIDER_UNAVAILABLE: 'PROVIDER_NETWORK',
+  PROVIDER_PROTOCOL: 'PROVIDER_PROTOCOL',
+}
+
+function providerFailure(record: Record<string, unknown>): ProviderApiError {
+  if (record.status === 'cancelled') return providerError('PROVIDER_REJECTED', 'provider reported a cancelled seller job', false)
+  const code = typeof record.errorCode === 'string' ? providerFailureCodes[record.errorCode] : undefined
+  const retryable = record.errorRetryable === true
+  if (code) return providerError(code, `provider reported ${record.errorCode as string}`, retryable)
+  return providerError('PROVIDER_REJECTED', 'provider reported a failed seller job', retryable)
+}
+
 function resultFromResponse(value: unknown, statusCode: number, elapsedMs: number): AgentJobResult<unknown> {
   const runId = providerRunId(value)
   if (!runId) return { status: 'failed', providerRunId: null, error: providerError('PROVIDER_PROTOCOL', 'provider response did not include a bounded run ID', false) }
@@ -100,7 +118,7 @@ function resultFromResponse(value: unknown, statusCode: number, elapsedMs: numbe
   if (typeof value !== 'object' || value === null) return { status: 'failed', providerRunId: runId, error: providerError('PROVIDER_PROTOCOL', 'provider response was not a JSON object', false) }
   const record = value as Record<string, unknown>
   if (record.status === 'pending' || record.status === 'accepted' || record.status === 'running') return { status: 'pending', providerRunId: runId }
-  if (record.status === 'failed' || record.status === 'cancelled') return { status: 'failed', providerRunId: runId, error: providerError('PROVIDER_REJECTED', 'provider reported a failed seller job', false) }
+  if (record.status === 'failed' || record.status === 'cancelled') return { status: 'failed', providerRunId: runId, error: providerFailure(record) }
   if (record.status !== 'completed' && record.status !== 'succeeded') return { status: 'failed', providerRunId: runId, error: providerError('PROVIDER_PROTOCOL', 'provider did not report a terminal success state', false) }
   if (!('output' in record)) return { status: 'failed', providerRunId: runId, error: providerError('PROVIDER_PROTOCOL', 'provider completed without an output payload', false) }
   return {
