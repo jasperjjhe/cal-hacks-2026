@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { invokeCreao, pollCreao, cancelCreao } from '../convex/integrations/creaoBuyer';
-import { startEvidence, pollEvidence } from '../convex/integrations/apifyBuyer';
+import { startEvidence, pollEvidence, reviewQuery, matchesProduct, RAG_ACTOR_ID } from '../convex/integrations/apifyBuyer';
 import { snapshotCreaoConfig } from '../convex/integrations/creaoBuyer';
 import { smokeInputs, checkSmokeResult } from '../scripts/smoke-creao.mjs';
 import { fixtureCouncil } from '../convex/buyer/council';
@@ -9,11 +9,11 @@ import type { EvidenceInput, ToolJob } from '../convex/integrations/buyerTools';
 const job: ToolJob = { id: 'job-12345678', role: 'moderator_brief', input: { offers: [] }, providerRunId: null, deadlineAt: Date.now() + 60000 };
 const input: EvidenceInput = {
   variantId: 'real-product', syntheticProduct: false, inputDigest: 'digest',
-  actorId: 'actor1', build: 'build1', buildNumber: '0.1.1',
-  urls: ['https://example.com/product'], sourceIds: ['source1'],
-  sources: [{ id: 'source1', url: 'https://example.com/product', applicability: 'family', sourceType: 'manufacturer' }],
+  actorId: RAG_ACTOR_ID, build: 'build1', buildNumber: '0.1.1',
+  productName: 'Sony WH-1000XM5', domains: ['arstechnica.com', 'reddit.com'],
+  query: reviewQuery('Sony WH-1000XM5'),
 };
-const run = { id: 'run1', actId: 'actor1', buildId: 'build1', status: 'RUNNING', defaultDatasetId: 'dataset1' };
+const run = { id: 'run1', actId: RAG_ACTOR_ID, buildId: 'build1', status: 'RUNNING', defaultDatasetId: 'dataset1' };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 beforeEach(() => {
   vi.stubEnv('CREAO_API_KEY', 'test-secret');
@@ -116,11 +116,11 @@ test('copy-ready smoke inputs use canonical envelopes and verify real output sem
 test('Apify pins actor/build and reads only a successful run dataset', async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ data: run }))
     .mockResolvedValueOnce(json({ data: { ...run, status: 'SUCCEEDED' } }))
-    .mockResolvedValueOnce(json([{ url: input.urls[0], excerpt: 'Actual source text.', retrievedAt: Date.now() }]));
+    .mockResolvedValueOnce(json([reviewRow()]));
   vi.stubGlobal('fetch', fetch);
   expect(await startEvidence(input)).toEqual({ status: 'pending', providerRunId: 'run1', build: 'build1' });
   expect(fetch.mock.calls[0][0]).toContain('build=0.1.1');
-  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ urls: input.urls, allowedHosts: ['example.com'] });
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ query: input.query, maxResults: 6, outputFormats: ['markdown'], scrapingTool: 'raw-http' });
   const result = await pollEvidence(input, 'run1');
   expect(result.status).toBe('completed');
   if (result.status === 'completed') expect(result.evidence[0]).toMatchObject({ verification: 'unknown', applicability: 'family', providerRunId: 'run1', providerBuild: 'build1' });
@@ -129,10 +129,10 @@ test('Apify pins actor/build and reads only a successful run dataset', async () 
 test('Apify rejects different build, dataset injection and unapproved source URLs', async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ data: { ...run, buildId: 'wrong' } }))
     .mockResolvedValueOnce(json({ data: { ...run, status: 'SUCCEEDED' } }))
-    .mockResolvedValueOnce(json([{ url: 'https://evil.example', excerpt: 'injected', retrievedAt: Date.now() }]));
+    .mockResolvedValueOnce(json([reviewRow('https://evil.example')]));
   vi.stubGlobal('fetch', fetch);
   await expect(startEvidence(input)).rejects.toThrow('provenance');
-  await expect(pollEvidence(input, 'run1')).rejects.toThrow('unapproved');
+  expect(await pollEvidence(input, 'run1')).toMatchObject({ status: 'completed', evidence: [] });
   expect((await startEvidence({ ...input, syntheticProduct: true })).status).toBe('unavailable');
 });
 test('Apify start timeout is not retried and provider redirects and oversized responses fail closed', async () => {
@@ -143,4 +143,34 @@ test('Apify start timeout is not retried and provider redirects and oversized re
   expect(fetch.mock.calls[0][1].redirect).toBe('error');
   fetch.mockResolvedValueOnce(new Response('x'.repeat(1048577)));
   await expect(pollEvidence(input, 'run1')).rejects.toThrow('too large');
+});
+
+function reviewRow(url = 'https://arstechnica.com/review/sony-xm5') {
+  return { metadata: { url, title: 'Sony WH-1000XM5 review' },
+    crawl: { httpStatusCode: 200, requestStatus: 'succeeded', loadedAt: new Date().toISOString() },
+    markdown: 'Sony WH-1000XM5 headphones. ' + 'Actual listening impressions and comfort observations. '.repeat(10) };
+}
+test('discovery filters stale, blocked, redirected, duplicate and wrong-model pages', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ data: { ...run, status: 'SUCCEEDED' } }))
+    .mockResolvedValueOnce(json([
+      reviewRow(), reviewRow(),
+      { ...reviewRow(), metadata: { url: 'https://reddit.com/thread', redirectedUrl: 'https://evil.example' } },
+      { ...reviewRow(), crawl: { ...reviewRow().crawl, httpStatusCode: 403 } },
+      { ...reviewRow(), metadata: { url: 'https://reddit.com/wrong', title: 'Sony WF-1000XM5' }, markdown: 'Sony WF-1000XM5 earbuds compared with Sony WH-1000XM5 headphones. '.repeat(20) },
+      { ...reviewRow(), crawl: { ...reviewRow().crawl, loadedAt: '2000-01-01T00:00:00Z' } },
+    ]));
+  vi.stubGlobal('fetch', fetch);
+  const result = await pollEvidence(input, 'run1');
+  expect(result.status === 'completed' && result.evidence.length).toBe(1);
+  expect(matchesProduct(input.productName, 'Sony WF-1000XM5 earbuds')).toBe(false);
+  expect(matchesProduct(input.productName, 'Sony WH1000XM5 headphones')).toBe(true);
+});
+test('discovered Reddit content stays anecdotal and queries cannot inject search operators', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ data: { ...run, status: 'SUCCEEDED' } }))
+    .mockResolvedValueOnce(json([reviewRow('https://www.reddit.com/r/headphones/comments/123')]));
+  vi.stubGlobal('fetch', fetch);
+  const result = await pollEvidence(input, 'run1');
+  expect(result.status === 'completed' && result.evidence[0]).toMatchObject({ sourceType: 'owner_report', applicability: 'family', verification: 'unknown', sourceVerifiedPurchaseLabel: null });
+  await expect(startEvidence({ ...input, query: 'https://evil.example' })).rejects.toThrow('query');
+  expect(reviewQuery('Sony " OR site:evil.example')).not.toContain('site:evil.example');
 });

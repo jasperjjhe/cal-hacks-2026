@@ -3,7 +3,8 @@
 Status: the Convex action path, canonical v2 seller-role bridge, and
 Agentverse-compatible Fetch seller agent are implemented on
 `feature/seller-side`. The buyer reference publishes the canonical v2 envelopes
-at `origin/geoff/buyer` `d863b16`; this branch consumes that source and keeps
+at `origin/geoff/buyer` `df26d70` (the v2 source was introduced at `d863b16`);
+this branch consumes that source and keeps
 buyer deadlines, retries, phase closure and publication authoritative. The
 repository still does not contain a real gateway URL or credential, so no live
 Fetch.ai prize claim is made until external deployment is configured and

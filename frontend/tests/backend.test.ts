@@ -753,7 +753,7 @@ test("authoritative exact-product contradictions invoke shared assessment and pr
       providerRunId: "expected",
       providerBuild: "pinned",
       input: {
-        urls: ["https://example.com/exact-product"],
+        domains: ["example.com"],
         syntheticProduct: false,
       },
       deadlineAt: Date.now() + 60000,
@@ -1225,7 +1225,7 @@ test.each([false, true])("conflicting authoritative facts block selection in eit
     await ctx.db.patch(variant._id, { syntheticProduct: false });
     const id = await ctx.db.insert("buyerResearch", {
       runId: state.view.runId, variantId: variant.variantId, digest: "conflict-input", state: "acquiring", providerRunId: "remote", providerBuild: "pinned", input: {
-        urls: ["https://example.com/a", "https://example.com/b"], syntheticProduct: false
+        domains: ["example.com"], syntheticProduct: false
       }, deadlineAt: Date.now() + 60000, createdAt: Date.now()
     });
     return { id, variantId: variant.variantId, offerId: row._id };
@@ -1374,4 +1374,28 @@ test("final revisions reject changed quantities, substituted listings and ungran
   ]) await expect(state.t.mutation(internal.buyerJobs.completeJob, { jobId, result: { status: "completed", providerRunId: "test", model: null,
     output: { ...job.input.finalBinding, decision: { kind: "propose", proposal: patched } } } })).rejects.toThrow();
   expect(await state.t.run(ctx => ctx.db.query("buyerSubmissions").collect())).toHaveLength(0);
+});
+
+test("genuine offered products queue automatic discovery without curated URLs", async () => {
+  vi.stubEnv('BUYER_EVIDENCE_REGISTRY', JSON.stringify({
+    actorId: '3ox4R101TgZz67sLr', build: 'pinned', buildNumber: '1.0.33'
+  }));
+  try {
+    const state = await resultRun();
+    await state.t.run(async ctx => {
+      const run = (await ctx.db.get(ctx.db.normalizeId('buyerRuns', state.view.runId)!))!;
+      await ctx.db.patch(run._id, { stage: 'researching', config: { ...run.config, researchDeadlineAt: Date.now() + 60000 } });
+      for (const job of await ctx.db.query('buyerResearch').withIndex('by_run', q => q.eq('runId', state.view.runId)).collect()) await ctx.db.delete(job._id);
+      const offer = (await ctx.db.query('buyerOffers').withIndex('by_run_effective', q => q.eq('runId', state.view.runId).eq('effective', true)).first())!;
+      const variant = (await ctx.db.query('variants').withIndex('by_variantId', q => q.eq('variantId', offer.card.products[0].variantId)).unique())!;
+      await ctx.db.patch(variant._id, { syntheticProduct: false, title: 'Sony WH-1000XM5 - Black' });
+    });
+    await state.t.mutation(internal.buyerEvidence.prepareResearch, { runId: state.view.runId });
+    const jobs = await state.t.run(ctx => ctx.db.query('buyerResearch').withIndex('by_run', q => q.eq('runId', state.view.runId)).collect());
+    const job = jobs.find(j => j.input.productName === 'Sony WH-1000XM5 - Black');
+    expect(job?.state).toBe('queued');
+    expect(job?.input.query).toBe('Sony WH-1000XM5 review');
+    expect(job?.input.urls).toBeUndefined();
+    expect(job?.input.domains).toContain('reddit.com');
+  } finally { vi.unstubAllEnvs(); }
 });

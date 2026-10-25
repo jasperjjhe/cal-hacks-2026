@@ -59,7 +59,7 @@ still needs explicit conflict resolution rather than replacing either schema.
   cancellation and partial outcomes are server-owned.
 - `buyerJobs.ts`, `buyerRoles.ts`: scoped intake, moderator, seller and evidence
   summary jobs; provider reference/digest validation; one bounded retry/repair.
-- `buyerEvidence.ts`: server source registry, exact/family applicability,
+- `buyerEvidence.ts`: automatic RAG review discovery, server domain policy, exact/family applicability,
   provenance, 24-hour cache, up to 8 URLs/40 excerpts per identity, 5 identities
   including one bounded refill. Authoritative exact facts call S's `assessLine`;
   contradictions block selection. Owner/family commentary cannot certify fit or
@@ -143,14 +143,13 @@ Use `frontend/convex/integrations/buyerTools.ts`:
    idempotency key. Do not pass private buyer conversation/ceiling to seller roles.
    The seller branch also has provider port utilities under `convex/integrations`;
    coordinate transport reuse rather than guessing CREAO endpoints.
-2. `startEvidence`, `pollEvidence`: implement the pinned Actor and expected
-   dataset lookup. `BUYER_EVIDENCE_REGISTRY` is server JSON:
-   `{"build":"verified-build-id","sources":[{"id":"source-id","variantId":"exact-id","url":"https://approved.example/product"}]}`.
-   Enforce redirect/DNS/private-network rules inside the actual acquisition
-   adapter/Actor. Return the expected run/build and applicable Evidence; optional
-   structured facts require exact authoritative source evidence IDs. Do not use
-   guessed webhook datasets, family pages as exact facts, or reviews as unit
-   diagnostics. Synthetic products never receive manufactured owner reports.
+2. `startEvidence`, `pollEvidence`: implemented using pinned Apify RAG Web Browser.
+   `BUYER_EVIDENCE_REGISTRY` now contains `actorId`, immutable `build`, numeric
+   `buildNumber` and optional `domains`; no manually curated `sources` array.
+   Searches come from genuine catalog product names. Approved-domain/model-matching
+   scraped pages become unverified family-level Evidence, with run/build attribution.
+   Existing cache/deadline/ownership checks remain. Fictional products skip research.
+   See `docs/BUYER_INTEGRATIONS.md` for copy-ready configuration and limitations.
 3. `executePayment`, `reconcilePayment`: simulation already works. Enable Visa
    sandbox only after supported execution/status lookup, test-merchant mapping
    and idempotency are demonstrated. External mode remains blocked until that

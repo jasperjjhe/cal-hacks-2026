@@ -4,17 +4,18 @@ This note records the boundary observed while cross-referencing `origin/geoff/bu
 
 ## Latest compatibility audit
 
-The latest fetched buyer reference is `origin/geoff/buyer` at `d863b16`
-(`creao integration`). It is
-tracked as a compatibility reference, not a merge target to apply wholesale.
-The branch now publishes the canonical v2 council source in
+The latest fetched buyer reference is `origin/geoff/buyer` at `df26d70`
+(`feat: discover product reviews with Apify RAG Web Browser`). The v2 council
+source was introduced at `d863b16`; the newer tip adds buyer-side Apify
+discovery changes. It is tracked as a compatibility reference, not a merge
+target to apply wholesale. The branch now publishes the canonical v2 council source in
 `frontend/src/contracts/index.ts`, the generated seller worker schema in
 `frontend/convex/lib/seller.schema.json`, persisted council/invitation records,
 and fixture-backed role execution. The seller merge now consumes that source
 for v2 role inputs/outputs and preserves its Fetch lifecycle.
 
-The fetched reference still has shared-file drift, but the resolved seller
-checkout has reconciled it as follows:
+The standalone buyer reference still has shared-file drift, but the resolved
+seller checkout has reconciled it as follows:
 
 - The fetched buyer branch still runs fixture-backed `seller_advocacy`,
   `seller_reply` and final roles directly in its `buyerJobs.ts`. The resolved
@@ -40,11 +41,12 @@ checkout has reconciled it as follows:
 The local integration gap is closed for deterministic and configured-provider
 execution: opening, advocacy, reply and final jobs use one seller job and one
 seller dispatcher path, and seller results cross back through the buyer job
-boundary without seller-owned phase closure or public promotion. Remaining
-work is external deployment/evidence and any future changes from the buyer
-developer that must be re-audited against this seam. The seller worker/parser
-and fixtures derive from the generated buyer-owned v2 source; no parallel
-council schema was added.
+boundary without seller-owned phase closure or public promotion. The current
+seller checkout also includes the buyer tip's Apify RAG discovery changes.
+Remaining work is external deployment/evidence and any future changes from the
+buyer developer that must be re-audited against this seam. The seller
+worker/parser and fixtures derive from the generated buyer-owned v2 source; no
+parallel council schema was added.
 
 The active Markdown specification remains normative while the buyer developer
 continues implementation. If `origin/geoff/buyer` lags, contradicts or omits
@@ -90,9 +92,11 @@ server-authorized option ID (or `null` for baseline), accepted offer versions
 carry `serviceOptionId`, and `validateFinalOfferRevision` checks the accepted
 opening offer, parent/frozen-basket scope, current brief fit, stock, price
 floors, private incremental contribution, delivered-total monotonicity and
-term monotonicity. The buyer-owned v2 envelope must still supply the parent
-offer, frozen basket and final proposal before Convex persistence and the Fetch
-worker can enable the migrated role.
+term monotonicity. The buyer-owned v2 envelope supplies the parent offer,
+frozen basket and final proposal before Convex persistence and the Fetch worker
+enables the migrated role. Live execution still requires the external gateway,
+secrets and deployment configuration described in
+`SELLER_FETCH_CONFIGURATION.md`.
 
 Seller entry points:
 

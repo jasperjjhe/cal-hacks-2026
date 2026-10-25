@@ -7,7 +7,7 @@ Status: active working plan for `feature/seller-side`, branched from `dev` on Oc
 Per-turn project state, compliance checks, branch/deployment status, sponsor
 decisions, and next steps are maintained in [`LOCAL_CONTEXT.md`](LOCAL_CONTEXT.md).
 
-The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan. The v5.3 council wire envelopes are published in the buyer-owned contract source at `origin/geoff/buyer` `d863b16`, and this seller runtime now consumes that source through the unified Convex/Fetch bridge; live deployment evidence remains external.
+The active implementation contract is `BUYERUNION_IMPLEMENTATION.md`, especially sections 3, 5, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19 and 20. The PDF product brief and the v4 Markdown conversion were read before this plan was created. `buyerunion-prd-v4-source.md` is an archive of historical decisions; it is not an alternate active implementation plan. The v5.3 council wire envelopes are published in the buyer-owned contract source at `origin/geoff/buyer` `df26d70` (introduced at `d863b16`), and this seller runtime now consumes that source through the unified Convex/Fetch bridge; live deployment evidence remains external.
 
 The seller-side implementation must preserve the buyer-side ownership described by the active handoff. A future buyer-side contributor will integrate through versioned contracts and Convex internal functions; this branch must not create a second workflow, buyer request store, evidence store, checkout authority or competing source of truth.
 
@@ -100,7 +100,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 
 - Add this plan and the seller sponsor-proof checklist.
 - Add the exact seller/buyer boundary types and golden fixtures.
-- Review the buyer-owned v5.3 canonical contracts at `origin/geoff/buyer` `d863b16`: request schemas stay version 1; council envelopes use version 2. Record the resolved schema revision and derive seller parsing/fixtures from it.
+- Review the buyer-owned v5.3 canonical contracts at `origin/geoff/buyer` `df26d70` (v2 introduced at `d863b16`): request schemas stay version 1; council envelopes use version 2. Record the resolved schema revision and derive seller parsing/fixtures from it.
 - Verify every new dependency against the seven-day package cooldown before installation.
 
 ### S1: deterministic seller core

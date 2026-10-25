@@ -9,14 +9,12 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-25
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current implementation checkpoint: merge in progress from the buyer fixed point
-`d863b16`; the seller v2 migration, unified schema, generated bindings, and
-buyer completion bridge are implemented locally but not committed yet. The
-remote buyer branch has since advanced to `df26d70` with buyer-only Apify
-updates that must be reconciled before the seller branch is declared current.
-This context file is updated with each implementation checkpoint. Remote seller
-status before this merge was clean and synchronized with
-`origin/feature/seller-side`.
+Current implementation checkpoint: the current buyer tip `df26d70` is
+reconciled locally. The seller v2 migration, unified schema, generated
+bindings, buyer completion bridge, and buyer-side Apify updates are present
+and verified. This context file is updated with each implementation
+checkpoint. Remote seller status before this merge was clean and synchronized
+with `origin/feature/seller-side`.
 
 ## Per-turn operating protocol
 
@@ -220,22 +218,22 @@ When integrating `origin/geoff/buyer`:
 
 For v5.3, B published the canonical schema/fixtures and coordinates the
 snapshot, checked council phases, invitation records and sealed promotion on
-the buyer branch. The fetched fixed point was `d863b16`; the current remote
-buyer tip is `df26d70` and adds buyer-side Apify work. This seller merge now
-migrates parsing/fixtures, validates seller authorship, frozen basket, policy
-authority and economics, and provides the single seller dispatch/result bridge.
-The standalone buyer branch's seller execution remains fixture-backed until
-the merged branch is configured with Fetch and the live integration is proven.
+the buyer branch. The current remote buyer tip is `df26d70` (v2 was introduced
+at `d863b16`) and adds buyer-side Apify work. This seller merge now consumes
+that source, validates seller authorship, frozen basket, policy authority and
+economics, and provides the single seller dispatch/result bridge. The
+standalone buyer branch's seller execution remains fixture-backed; this merged
+branch routes Fetch when configured and keeps fixture fallback until live
+integration is proven.
 
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
 must not also be started by that generic buyer dispatcher. At fetched ref
-`d863b16`, it used fixture seller dispatch, passed unsupported
+the standalone buyer branch uses fixture seller dispatch, passes unsupported
 `deferPromotion` to seller validation, and dropped seller provider lifecycle
 and final-service fields from shared files. The local merge resolves that
-drift through the single seller bridge; the newer `df26d70` changes are
-buyer-side Apify changes and still need to be integrated without regressing
-the bridge. The exact boundary is recorded in
+drift through the single seller bridge; the `df26d70` Apify changes are
+integrated without regressing the bridge. The exact boundary is recorded in
 `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 
 ## Sponsor strategy and evidence status
@@ -353,10 +351,10 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
-- Latest compatibility audit: buyer ref `d863b16`; this merge preserves its
-  canonical v2 council contracts, buyer tables and workflow bindings while
-  adding the seller v2 role seam. Live Fetch wiring and the buyer completion
-  bridge remain pending; drift is recorded in
+- Latest compatibility audit: buyer ref `df26d70`; this merge preserves its
+  canonical v2 council contracts, buyer tables, workflow bindings and Apify
+  evidence path while adding the seller v2 role seam. Live Fetch wiring and
+  sponsor evidence remain pending; drift is recorded in
   `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
@@ -393,11 +391,11 @@ specific proof criteria.
 
 Status at this context update: **seller v2 contract/worker migration,
 unified buyer-plus-seller Convex schema/bindings, durable v2 result records,
-seller-owned final validation, buyer-compatible dispatch/completion bridge and
-fixture-safe operator surface implemented locally; merge resolution against the
-latest buyer tip, hosted deployment, live route verification and sponsor
-evidence remain pending. Signup/onboarding is intentionally out of demo
-scope.**
+seller-owned final validation, buyer-compatible dispatch/completion bridge,
+buyer Apify updates and fixture-safe operator surface implemented locally; the
+merge checkpoint is ready to commit/push, while hosted deployment, live route
+verification and sponsor evidence remain pending. Signup/onboarding is
+intentionally out of demo scope.**
 
 Completed:
 
@@ -439,13 +437,11 @@ Completed:
   guardrails, authorized service options, merchant pause/resume, activity and
   agent-readiness status. It is explicitly labeled fixture preview and does
   not pretend to be authenticated Convex data.
-- The buyer compatibility reference used to resolve the current merge was
-  `d863b16`; the remote tip is now `df26d70` and adds buyer-side Apify changes.
-  The local merge consumes the canonical v2 role input/output, preserves
-  buyer-owned coordination, and routes configured Fetch seller jobs through one
-  seller dispatch bridge with a result query before buyer publication. The
-  latest buyer-only changes still need a clean follow-up merge and combined
-  verification.
+- The current buyer compatibility reference is `df26d70` (the canonical v2
+  source originated at `d863b16`). The local merge consumes the canonical v2
+  role input/output, preserves buyer-owned coordination, includes the buyer
+  Apify changes, and routes configured Fetch seller jobs through one seller
+  dispatch bridge with a result query before buyer publication.
 - Branch protection policy checked in with no required second approval.
 - Supply-chain controls and seven-day package-release-age policy implemented.
 - Full CI passed on the Fetch checkpoint: security tests, seller tests,
@@ -458,8 +454,8 @@ Completed:
 
 Pending:
 
-- Reconcile the current remote buyer tip `df26d70` after resolving the in-flight
-  `d863b16` merge; preserve the single Fetch seller bridge and rerun all gates.
+- Preserve the single Fetch seller bridge and rerun the compatibility check
+  after future buyer updates.
 - Set the linked Agentverse Hosted Agent's private shared secret; configure
   and deploy the Mana/public HTTPS gateway; and verify the typed query plus
   fixed HTTP route path end to end.
@@ -489,8 +485,8 @@ Pending:
 
 ## Immediate next steps
 
-1. Finish the in-flight merge, then merge/reconcile remote buyer tip
-   `df26d70`; preserve the single seller dispatcher and result bridge.
+1. Re-fetch `origin/geoff/buyer` before any future integration-sensitive
+   change; preserve the single seller dispatcher and result bridge.
 2. Regenerate Convex bindings after any shared schema change and run the
    combined buyer/seller contract and backend tests.
 3. Exercise the v2 seller roles through the generated contract and route final
