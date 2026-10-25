@@ -212,7 +212,7 @@ When integrating `origin/geoff/buyer`:
 
 For v5.3, B has now published the canonical schema/fixtures and coordinates
 the snapshot, checked council phases, invitation records and sealed promotion
-on `origin/geoff/buyer` at `53e49dc`. S must now migrate seller
+on `origin/geoff/buyer` at `d863b16`. S must now migrate seller
 parsing/fixtures and validate seller authorship, frozen basket, policy
 authority and economics before enabling new seller roles. The buyer branch's
 seller execution remains fixture-backed until this seller migration and live
@@ -221,7 +221,7 @@ Fetch integration are complete.
 Known buyer-branch hazard: its generic live provider mapping currently points
 live agent roles to CREAO. A Fetch seller job must use the seller action and
 must not also be started by that generic buyer dispatcher. At fetched ref
-`53e49dc`, it still uses fixture seller dispatch, passes unsupported
+`d863b16`, it still uses fixture seller dispatch, passes unsupported
 `deferPromotion` to seller validation, and drops seller provider lifecycle and
 final-service fields from shared files. The exact drift is recorded in
 `docs/BUYER_SELLER_INTEGRATION_NOTES.md`.
@@ -341,7 +341,7 @@ specific proof criteria.
 - `origin/geoff/buyer` and the seller feature branch have diverged. Integrate
   through the documented internal seam rather than copying duplicate
   implementations.
-- Latest compatibility audit: buyer ref `53e49dc`; the buyer branch now
+- Latest compatibility audit: buyer ref `d863b16`; the buyer branch now
   publishes the canonical v2 council contracts and fixture-backed council
   integration. Seller worker migration, shared schema reconciliation and live
   Fetch wiring remain pending; drift is recorded in
@@ -427,7 +427,7 @@ Completed:
   agent-readiness status. It is explicitly labeled fixture preview and does
   not pretend to be authenticated Convex data.
 - The latest buyer compatibility reference is `origin/geoff/buyer` at
-  `53e49dc`; it now contains the canonical v2 council contracts and a
+  `d863b16`; it now contains the canonical v2 council contracts and a
   fixture-backed council path. This seller branch still has the legacy v1
   provider boundary and must migrate from the buyer-owned source before
   enabling v5.3 roles.
@@ -477,7 +477,7 @@ Pending:
 ## Immediate next steps
 
 1. Review the published buyer-owned v5.3 contract and generated worker schema
-   at `origin/geoff/buyer` `53e49dc`; reconcile shared schemas and fixtures
+   at `origin/geoff/buyer` `d863b16`; reconcile shared schemas and fixtures
    before enabling new seller roles.
 2. Migrate seller contracts, worker/parser and fixtures to the v5.3 public
    snapshot, advocacy, grouped reply and final-invitation envelopes. Keep the

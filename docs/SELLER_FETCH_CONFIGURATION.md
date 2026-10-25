@@ -1,6 +1,6 @@
 # Seller provider runtime handoff
 
-Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The v5.3 council format is now the active specification, and the buyer branch publishes the canonical v2 envelopes at `origin/geoff/buyer` `53e49dc`; seller role migration is not implemented in this worker yet. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
+Status: the Convex action path and an Agentverse-compatible Fetch seller agent are implemented on `feature/seller-side`. The v5.3 council format is now the active specification, and the buyer branch publishes the canonical v2 envelopes at `origin/geoff/buyer` `d863b16`; seller role migration is not implemented in this worker yet. The repository still does not contain a real Agentverse URL or credential, so no live Fetch.ai prize claim is made until the external deployment is created and recorded.
 
 The agent source is in `agents/fetch-seller/`. It can be copied into an
 Agentverse Hosted Agent or run as a local uAgent. Hosted process globals are

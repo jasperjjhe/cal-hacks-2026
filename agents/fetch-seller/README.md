@@ -72,7 +72,7 @@ The active specification adds seller advocacy, grouped replies and one sealed
 final invitation per eligible candidate. The current deployed code still
 implements the legacy bounded proposal path. The buyer branch now publishes
 the canonical v2 contracts and generated worker schema at
-`origin/geoff/buyer` `53e49dc`, but this worker has not yet been migrated to
+`origin/geoff/buyer` `d863b16`, but this worker has not yet been migrated to
 those roles. Do not enable the new role names until the seller parser,
 fixtures, Convex seams and live provider path are migrated and tested from
 that source.

@@ -4,8 +4,8 @@ This note records the boundary observed while cross-referencing `origin/geoff/bu
 
 ## Latest compatibility audit
 
-The latest fetched buyer reference is `origin/geoff/buyer` at `53e49dc`
-(`feat: implement buyer council v2 with fixture seller integration`). It is
+The latest fetched buyer reference is `origin/geoff/buyer` at `d863b16`
+(`creao integration`). It is
 tracked as a compatibility reference, not a merge target to apply wholesale.
 The branch now publishes the canonical v2 council source in
 `frontend/src/contracts/index.ts`, the generated seller worker schema in
