@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current pushed commit: `f6af203` (`feat: add seller final service policy authority`).
+Current pushed commit: `0335d8a` (`docs: record seller service authority checkpoint`).
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`.
 
@@ -303,7 +303,7 @@ specific proof criteria.
   followed by pushed documentation checkpoints `c1e788c` and `fe9b70a`, then
   the tested seller service-authority checkpoint `f6af203`.
 - `origin/dev` is the merge base's current remote line; the seller branch is
-  22 commits ahead and has no commits missing from `origin/dev` at this check.
+  23 commits ahead and has no commits missing from `origin/dev` at this check.
 - `origin/geoff/buyer` and the seller feature branch have diverged (7 commits
   unique to buyer, 21 unique to seller at this check). Integrate through the
   documented internal seam rather than copying duplicate implementations.
