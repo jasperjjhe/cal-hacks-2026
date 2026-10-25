@@ -24,6 +24,7 @@ import {
 } from '../convex/lib/sellerInventory.ts'
 import { FixtureAgentPort } from '../convex/integrations/fixtureAgentPort.ts'
 import { createFetchAgentPort } from '../convex/integrations/fetchAdapter.ts'
+import { projectOperatorListing, validateOperatorListingDraft } from '../convex/lib/sellerOperator.ts'
 
 const fixtures = makeSellerFixtures()
 
@@ -105,6 +106,29 @@ test('seller brief construction excludes private buyer fields', () => {
     () => assertSellerBriefSafe({ ...brief, privateMaximumCents: 100_000 }),
     (error) => error instanceof SellerContractError && error.code === 'INVALID_INPUT',
   )
+})
+
+test('seller operator projection exposes catalog facts and rejects unsafe listing drafts', () => {
+  const snapshot = fixtures.snapshotsByMerchant.merchant_a[0]
+  const projected = projectOperatorListing(snapshot.listing, snapshot.variant, snapshot.availableQuantity)
+  assert.equal(projected.listing.id, snapshot.listing.listing.id)
+  assert.equal(projected.title, snapshot.variant.title)
+  assert.equal(projected.availableQuantity, snapshot.availableQuantity)
+  assert.equal(projected.syntheticProduct, true)
+  assert.notEqual(projected.attributes, snapshot.variant.attributes)
+  assert.deepEqual(validateOperatorListingDraft({
+    initialQuantity: 2,
+    referenceUnitCents: 99_000,
+    operatorFloorCents: 95_000,
+  }), [])
+  assert.deepEqual(validateOperatorListingDraft({
+    initialQuantity: 1.5,
+    referenceUnitCents: 95_000,
+    operatorFloorCents: 96_000,
+  }), [
+    { field: 'initialQuantity', message: 'quantity must be a whole number from zero to 10000' },
+    { field: 'operatorFloorCents', message: 'lowest accepted price cannot exceed MSRP' },
+  ])
 })
 
 test('minimum price follows the documented floor, discount and contribution formula', () => {
