@@ -94,7 +94,8 @@ SCHEMA_JSON = r'''{
                   "tech_accessory",
                   "clothing",
                   "household_accessory",
-                  "small_appliance"
+                  "small_appliance",
+                  "headphones"
                 ]
               },
               "profile": {
@@ -961,7 +962,8 @@ SCHEMA_JSON = r'''{
                           "tech_accessory",
                           "clothing",
                           "household_accessory",
-                          "small_appliance"
+                          "small_appliance",
+                          "headphones"
                         ]
                       },
                       "profile": {
@@ -3053,7 +3055,8 @@ SCHEMA_JSON = r'''{
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -3661,7 +3664,8 @@ SCHEMA_JSON = r'''{
                               "tech_accessory",
                               "clothing",
                               "household_accessory",
-                              "small_appliance"
+                              "small_appliance",
+                              "headphones"
                             ]
                           },
                           "profile": {

@@ -1,0 +1,36 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="53.4473" height="50.0004" viewBox="0 0 53.4473 50.0004" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 21">
+<path id="Union" d="M26.5723 1.20791C38.913 1.20791 48.9178 11.2119 48.918 23.5526C48.918 26.3123 48.4148 28.7883 47.5 30.9706C51.2051 31.5741 53.4473 33.7028 53.4473 36.2353C53.447 39.2369 50.2968 41.6698 45.2939 41.6698C43.7267 41.6698 42.2526 41.5484 40.9668 41.2528C41.4635 45.4875 40.4101 48.9811 35.9102 49.8456C30.9905 50.7905 28.7312 47.2906 27.748 42.5546C27.3587 42.5682 26.9666 42.5761 26.5723 42.5761C26.2312 42.5761 25.892 42.5697 25.5547 42.5595C24.5709 47.2929 22.3125 50.7902 17.3945 49.8456C12.9071 48.9835 11.8463 45.5068 12.333 41.288C11.0824 41.5598 9.66112 41.6737 8.15332 41.6737C3.15043 41.6737 0.000194257 39.2409 0 36.2392C0 33.7714 2.12895 31.6886 5.66602 31.0253C4.73675 28.8298 4.22754 26.3351 4.22754 23.5526C4.22766 11.212 14.2316 1.20803 26.5723 1.20791Z" fill="url(#paint0_radial_0_119)"/>
+<g id="Group 17">
+<ellipse id="Ellipse 14" cx="34.5642" cy="28.7678" rx="4.22744" ry="4.5294" transform="rotate(10.346 34.5642 28.7678)" fill="white"/>
+<ellipse id="Ellipse 12" cx="34.5643" cy="28.7686" rx="3.0196" ry="3.39705" transform="rotate(10.346 34.5643 28.7686)" fill="#542116"/>
+</g>
+<g id="Group 18">
+<ellipse id="Ellipse 14_2" cx="4.22744" cy="4.5294" rx="4.22744" ry="4.5294" transform="matrix(-0.983741 0.179592 0.179592 0.983741 20.9998 23.5528)" fill="white"/>
+<ellipse id="Ellipse 12_2" cx="3.0196" cy="3.39705" rx="3.0196" ry="3.39705" transform="matrix(-0.983741 0.179592 0.179592 0.983741 20.0149 24.8845)" fill="#542116"/>
+</g>
+<g id="Group 19">
+<circle id="Ellipse 15" cx="26.8745" cy="12.3796" r="0.90588" fill="#FFC7AE"/>
+<circle id="Ellipse 18" cx="17.8157" cy="6.94495" r="0.90588" fill="#FFC7AE"/>
+<circle id="Ellipse 19" cx="12.3805" cy="16.0033" r="0.90588" fill="#FFC7AE"/>
+<circle id="Ellipse 16" cx="42.5765" cy="16.6072" r="0.90588" fill="#FFC7AE"/>
+<circle id="Ellipse 17" cx="34.1215" cy="6.94495" r="0.90588" fill="#FFC7AE"/>
+</g>
+<path id="Ellipse 10" d="M15.4725 5.48377C16.7993 6.93496 16.7811 9.41175 14.552 12.1362C12.3229 14.8607 7.92074 13.3746 7.42945 12.8373C4.66043 9.80862 4.21619 5.70726 6.4372 3.67665C8.65822 1.64603 12.7034 2.45511 15.4725 5.48377Z" fill="url(#paint1_radial_0_119)"/>
+<path id="Ellipse 11" d="M37.3466 5.48377C36.0199 6.93496 36.038 9.41175 38.2671 12.1362C40.4962 14.8607 44.8984 13.3746 45.3897 12.8373C48.1587 9.80862 48.6029 5.70726 46.3819 3.67665C44.1609 1.64603 40.1157 2.45511 37.3466 5.48377Z" fill="url(#paint2_radial_0_119)"/>
+</g>
+<defs>
+<radialGradient id="paint0_radial_0_119" cx="0" cy="0" r="1" gradientTransform="matrix(0.267499 49.9106 -41.0931 0.274921 27.4999 -1.27932)" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F67956"/>
+<stop offset="1" stop-color="#F9C075"/>
+</radialGradient>
+<radialGradient id="paint1_radial_0_119" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(5.87305 1.23833) rotate(45.1786) scale(23.7963 20.7188)">
+<stop stop-color="#F65656"/>
+<stop offset="1" stop-color="#F9B575"/>
+</radialGradient>
+<radialGradient id="paint2_radial_0_119" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(46.9461 1.23833) rotate(134.821) scale(23.7963 20.7188)">
+<stop stop-color="#F65656"/>
+<stop offset="1" stop-color="#F9B575"/>
+</radialGradient>
+</defs>
+</svg>

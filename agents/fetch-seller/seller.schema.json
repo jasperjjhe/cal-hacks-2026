@@ -92,7 +92,8 @@
                   "tech_accessory",
                   "clothing",
                   "household_accessory",
-                  "small_appliance"
+                  "small_appliance",
+                  "headphones"
                 ]
               },
               "profile": {
@@ -959,7 +960,8 @@
                           "tech_accessory",
                           "clothing",
                           "household_accessory",
-                          "small_appliance"
+                          "small_appliance",
+                          "headphones"
                         ]
                       },
                       "profile": {
@@ -3051,7 +3053,8 @@
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -3659,7 +3662,8 @@
                               "tech_accessory",
                               "clothing",
                               "household_accessory",
-                              "small_appliance"
+                              "small_appliance",
+                              "headphones"
                             ]
                           },
                           "profile": {

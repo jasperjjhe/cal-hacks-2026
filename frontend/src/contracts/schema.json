@@ -53,7 +53,8 @@
             "tech_accessory",
             "clothing",
             "household_accessory",
-            "small_appliance"
+            "small_appliance",
+            "headphones"
           ]
         },
         "allowedConditions": {
@@ -308,7 +309,8 @@
             "tech_accessory",
             "clothing",
             "household_accessory",
-            "small_appliance"
+            "small_appliance",
+            "headphones"
           ]
         },
         "profile": {
@@ -523,7 +525,8 @@
                   "tech_accessory",
                   "clothing",
                   "household_accessory",
-                  "small_appliance"
+                  "small_appliance",
+                  "headphones"
                 ]
               },
               "profile": {
@@ -784,7 +787,8 @@
                   "tech_accessory",
                   "clothing",
                   "household_accessory",
-                  "small_appliance"
+                  "small_appliance",
+                  "headphones"
                 ]
               },
               "profile": {
@@ -1414,7 +1418,8 @@
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -3595,7 +3600,8 @@
                           "tech_accessory",
                           "clothing",
                           "household_accessory",
-                          "small_appliance"
+                          "small_appliance",
+                          "headphones"
                         ]
                       },
                       "profile": {
@@ -5272,7 +5278,8 @@
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -5880,7 +5887,8 @@
                               "tech_accessory",
                               "clothing",
                               "household_accessory",
-                              "small_appliance"
+                              "small_appliance",
+                              "headphones"
                             ]
                           },
                           "profile": {
@@ -6953,7 +6961,8 @@
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -7901,6 +7910,14 @@
               "type": "null"
             }
           ]
+        },
+        "highlights": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          }
         }
       },
       "required": [
@@ -7999,7 +8016,8 @@
                       "tech_accessory",
                       "clothing",
                       "household_accessory",
-                      "small_appliance"
+                      "small_appliance",
+                      "headphones"
                     ]
                   },
                   "profile": {
@@ -8381,7 +8399,8 @@
                               "tech_accessory",
                               "clothing",
                               "household_accessory",
-                              "small_appliance"
+                              "small_appliance",
+                              "headphones"
                             ]
                           },
                           "profile": {
@@ -9315,6 +9334,14 @@
                     "type": "null"
                   }
                 ]
+              },
+              "highlights": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 4000
+                }
               }
             },
             "required": [
@@ -11094,7 +11121,8 @@
                   "tech_accessory",
                   "clothing",
                   "household_accessory",
-                  "small_appliance"
+                  "small_appliance",
+                  "headphones"
                 ]
               },
               "profile": {
