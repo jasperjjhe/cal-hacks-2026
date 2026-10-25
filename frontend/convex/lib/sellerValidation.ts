@@ -42,6 +42,7 @@ const NUMERIC_UNITS: Record<string, NumericUnit> = {
   V: { family: 'voltage', multiplier: 1 },
   Hz: { family: 'frequency', multiplier: 1 },
   '%': { family: 'percentage', multiplier: 1 },
+  h: { family: 'duration', multiplier: 1 },
 }
 
 function isSafeCents(value: unknown, minimum = 0): value is Cents {

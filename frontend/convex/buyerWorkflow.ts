@@ -1,4 +1,5 @@
 import { buyerTiming } from "./buyer/timing.ts";
+import { computeHighlights, type HighlightInput } from "./buyer/highlights.ts";
 import { merchantEligible } from "./buyer/eligibility";
 import {
   cancel,
@@ -365,6 +366,17 @@ export const publishResults = internalMutation({
       )
       .take(6);
     let selectable = 0;
+    const highlightInputs: HighlightInput[] = [];
+    for (const row of rows) {
+      const variantId = row.card.products[0].variantId as string;
+      const variant = await ctx.db
+        .query("variants")
+        .withIndex("by_variantId", (q) => q.eq("variantId", variantId))
+        .first();
+      if (variant && row.data.policyValid && row.data.requirementsValidExceptBudget && row.data.affordable)
+        highlightInputs.push({ offerId: String(row._id), totalCents: row.card.totalCents, attributes: variant.attributes });
+    }
+    const highlights = computeHighlights(highlightInputs);
     for (const row of rows) {
       const data = contracts.OfferVersion.parse(row.data);
       const card = contracts.OfferCard.parse(row.card);
@@ -392,6 +404,7 @@ export const publishResults = internalMutation({
               ? "unavailable"
               : card.evidenceStatus,
           selectable: valid,
+          highlights: highlights.get(String(row._id)) ?? [],
           unavailableReason: valid
             ? null
             : !data.affordable

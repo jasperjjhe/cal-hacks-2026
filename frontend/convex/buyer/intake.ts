@@ -8,7 +8,9 @@ export function fixtureIntake(
   const raw = buyers.map((m) => m.text).join("\n");
   const category = /laptop|macbook|thinkpad|computer/i.test(raw)
     ? "laptop"
-    : /shirt|tee|cotton/i.test(raw)
+    : /headphone|earbud|earphone|\bxm5\b|wh-1000/i.test(raw)
+      ? "headphones"
+      : /shirt|tee|cotton/i.test(raw)
       ? "clothing"
       : /shelf|household/i.test(raw)
         ? "household_accessory"
@@ -126,6 +128,19 @@ export function fixtureIntake(
           /(?:under|max(?:imum)?(?:\s+width)?|at most)\s*(\d+)\s*mm/i,
         );
     }
+    if (category === "headphones") {
+      const color = raw.match(/\b(black|silver|white|blue)\b/i);
+      if (color)
+        add("color", "equals", color[1].toLowerCase(), null, /\b(black|silver|white|blue)\b/i);
+      const style = raw.match(/\b(over|on|in)[- ]ear\b/i);
+      if (style)
+        add("headphoneType", "equals", `${style[1].toLowerCase()}-ear`, null, /\b(over|on|in)[- ]ear\b/i);
+      const battery = raw.match(/(\d{1,3})\+?\s*(?:h\b|hr|hrs|hours?)/i);
+      if (battery)
+        add("batteryHours", "min", Number(battery[1]), "h", /(\d{1,3})\+?\s*(?:h\b|hr|hrs|hours?)/i);
+      if (/noise[- ]cancel|\banc\b/i.test(raw))
+        add("noiseCancelling", "equals", true, null, /noise[- ]cancel|\banc\b/i);
+    }
     if (category === "small_appliance" && /\bUS\b|120\s*V/i.test(raw)) {
       add("voltage", "equals", 120, "V", /\bUS\b|120\s*V/i);
       add("frequency", "equals", 60, "Hz", /\bUS\b|120\s*V/i);
@@ -138,7 +153,9 @@ export function fixtureIntake(
           ? profiles.clothing
           : category === "household_accessory"
             ? profiles.household
-            : profiles.appliance;
+            : category === "headphones"
+              ? profiles.headphones
+              : profiles.appliance;
     lines.push({
       lineId: "line-main",
       role: "primary",
@@ -147,7 +164,7 @@ export function fixtureIntake(
       quantity: 1,
       allowedConditions:
         /only new|new only/i.test(raw) ||
-        ["clothing", "household_accessory"].includes(category)
+        ["clothing", "household_accessory", "headphones"].includes(category)
           ? ["new"]
           : ["new", "refurbished"],
       requirements,
@@ -161,13 +178,28 @@ export function fixtureIntake(
     proposedPrivateMaximumCents: maximum,
     proposedSharedTargetCents: null,
     origins,
-    clarificationQuestions: unresolved.length
-      ? [
-          "Please confirm the missing category, private maximum and delivery deadline in your brief.",
-        ]
-      : [],
+    clarificationQuestions:
+      category === "headphones"
+        ? [
+            ...(maximum ? [] : ["What is the most you want to spend, delivered?"]),
+            ...(lines[0]?.requirements.some((r) => r.fieldId === "batteryHours")
+              ? []
+              : ["How many hours of battery life do you need?"]),
+            ...(deadline ? [] : ["By what date do you need them?"]),
+          ]
+        : unresolved.length
+          ? [
+              "Please confirm the missing category, private maximum and delivery deadline in your brief.",
+            ]
+          : [],
     suggestedReplies:
-      category === "laptop"
+      category === "headphones"
+        ? [
+            { id: "battery20", label: "20+ hours", text: "At least 20 hours of battery" },
+            { id: "battery30", label: "30+ hours", text: "At least 30 hours of battery" },
+            { id: "budget450", label: "Up to $450", text: "Budget is $450" },
+          ]
+        : category === "laptop"
         ? [
             { id: "battery", label: "Battery first", text: "Battery first" },
             { id: "new", label: "Only new", text: "Only new" },
