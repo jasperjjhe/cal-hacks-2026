@@ -291,6 +291,14 @@ specific proof criteria.
 - The Fetch transport decision is pending direct-route verification: Hosted
   Agent direct REST if the dashboard exposes it; otherwise Mana/public HTTPS
   runtime plus Agentverse mailbox/discovery.
+- Chat Protocol decision: it may be added as an optional public Agentverse/
+  ASI:One discovery and demo surface, but it is not the seller-job transport or
+  source of truth. Chat messages are not allowed to carry raw buyer prompts,
+  private budgets, competitor data, hidden seller pricing, or arbitrary job
+  commands. Any future Chat handler may answer public capability/catalog
+  questions only. Core seller work remains the strict REST contract or a
+  custom typed uAgents Protocol/Dialogue with Convex-owned job scope,
+  idempotency, and reconciliation.
 
 ## Current implementation status
 

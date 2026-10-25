@@ -61,6 +61,18 @@ operations and signed message-envelope submission; it does not establish that
 Treat direct REST reachability as an external verification step rather than an
 assumption.
 
+## Chat Protocol role
+
+The Agent Chat Protocol can be enabled later for public Agentverse/ASI:One
+discoverability or a seller-capability demonstration. It must not replace the
+seller job contract: Chat Protocol is conversational/string-oriented, while
+seller jobs require strict typed inputs, server-owned scope, idempotency,
+pending/terminal state, and reconciliation. A Chat handler must not accept raw
+buyer prompts, private budgets, competitor data, hidden floors/costs, or an
+arbitrary job command. If Fetch mailbox transport is preferred for the core
+workflow, implement a separate typed uAgents Protocol/Dialogue and keep Chat
+as an optional public surface.
+
 The pure logic test can be run without the uAgents package:
 
 ```text
