@@ -9,53 +9,26 @@ from __future__ import annotations
 
 import os
 import secrets
+import json
 from typing import Any, Dict, Optional
 
-from uagents import Agent, Context, Model
+from uagents import Agent, Context
 
+from protocol import (
+    CancelRequest,
+    MailboxResponse,
+    PollRequest,
+    ProviderResponse,
+    ReconcileRequest,
+    SellerMessage,
+    StartRequest,
+)
 from seller_logic import SellerInputError, bounded_id, build_decision
 
 
 AGENT_NAME = os.getenv("FETCH_SELLER_AGENT_NAME", "buyerunion-fetch-seller")
 SHARED_TOKEN_ENV = "FETCH_SELLER_SHARED_TOKEN"
 MODEL_NAME = "fetch-seller-deterministic-v1"
-
-
-class StartRequest(Model):
-    jobId: str
-    runId: str
-    phaseId: str
-    role: str
-    inputRef: str
-    inputDigest: str
-    input: Dict[str, Any]
-    providerAuthToken: Optional[str] = None
-
-
-class PollRequest(Model):
-    jobId: str
-    providerRunId: Optional[str] = None
-    providerAuthToken: Optional[str] = None
-
-
-class ReconcileRequest(Model):
-    jobId: str
-    providerAuthToken: Optional[str] = None
-
-
-class CancelRequest(Model):
-    jobId: str
-    providerRunId: Optional[str] = None
-    providerAuthToken: Optional[str] = None
-
-
-class ProviderResponse(Model):
-    status: str
-    providerRunId: str
-    output: Optional[Dict[str, Any]] = None
-    model: Optional[str] = None
-    errorCode: Optional[str] = None
-    errorRetryable: Optional[bool] = None
 
 
 def _provider_run_id(job_id: str) -> str:
@@ -166,29 +139,7 @@ def _poll_record(ctx: Context, job_id: str, supplied_run_id: Optional[str]) -> P
     return ProviderResponse(status="completed", providerRunId=provider_run_id, output=decision, model=MODEL_NAME)
 
 
-agent_kwargs: Dict[str, Any] = {"name": AGENT_NAME}
-seed = os.getenv("FETCH_SELLER_AGENT_SEED", "").strip()
-if seed:
-    agent_kwargs["seed"] = seed
-port = os.getenv("FETCH_SELLER_AGENT_PORT", "").strip()
-if port:
-    try:
-        agent_kwargs["port"] = int(port)
-    except ValueError as error:
-        raise RuntimeError("FETCH_SELLER_AGENT_PORT must be an integer") from error
-endpoint = os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip()
-if endpoint:
-    agent_kwargs["endpoint"] = [endpoint]
-if os.getenv("FETCH_SELLER_AGENT_MAILBOX", "").strip().lower() == "true":
-    # Useful for a local/Mana deployment that should also register with
-    # Agentverse. Hosted Agentverse runs do not need this flag.
-    agent_kwargs["mailbox"] = True
-
-agent = Agent(**agent_kwargs)
-
-
-@agent.on_rest_post("/seller/jobs", StartRequest, ProviderResponse)
-async def start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
+def _start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
     job_id, provider_run_id = _request_job_id(request.jobId)
     if not _authorized(request.providerAuthToken):
         return _failed(provider_run_id, "PROVIDER_AUTH")
@@ -218,24 +169,21 @@ async def start_seller_job(ctx: Context, request: StartRequest) -> ProviderRespo
     return ProviderResponse(status="pending", providerRunId=provider_run_id, model=MODEL_NAME)
 
 
-@agent.on_rest_post("/seller/jobs/poll", PollRequest, ProviderResponse)
-async def poll_seller_job(ctx: Context, request: PollRequest) -> ProviderResponse:
+def _poll_seller_job(ctx: Context, request: PollRequest) -> ProviderResponse:
     job_id, provider_run_id = _request_job_id(request.jobId)
     if not _authorized(request.providerAuthToken):
         return _failed(provider_run_id, "PROVIDER_AUTH")
     return _poll_record(ctx, job_id, request.providerRunId)
 
 
-@agent.on_rest_post("/seller/jobs/reconcile", ReconcileRequest, ProviderResponse)
-async def reconcile_seller_job(ctx: Context, request: ReconcileRequest) -> ProviderResponse:
+def _reconcile_seller_job(ctx: Context, request: ReconcileRequest) -> ProviderResponse:
     job_id, provider_run_id = _request_job_id(request.jobId)
     if not _authorized(request.providerAuthToken):
         return _failed(provider_run_id, "PROVIDER_AUTH")
     return _poll_record(ctx, job_id, provider_run_id)
 
 
-@agent.on_rest_post("/seller/jobs/cancel", CancelRequest, ProviderResponse)
-async def cancel_seller_job(ctx: Context, request: CancelRequest) -> ProviderResponse:
+def _cancel_seller_job(ctx: Context, request: CancelRequest) -> ProviderResponse:
     job_id, provider_run_id = _request_job_id(request.jobId)
     if not _authorized(request.providerAuthToken):
         return _failed(provider_run_id, "PROVIDER_AUTH")
@@ -249,6 +197,132 @@ async def cancel_seller_job(ctx: Context, request: CancelRequest) -> ProviderRes
     record["response"] = _stored_response("cancelled", provider_run_id)
     _store_record(ctx, job_id, record)
     return ProviderResponse(status="cancelled", providerRunId=provider_run_id, model=MODEL_NAME)
+
+
+def _handle_mailbox_message(ctx: Context, request: SellerMessage) -> ProviderResponse:
+    job_id, provider_run_id = _request_job_id(request.jobId)
+    operation = request.operation.strip().lower()
+    if operation == "start":
+        if (
+            request.runId is None
+            or request.phaseId is None
+            or request.role is None
+            or request.inputRef is None
+            or request.inputDigest is None
+            or not isinstance(request.inputJson, str)
+        ):
+            return _failed(provider_run_id, "INVALID_INPUT")
+        try:
+            input_value = json.loads(request.inputJson)
+            if not isinstance(input_value, dict):
+                return _failed(provider_run_id, "INVALID_INPUT")
+            return _start_seller_job(
+                ctx,
+                StartRequest(
+                    jobId=request.jobId,
+                    runId=request.runId,
+                    phaseId=request.phaseId,
+                    role=request.role,
+                    inputRef=request.inputRef,
+                    inputDigest=request.inputDigest,
+                    input=input_value,
+                    providerAuthToken=request.providerAuthToken,
+                ),
+            )
+        except Exception:
+            return _failed(provider_run_id, "INVALID_INPUT")
+    if operation == "poll":
+        return _poll_seller_job(
+            ctx,
+            PollRequest(
+                jobId=request.jobId,
+                providerRunId=request.providerRunId or None,
+                providerAuthToken=request.providerAuthToken,
+            ),
+        )
+    if operation == "reconcile":
+        return _reconcile_seller_job(
+            ctx,
+            ReconcileRequest(jobId=request.jobId, providerAuthToken=request.providerAuthToken),
+        )
+    if operation == "cancel":
+        return _cancel_seller_job(
+            ctx,
+            CancelRequest(
+                jobId=request.jobId,
+                providerRunId=request.providerRunId or None,
+                providerAuthToken=request.providerAuthToken,
+            ),
+        )
+    return _failed(provider_run_id, "INVALID_OPERATION")
+
+
+def _mailbox_response(response: ProviderResponse) -> MailboxResponse:
+    output_json = ""
+    if response.output is not None:
+        output_json = json.dumps(response.output, separators=(",", ":"), ensure_ascii=True)
+    return MailboxResponse(
+        status=response.status,
+        providerRunId=response.providerRunId,
+        outputJson=output_json,
+        model=response.model or "",
+        errorCode=response.errorCode or "",
+        errorRetryable="" if response.errorRetryable is None else str(response.errorRetryable).lower(),
+    )
+
+
+agent_kwargs: Dict[str, Any] = {"name": AGENT_NAME}
+seed = os.getenv("FETCH_SELLER_AGENT_SEED", "").strip()
+if seed:
+    agent_kwargs["seed"] = seed
+port = os.getenv("FETCH_SELLER_AGENT_PORT", "").strip()
+if port:
+    try:
+        agent_kwargs["port"] = int(port)
+    except ValueError as error:
+        raise RuntimeError("FETCH_SELLER_AGENT_PORT must be an integer") from error
+endpoint = os.getenv("FETCH_SELLER_AGENT_ENDPOINT", "").strip()
+if endpoint:
+    agent_kwargs["endpoint"] = [endpoint]
+if os.getenv("FETCH_SELLER_AGENT_MAILBOX", "").strip().lower() == "true":
+    # Useful for a local/Mana deployment that should also register with
+    # Agentverse. Hosted Agentverse runs do not need this flag.
+    agent_kwargs["mailbox"] = True
+
+agent = Agent(**agent_kwargs)
+
+
+REST_AVAILABLE = callable(getattr(agent, "on_rest_post", None))
+
+if REST_AVAILABLE:
+
+    @agent.on_rest_post("/seller/jobs", StartRequest, ProviderResponse)
+    async def start_seller_job(ctx: Context, request: StartRequest) -> ProviderResponse:
+        return _start_seller_job(ctx, request)
+
+    @agent.on_rest_post("/seller/jobs/poll", PollRequest, ProviderResponse)
+    async def poll_seller_job(ctx: Context, request: PollRequest) -> ProviderResponse:
+        return _poll_seller_job(ctx, request)
+
+    @agent.on_rest_post("/seller/jobs/reconcile", ReconcileRequest, ProviderResponse)
+    async def reconcile_seller_job(ctx: Context, request: ReconcileRequest) -> ProviderResponse:
+        return _reconcile_seller_job(ctx, request)
+
+    @agent.on_rest_post("/seller/jobs/cancel", CancelRequest, ProviderResponse)
+    async def cancel_seller_job(ctx: Context, request: CancelRequest) -> ProviderResponse:
+        return _cancel_seller_job(ctx, request)
+
+
+@agent.on_query(model=SellerMessage, replies={MailboxResponse})
+async def seller_query(ctx: Context, sender: str, request: SellerMessage) -> None:
+    """Handle the same bounded job contract over hosted Agentverse transport."""
+
+    try:
+        response = _handle_mailbox_message(ctx, request)
+    except Exception:
+        _, provider_run_id = _request_job_id(request.jobId)
+        response = _failed(provider_run_id, "PROVIDER_PROTOCOL")
+    await ctx.send(sender, _mailbox_response(response))
 
 
 if __name__ == "__main__":

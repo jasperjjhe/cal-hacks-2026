@@ -32,8 +32,8 @@ FETCH_SELLER_POLL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/poll
 FETCH_SELLER_CANCEL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/cancel
 FETCH_SELLER_ALLOWED_HOSTS=<verified-agent-host>
 FETCH_SELLER_REQUEST_TIMEOUT_MS=8000
-FETCH_SELLER_CONFIG_REVISION=fetch-seller-agentverse-v1
-FETCH_SELLER_AGENT_TOKEN=<same long random secret configured as Agentverse FETCH_SELLER_SHARED_TOKEN>
+FETCH_SELLER_CONFIG_REVISION=fetch-seller-agentverse-gateway-v1
+FETCH_SELLER_AGENT_TOKEN=<gateway secret, matching FETCH_SELLER_GATEWAY_TOKEN>
 ```
 
 Recommended for ambiguous-start reconciliation:
@@ -42,18 +42,18 @@ Recommended for ambiguous-start reconciliation:
 FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/reconcile
 ```
 
-The host must be an exact HTTPS hostname allowlisted for this deployment. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The Fetch adapter uses POST for poll, reconcile and cancel and includes the application `jobId` in the typed body. It sends the server-side token as `providerAuthToken` in the POST body because the uAgents REST handler consumes a request model; the token is also sent as a bearer header and is never logged or persisted.
+The host must be an exact HTTPS hostname allowlisted for the Mana gateway. Do not use a wildcard, URL path, IP literal or arbitrary buyer-provided URL. The Fetch adapter uses POST for poll, reconcile and cancel and includes the application `jobId` in the typed body. It sends the gateway token as a bearer header and body; the gateway replaces that body token with the separately stored Agentverse shared secret for the typed uAgents query. Neither token is logged or persisted.
 
 The agent returns JSON with a bounded `providerRunId` and one of `pending`, `completed`, `failed` or `cancelled`; completed responses include the strict `SellerDecision` contract from `frontend/convex/lib/seller.schema.json`. A job starts pending, remains pending through the first poll, and becomes terminal on the next poll. Repeated starts with the same `jobId` and input digest replay the stored response; a different digest is rejected.
 
 ## Agentverse setup
 
 1. Authenticate AVCTL with `avctl auth login` and check `avctl auth status`. The checked-in `agents/fetch-seller/.avctl/config.toml` links this repository to the existing Agentverse agent; do not create a second agent or use `hosting sync` as the source of truth.
-2. From `agents/fetch-seller/`, run `avctl hosting deploy -f agent.py,seller_logic.py,README.md,pyproject.toml`. The deployment uses the pinned Agentverse-supported `uagents==0.25.5` dependency.
-3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret with `avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN`. Generate a new random value for the deployment; do not reuse a source-control or personal credential. Start/restart the agent and record its compiled/running status.
-4. Confirm whether the dashboard exposes a public HTTPS base URL for the custom REST routes. The Agentverse hosting control-plane URL or agent address alone is not a valid `FETCH_SELLER_START_URL`.
-5. If direct custom REST is exposed, verify all four routes and use that exact HTTPS host. If it is not exposed, deploy the same source on the team's public Mana endpoint with `FETCH_SELLER_AGENT_ENDPOINT` and optional `FETCH_SELLER_AGENT_MAILBOX=true`; use the Mana HTTPS host for Convex and keep the Agentverse address as discovery/provenance evidence.
-6. Set the Convex variables above with `npx convex env set NAME VALUE` from `frontend/` in a protected shell only after the route host has been verified.
+2. From `agents/fetch-seller/`, run `avctl hosting deploy -f agent.py,protocol.py,seller_logic.py`. The deployment uses the typed `SellerMessage` query contract and the pinned Agentverse-supported `uagents==0.25.5` repository manifest.
+3. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret with `avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN`. Generate a new random value for the deployment; do not reuse a source-control or personal credential. The current linked agent is compiled and running.
+4. The current hosted wrapper does not expose `on_rest_post`; do not use the Agentverse address or control-plane URL as `FETCH_SELLER_START_URL`. The hosted seller is reached through the typed uAgents query contract.
+5. Run `gateway.py` on the public Mana edge with `FETCH_SELLER_AGENT_ADDRESS`, `FETCH_SELLER_GATEWAY_TOKEN`, and `FETCH_SELLER_SHARED_TOKEN`. Terminate TLS at the Mana/public edge and expose only the four fixed `/seller/jobs*` POST routes. The gateway forwards to the fixed Agentverse address and never accepts a client-supplied destination or provider secret.
+6. Set the Convex variables above with `npx convex env set NAME VALUE` from `frontend/` in a protected shell, using the verified Mana gateway host only after its HTTPS routes and gateway authentication have been tested.
 7. Run one live seller job, one replay, one pending-to-terminal poll sequence, one explicit reconciliation, one cancellation, and one malformed/timeout recovery. Add the non-secret evidence to `docs/SELLER_SPONSOR_PROOF.md`.
 
 AVCTL device-login credentials are short-lived by design. The CLI exposes no

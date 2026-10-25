@@ -13,7 +13,7 @@ after review with:
 
 ```text
 avctl auth status
-avctl hosting deploy -f agent.py,seller_logic.py,README.md,pyproject.toml
+avctl hosting deploy -f agent.py,protocol.py,seller_logic.py
 ```
 
 `hosting deploy` updates and restarts the configured Agentverse agent. Do not
@@ -21,6 +21,26 @@ use the hosted editor as an untracked source of truth. If a hosted-editor
 change is made for an emergency, reconcile it back into Git immediately.
 Hosted Agents reset process globals between invocations, so this implementation
 stores job state with `ctx.storage`.
+
+The hosted Agentverse runtime uses the typed `SellerMessage` query contract in
+`protocol.py`. The current hosted wrapper does not expose `on_rest_post`, so
+Convex must not use the Agentverse address as an HTTP URL. For the existing
+Convex HTTP port, run `gateway.py` on the public Mana edge; it authenticates
+Convex, forwards only the four fixed operations as a uAgents query to this
+Agentverse address, and returns the validated provider response. The gateway
+must be behind HTTPS and receives these runtime-only variables:
+
+```text
+FETCH_SELLER_AGENT_ADDRESS=<this Agentverse address>
+FETCH_SELLER_GATEWAY_TOKEN=<Convex-to-gateway secret>
+FETCH_SELLER_SHARED_TOKEN=<gateway-to-agent secret>
+FETCH_SELLER_GATEWAY_HOST=127.0.0.1
+FETCH_SELLER_GATEWAY_PORT=8787
+```
+
+`pyproject.toml` is checked in for reproducible local/Mana setup and pins the
+Agentverse-supported `uagents==0.25.5`; Agentverse's hosted uploader accepts
+the Python modules and manages its runtime package allowlist separately.
 
 AVCTL device authentication is intentionally short-lived. The current CLI has
 no documented flag to extend the device-token lifetime; run `avctl auth login`
@@ -35,24 +55,13 @@ Set the shared runtime secret in Agentverse, not in source control:
 avctl hosting add secrets FETCH_SELLER_SHARED_TOKEN
 ```
 
-The command prompts for the value. Use a new random secret and configure the
-same value in the protected Convex environment as
-`FETCH_SELLER_AGENT_TOKEN`.
-
-Agentverse hosting and direct REST reachability are separate checks. The
-Agentverse control-plane address is not automatically a substitute for the
-`FETCH_SELLER_*_URL` values. Confirm that the dashboard exposes a public HTTPS
-base URL for these custom REST routes before configuring Convex. If it does
-not, run the same source on the team's public Mana endpoint, set
-`FETCH_SELLER_AGENT_ENDPOINT` and `FETCH_SELLER_AGENT_MAILBOX=true`, and use
-that exact HTTPS host for Convex while Agentverse provides discovery/mailbox
-connectivity.
-
-Configure `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret. The value must be a
-long random token shared only with the Convex deployment's
-`FETCH_SELLER_AGENT_TOKEN` environment variable. The agent fails closed if the
-secret is missing or does not match. Do not put the value in this repository,
-the agent profile, or a demo recording.
+The command prompts for the value. Use a new random secret shared only with
+the Mana gateway's `FETCH_SELLER_SHARED_TOKEN` environment variable. The
+Convex `FETCH_SELLER_AGENT_TOKEN` is a separate gateway secret matching
+`FETCH_SELLER_GATEWAY_TOKEN`; it must not be reused as the Agentverse secret.
+The agent fails closed if its shared secret is missing or does not match. Do
+not put either value in this repository, the agent profile, or a demo
+recording.
 
 The routes are fixed, typed POST endpoints:
 
@@ -64,7 +73,7 @@ The routes are fixed, typed POST endpoints:
 | Cancel | `/seller/jobs/cancel` | Best-effort cancellation |
 
 The Convex environment should point every URL at the exact HTTPS host exposed
-by the deployed agent:
+by the deployed Mana gateway:
 
 ```text
 FETCH_SELLER_START_URL=https://<verified-agent-host>/seller/jobs
@@ -73,14 +82,14 @@ FETCH_SELLER_RECONCILE_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/re
 FETCH_SELLER_CANCEL_URL_TEMPLATE=https://<verified-agent-host>/seller/jobs/cancel
 FETCH_SELLER_ALLOWED_HOSTS=<verified-agent-host>
 FETCH_SELLER_REQUEST_TIMEOUT_MS=8000
-FETCH_SELLER_CONFIG_REVISION=fetch-seller-agentverse-v1
-FETCH_SELLER_AGENT_TOKEN=<same secret value, entered only with `npx convex env set`>
+FETCH_SELLER_CONFIG_REVISION=fetch-seller-agentverse-gateway-v1
+FETCH_SELLER_AGENT_TOKEN=<gateway secret, entered only with `npx convex env set`>
 ```
 
-The Convex adapter sends the token as a bearer header and, for these Fetch
-routes, as `providerAuthToken` inside the POST envelope because the uAgents REST
-handler receives a typed request model. The token is not logged or persisted by
-the agent.
+The Convex adapter sends the gateway token as a bearer header and POST field.
+The gateway authenticates that token, discards the client-supplied provider
+token, and injects the separately stored Agentverse shared secret into the
+typed uAgents query. Neither token is logged or persisted by the agent.
 
 ## Local smoke test
 

@@ -9,7 +9,7 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current pushed commit: pending this turn
+Current pushed commit: use the current `feature/seller-side` branch HEAD; refresh this line after each push.
 Remote status at last review: clean and synchronized with
 `origin/feature/seller-side`
 
@@ -116,8 +116,8 @@ use the product's private secret-entry mechanism or a protected local shell.
 
 ### Fetch seller agent
 
-- `agents/fetch-seller/agent.py` is an Agentverse-compatible uAgent with fixed
-  typed POST routes:
+- `agents/fetch-seller/agent.py` is an Agentverse-compatible uAgent with a
+  typed query/mailbox contract and optional fixed POST routes:
   - `/seller/jobs` — idempotent start;
   - `/seller/jobs/poll` — known-run polling;
   - `/seller/jobs/reconcile` — application-job reconciliation;
@@ -126,11 +126,20 @@ use the product's private secret-entry mechanism or a protected local shell.
   matching. It rejects private fields, oversized/non-JSON input, wrong merchant
   scope, malformed catalog/policy data, unsupported units, and unknown hard
   requirements. It proposes the public reference price only.
+- `agents/fetch-seller/protocol.py` is the single source of truth for the
+  typed seller message, mailbox response, REST request, and provider response
+  models. Hosted Agentverse uses its schema-safe query wire form.
+- `agents/fetch-seller/gateway.py` is the dependency-light Mana/public HTTP
+  bridge. It authenticates Convex, forwards only fixed operations to the
+  configured Agentverse address, and never accepts a client-selected agent or
+  provider secret.
 - Agent Storage holds only bounded job metadata, the input digest, state, and
   the validated decision. It does not store the shared token or full inbound
   request envelope.
-- The shared Agentverse secret is required and fails closed when missing or
-  incorrect. Convex sends it only from the server-created provider envelope.
+- The Agentverse shared secret is required at the gateway/agent boundary and
+  fails closed when missing or incorrect. Convex uses a separate gateway
+  secret; neither secret is stored in the repository or forwarded from a
+  browser.
 - `agents/fetch-seller/.avctl/config.toml` links the repository to the existing
   blank Agentverse agent address, and `pyproject.toml` pins the
   Agentverse-supported `uagents==0.25.5` dependency. The repository remains
@@ -140,15 +149,14 @@ use the product's private secret-entry mechanism or a protected local shell.
   device credential is short-lived. The current CLI exposes no documented
   lifetime-extension flag; re-authentication or an explicitly supported
   protected automation token is required for unattended deployment.
-- No shared Agent Secret, verified public Agentverse/Mana HTTPS route, or live
-  provider run has been configured or claimed yet.
-- Transport caveat: official Agentverse hosting documentation exposes hosted
-  agent identity/control metadata and message-envelope submission, while the
-  uAgents custom REST documentation demonstrates direct routes on the running
-  agent. A hosted-agent address/control-plane URL must not be assumed to proxy
-  arbitrary custom REST routes. Verify that explicitly; otherwise run the same
-  agent on the team's public Mana HTTPS endpoint (optionally with mailbox
-  registration) and point Convex at that exact endpoint.
+- No shared Agent Secret, verified public Mana HTTPS gateway, or live provider
+  run has been configured or claimed yet.
+- Transport status: the linked hosted Agentverse wrapper was verified to lack
+  `on_rest_post`. It now runs the typed `SellerMessage` query contract. The
+  Agentverse address/control-plane URL must not be used as a Convex HTTP host;
+  run `gateway.py` on Mana/public HTTPS and point Convex at that exact gateway
+  host. Custom REST routes remain available only on a runtime that explicitly
+  exposes them.
 
 ### Buyer-side boundary
 
@@ -293,12 +301,12 @@ specific proof criteria.
   committed.
 - The development deployment is smoke-test evidence, not production/Auth or
   sponsor evidence.
-- Fetch Agentverse URL, Agent Secret, Convex Fetch environment variables,
+- Fetch Agent Secret, Mana gateway URL, Convex Fetch environment variables,
   production Convex/Auth, Mana runtime, CREAO project/agent, Visa operation,
   and buyer-side live proof remain external handoffs.
-- The Fetch transport decision is pending direct-route verification: Hosted
-  Agent direct REST if the dashboard exposes it; otherwise Mana/public HTTPS
-  runtime plus Agentverse mailbox/discovery.
+- The Fetch transport is now selected: typed uAgents query to the hosted
+  Agentverse seller through the Mana/public HTTPS gateway. Direct hosted REST
+  is not claimed because the linked runtime does not expose it.
 - Chat Protocol decision: it may be added as an optional public Agentverse/
   ASI:One discovery and demo surface, but it is not the seller-job transport or
   source of truth. Chat messages are not allowed to carry raw buyer prompts,
@@ -318,12 +326,16 @@ Completed:
 
 - Seller contracts, validation, inventory helpers, Convex schema/functions,
   provider-neutral adapters, job orchestration, fixture catalog, and tests.
-- Agentverse-compatible Fetch seller source, fixed typed REST routes, shared
-  secret authentication, Agent Storage state, replay protection, bounded
-  matching, and pure Python tests.
+- Agentverse-compatible Fetch seller source, typed query plus optional fixed
+  REST routes, shared secret authentication, Agent Storage state, replay
+  protection, bounded matching, and pure Python tests.
 - AVCTL v0.1.18 is installed and authenticated; the existing blank Agentverse
   agent is linked in checked-in `.avctl/config.toml`, with a pinned
   `pyproject.toml` for hosted deployment.
+- The linked Agentverse agent has been deployed with `agent.py`, `protocol.py`,
+  and `seller_logic.py`; its current status is compiled/running and its latest
+  logs show successful startup and Almanac registration. Historical failed
+  revisions remain in the log history and are not current proof.
 - Fetch configuration, sponsor proof, seller implementation plan, and buyer/
   seller integration notes updated.
 - Branch protection policy checked in with no required second approval.
@@ -338,10 +350,9 @@ Completed:
 
 Pending:
 
-- Deploy the checked-in seller project to the linked Agentverse Hosted Agent
-  with AVCTL; set its private shared secret; and verify whether it exposes
-  direct HTTPS custom REST routes. If not, deploy the same source on
-  Mana/public HTTPS with mailbox registration.
+- Set the linked Agentverse Hosted Agent's private shared secret; configure
+  and deploy the Mana/public HTTPS gateway; and verify the typed query plus
+  fixed HTTP route path end to end.
 - Configure Convex `FETCH_SELLER_*` variables in the target deployment without
   exposing values.
 - Capture live Fetch run/replay/poll/reconcile/cancel/failure evidence in the
@@ -356,11 +367,11 @@ Pending:
 
 ## Immediate next steps
 
-1. From `agents/fetch-seller/`, run `avctl hosting deploy -f
-   agent.py,seller_logic.py,README.md,pyproject.toml` for the linked agent, then
-   add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret and start it. Do not
-   paste the secret into chat.
-2. Verify the four agent routes and record the exact public HTTPS host, agent
+1. Add `FETCH_SELLER_SHARED_TOKEN` as an Agent Secret for the linked hosted
+   agent, then configure `gateway.py` on Mana with a separate gateway token and
+   the fixed Agentverse address. Do not paste either secret into chat.
+2. Verify the four gateway routes and typed Agentverse query, then record the
+   exact public HTTPS host, agent address, runtime version, and non-secret test run IDs.
    address, runtime version, and non-secret test run IDs.
 3. Set the documented `FETCH_SELLER_*` variables with `npx convex env set` in
    the protected `frontend/` shell.
