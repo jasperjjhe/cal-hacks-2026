@@ -1,5 +1,10 @@
 # BuyerUnion PRD v4 - complete source conversion
 
+> Superseded council format: [active PRD/technical spec v5.3](BUYERUNION_IMPLEMENTATION.md)
+> now specifies public offer snapshots, merchant peer challenges/grouped replies
+> and a sealed final-offer invitation for every eligible competitive candidate.
+> This archive remains historical; its extracted source text below is unchanged.
+
 Archived October 24, 2026 before revision. This is a full text conversion of the 29-page original, not the current implementation plan. Page order and extracted text are preserved, including historical decisions that the new plan supersedes. PDF table layout is flattened by extraction; source hyperlinks are retained in the ledger below.
 
 Source: `buyerunion-audit-and-prd.pdf`
