@@ -9,9 +9,9 @@ record, not a substitute for the authoritative implementation specification.
 Last reviewed: 2026-10-24  
 Current checkout: `C:\Users\Jasper\Documents\cal-hacks-2026`  
 Current branch: `feature/seller-side`  
-Current pushed commit: use the current `feature/seller-side` branch HEAD; refresh this line after each push.
+Current pushed commit: `c1e788c` (`docs: sync seller plan with council v5.3`).
 Remote status at last review: clean and synchronized with
-`origin/feature/seller-side`
+`origin/feature/seller-side`.
 
 ## Per-turn operating protocol
 
@@ -298,14 +298,14 @@ specific proof criteria.
 - The local `main` branch is one commit behind `origin/main`; do not silently
   rewrite or reset it. Refresh it only as an explicitly requested maintenance
   step.
-- The local branch contains the seller feature history plus merge commit
-  `84db50c`, which brings in the latest documentation-only `origin/dev`
-  council v5.3 revision. The documentation checkpoint below is pending push.
-- `origin/feature/seller-side` remains at the prior pushed seller checkpoint
-  until this documentation sync is pushed; refresh this section after push.
-- `origin/geoff/buyer` and the seller feature branch have diverged; integrate
-  through the documented internal seam rather than copying duplicate
-  implementations.
+- The local and remote seller branches contain merge commit `84db50c`, which
+  brings in the latest documentation-only `origin/dev` council v5.3 revision,
+  followed by pushed documentation checkpoint `c1e788c`.
+- `origin/dev` is the merge base's current remote line; the seller branch is
+  20 commits ahead and has no commits missing from `origin/dev` at this check.
+- `origin/geoff/buyer` and the seller feature branch have diverged (7 commits
+  unique to buyer, 21 unique to seller at this check). Integrate through the
+  documented internal seam rather than copying duplicate implementations.
 - Checked-in main protection at `.github/main-branch-protection.json` requires
   the `security` and `dependency-review` checks, a PR, linear history,
   conversation resolution, no force pushes/deletions, and **zero required
