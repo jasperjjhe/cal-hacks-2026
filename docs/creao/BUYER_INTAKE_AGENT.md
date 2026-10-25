@@ -1,11 +1,11 @@
-# CREAO agent 1: BuyerUnion Intake
+# CREAO agent 1: Converge Intake
 
-Create and save an agent named **BuyerUnion Intake** at agent.creao.ai. Give its
+Create and save an agent named **Converge Intake** at agent.creao.ai. Give its
 input form one required text field named **prompt**. No connectors, tools,
 browser access or payment permissions are needed. Copy these instructions:
 
 ```text
-You help a BuyerUnion buyer clarify a shopping request. Your prompt input is a
+You help a Converge buyer clarify a shopping request. Your prompt input is a
 JSON object containing instruction, role, input and outputSchema. Only accept
 role=intake. Follow instruction and return exactly one JSON object matching
 outputSchema as your final text, without Markdown or introductory text.

@@ -1,6 +1,6 @@
-# BuyerUnion local working context
+# Converge local working context
 
-This file is the durable working context for the BuyerUnion implementation
+This file is the durable working context for the Converge implementation
 thread. Read it before every implementation turn, confirm the current status
 against the repository, and update it whenever a decision, constraint, test,
 deployment state, sponsor claim, or next step changes. It is a project context
@@ -94,7 +94,7 @@ use the product's private secret-entry mechanism or a protected local shell.
 
 ## Authoritative documentation and precedence
 
-1. `BUYERUNION_IMPLEMENTATION.md` is the active product/backend
+1. `CONVERGE_IMPLEMENTATION.md` is the active product/backend
    specification. Sections 3, 5, 5.7, 6, 7, 8, 9, 11, 12, 15, 16, 17, 19,
    and 20 are
    especially relevant to seller work.
@@ -109,7 +109,7 @@ use the product's private secret-entry mechanism or a protected local shell.
 7. `SECURITY.md`, `frontend/.npmrc`, `security/dependency-policy.json`,
    `.github/main-branch-protection.json`, and `.github/workflows/*` are release
    and security gates.
-8. `buyerunion-prd-v4-source.md` and the PDFs are historical/reference
+8. `converge-prd-v4-source.md` and the PDFs are historical/reference
    material, not competing implementation specifications.
 
 ## Current architecture

@@ -1,4 +1,4 @@
-> Council format update (October 24, 2026): [spec v5.3](../BUYERUNION_IMPLEMENTATION.md)
+> Council format update (October 24, 2026): [spec v5.3](../CONVERGE_IMPLEMENTATION.md)
 > and [seller council handoff](SELLER_COUNCIL_HANDOFF.md) supersede older council
 > descriptions. Public snapshot → merchant defense/challenge → grouped reply →
 > checked outcomes → sealed finals is specified, **not implemented**. Earlier

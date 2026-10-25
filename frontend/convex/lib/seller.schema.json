@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://buyerunion.local/contracts/seller.v1.schema.json",
+  "$id": "https://converge.local/contracts/seller.v1.schema.json",
   "$comment": "Request envelopes remain v1; council and final decision envelopes are v2. Generated from the canonical registry.",
   "oneOf": [
     {

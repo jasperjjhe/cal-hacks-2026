@@ -63,7 +63,7 @@ export default function BackendApp() {
   return (
     <div className="connection-screen">
       <div className="brand-mark">✦</div>
-      <h1>BuyerUnion</h1>
+      <h1>Converge</h1>
       <p>{flow === "signUp" ? "Create your buyer account" : "Sign in to your buyer workspace"}</p>
       <form onSubmit={async event => {
         event.preventDefault();
@@ -237,7 +237,7 @@ function Workspace() {
         <button className="brand" onClick={() => openRequest(null)}>
           <span className="brand-mark">✦</span>
           <span>
-            <strong>BuyerUnion</strong>
+            <strong>Converge</strong>
             <small>buyer workspace</small>
           </span>
         </button>
@@ -955,7 +955,7 @@ function Workspace() {
           </section>
         )}
         <footer className="workspace-footer">
-          <span>BuyerUnion · disclosed demo commerce</span>
+          <span>Converge · disclosed demo commerce</span>
           <span>Backend owns prices, stock, approvals and orders</span>
         </footer>
       </main>

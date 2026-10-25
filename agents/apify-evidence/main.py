@@ -54,7 +54,7 @@ def fetch_page(url, hosts):
             if parsed.query:
                 path += "?" + parsed.query
             connection.request("GET", path, headers={
-                "User-Agent": "BuyerUnionEvidence/1.0", "Accept": "text/html,text/plain",
+                "User-Agent": "ConvergeEvidence/1.0", "Accept": "text/html,text/plain",
                 "Accept-Encoding": "identity",
             })
             response = connection.getresponse()

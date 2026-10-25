@@ -7,7 +7,7 @@
 
 ## v5.3 council revision — specified, not implemented
 
-The active [PRD/technical spec](../BUYERUNION_IMPLEMENTATION.md), sections 5.7
+The active [PRD/technical spec](../CONVERGE_IMPLEMENTATION.md), sections 5.7
 and 9, replaces the old council with a common frozen public snapshot, checked
 competitive briefs, merchant defense/peer challenge, one grouped reply per target,
 checked outcomes and a sealed final invitation for every eligible candidate.

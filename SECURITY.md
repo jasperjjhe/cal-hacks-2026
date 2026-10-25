@@ -1,4 +1,4 @@
-# BuyerUnion security rules
+# Converge security rules
 
 This project processes buyer requirements, merchant offers, web evidence, AI-agent outputs and optional payment-provider state. The rules below are release gates, not suggestions.
 
