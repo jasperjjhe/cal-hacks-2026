@@ -1,75 +1,142 @@
-# React + TypeScript + Vite
+# BuyerUnion buyer workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The default React application uses an authenticated Convex backend. Requests,
+immutable confirmed versions, agent jobs, durable runs, evidence, quotes, stock
+allocations, approvals, execution attempts, bookmarks and orders are persisted.
+The historical browser-only prototype is available explicitly at `/mock`.
 
-Currently, two official plugins are available:
+## Council format: current implementation versus agreed revision
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+[Spec v5.3](../BUYERUNION_IMPLEMENTATION.md) and the
+[seller council handoff](../docs/SELLER_COUNCIL_HANDOFF.md) now require public
+competitive snapshots, merchant peer challenges/grouped replies, checked public
+exchanges and one sealed final invitation for every eligible candidate. The
+buyer now implements those phases, canonical v2 envelopes and validation with
+fixture sellers. See [buyer migration status](../docs/BUYER_COUNCIL_MIGRATION.md)
+for the exact seller boundary. Live seller work and service authority are pending.
+Products stay fixed in the proposed round; above-budget hard-valid offers may
+compete privately with respect to affordability, while only affordable offers
+are selectable. User-approved MVP waits allow 90 seconds per CREAO role and eight minutes overall;
+there is no 45-second complete-comparison promise.
 
-## React Compiler
+## Local setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Use Node 24 (`.nvmrc`) and the reviewed lockfile. From `frontend/`:
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm run security:dependencies
+npm ci --ignore-scripts
+npx convex dev --typecheck enable
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Keep that terminal running. On a fresh checkout, select local development / use
+without an account if prompted. The CLI generates `.env.local` and downloads the
+local backend. A cloud deployment or provider key is not required. Unlike a cloud
+deployment, the local backend stops when its development process stops; `--once`
+is for deployment/checking, not for keeping the application online.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+In a second terminal, initialize the new local deployment once:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+node scripts/setup-local-auth.mjs
+npx convex run sellerSeed:seedSellerDemo '{"seedRevision":"buyer-v1"}'
+npm run dev
 ```
+
+Open `http://localhost:5173`. Restart Vite if it was running before `.env.local`
+was generated. Authentication keys and the local database are ignored by Git.
+Do not rerun the auth initializer on every startup: it rotates signing keys.
+For a local catalog seeded before the diagnostic fix, run
+`npx convex run buyerAdmin:upgradeDemoDiagnostics '{}'` once. This creates new
+listing versions and preserves allocations and historical order snapshots.
+
+Seeding is idempotent for the same revision and refuses to reset a nonempty
+catalog with another revision. Existing purchases are never silently reset.
+
+A buyer session signs in anonymously. Keep the same browser profile to return to
+its requests; cross-device recovery is outside this prototype. A request URL
+contains only the request ID; ownership is checked by the server on every call.
+
+## Working journey — current baseline
+
+1. Describe a laptop, clothing item, household accessory or small appliance.
+   Fixture intake proposes explicit supported details; it is not live language
+   interpretation. ISO dates such as `2026-11-15` are recognized. All missing or
+   unrecognized requirements can be entered in the editable brief.
+2. Review the primary item, up to two related items, quantities 1–10, conditions,
+   measurable hard requirements/weighted preferences, deadline and private
+   maximum delivered total. An optional shared target requires separate consent.
+3. Confirm and start. The backend coordinates actual persisted demo merchant
+   jobs, validates them through seller rules, runs at most one sealed price round
+   when useful, and checks evidence applicability. Missing real evidence is shown
+   honestly. These fixtures use synthetic product identities and diagnostics.
+4. Sort, compare, inspect sources/facts and save checked offers. Select one for a
+   freshly validated three-minute firm quote and atomic stock hold.
+5. Review exact product configuration, quantities, total and terms. Explicitly
+   approve the simulation. Duplicate approvals share one execution/order. A
+   decline releases stock; an unknown result retains it and reconciles the same
+   attempt. Success says **“Demo order completed; no payment taken.”**
+6. Reload or visit Orders to see persisted progress and the frozen receipt.
+
+Revising a brief invalidates its old run, releases unapproved holds and resets
+shared-target consent. Pending/unknown purchases block edits and new execution.
+Seven-day cleanup removes reconciled request/research data, retaining unresolved
+executions and stock ledger entries so deletion cannot restock sold goods.
+
+## Provider configuration
+
+CREAO buyer roles and the pinned Apify evidence Actor have implemented adapters
+with mocked transport tests. See [buyer integration setup](../docs/BUYER_INTEGRATIONS.md)
+for agent creation, automatic Apify RAG review discovery, backend variables and live acceptance.
+Apify no longer requires deploying the custom Python Actor or selecting product URLs;
+configure the maintained RAG Actor/build and use genuine catalog product identities.
+Credentials and live execution are still unverified. Seller jobs remain fixtures
+until the seller branch is consolidated; live buyer runs report mixed agent mode.
+External payment is deferred; fixture agents and simulated checkout need no keys.
+
+Operator accounts are provisioned only through the internal
+`buyerAdmin:provisionOperator` action. Public password signup is disabled;
+membership is assigned server-side to one merchant. After password sign-in,
+call `seller.bindOperatorSession({})` before querying the seller workspace.
+It derives the merchant from an internal account grant and binds the exact
+`identity.tokenIdentifier`, following Dev S's authentication contract. Repeat
+this call after each new login; it is idempotent. Clients cannot choose a
+merchant or role. Use separate buyer/operator browser contexts. The buyer UI
+does not expose seller administration.
+
+For an existing deployment with the old `authSubject` membership field, deploy
+the transitional schema and run `npx convex run buyerAdmin:migrateOperatorMemberships '{}'`
+once. It is safe to repeat. Legacy subjects never authorize seller operations;
+existing token-identifier memberships remain valid. See the review-resolution
+handoff for details before merging Dev S's schema.
+
+## Checks
+
+```sh
+npm run contracts:check
+npm run test:buyer
+npm run test:seller
+npm run test:backend
+npm run typecheck:backend
+npm run lint
+npm run build
+```
+
+`test:backend` runs real Convex function handlers and Workflow components against
+`convex-test`'s isolated database/runtime. It checks ownership, privacy, versioning,
+sealed promotion, category/basket behavior, contention, rollback, quote expiry,
+exact approval, duplicate execution, decline/unknown status, evidence provenance
+and seven-day retention. It does not prove external provider behavior.
+
+`npm run ci` additionally installs from the lockfile with scripts disabled and
+checks dependency age, signatures, workflow policy and vulnerabilities. CI runs
+backend and seller checks as well as the original browser-mock regression tests.
+
+## Design reference
+
+[Figma](https://www.figma.com/design/anisZ6onqrgSdZMnzbjBuf), home `53:1134`,
+provides layout/colors. Rechecked during backend UI work on October 24. The navy
+sidebar, centered prompt and illustrated offer cards use existing design tokens
+and downloaded local images. Photos illustrate laptops; exact facts come from
+the selected variant. Responsiveness and interactions follow implementation
+judgment. Figma placeholder identities, ratings and provider claims are not data.
