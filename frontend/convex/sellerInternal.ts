@@ -257,6 +257,9 @@ export const prepareSellerJob = internalMutation({
       const prior = existing[0]
       const same = prior.merchantId === args.merchantId && prior.inputDigest === args.inputDigest && prior.inputRef === args.inputRef && prior.phaseId === args.phaseId
       if (!same) throwSellerError('REPLAY_REJECTED', 'job ID was already prepared with a different payload')
+      if (args.brief !== undefined && prior.status === 'created') {
+        await storeSellerBrief(ctx, prior.jobId, args.brief, prior.requestId, prior.requestVersion, prior.runId)
+      }
       return { jobId: prior.jobId, status: prior.status, replayed: true }
     }
     await ctx.db.insert('sellerJobs', {
@@ -477,11 +480,6 @@ export const claimSellerJob = internalMutation({
         ? job.status === 'pending' && Boolean(job.providerRunId)
         : job.status === 'ambiguous'
     if (!allowed) return null
-    const inputs = await ctx.db
-      .query('sellerJobInputs')
-      .withIndex('by_jobId', (query) => query.eq('jobId', job.jobId))
-      .collect()
-    if (inputs.length !== 1) throwSellerError('INVALID_INPUT', 'seller job has no unique sanitized input')
     const nextStatus = mode === 'start' ? 'starting' : 'polling'
     const attemptCount = job.attemptCount + 1
     await ctx.db.patch(job._id, {
@@ -538,7 +536,9 @@ export const recordProviderResult = internalMutation({
     }
     const errorCode = args.errorCode ?? 'PROVIDER_PROTOCOL'
     const retryable = args.errorRetryable ?? false
-    const ambiguous = errorCode === 'PROVIDER_TIMEOUT' && !providerRunId
+    const ambiguous = job.status === 'starting'
+      && !providerRunId
+      && (errorCode === 'PROVIDER_TIMEOUT' || errorCode === 'PROVIDER_NETWORK')
     if (ambiguous) {
       await ctx.db.patch(job._id, {
         status: 'ambiguous',
@@ -551,7 +551,7 @@ export const recordProviderResult = internalMutation({
       await recordInternalEvent(ctx, job.merchantId, 'provider_ambiguous', { errorCode }, [], job.jobId)
       return { replayed: false, retry: false, pending: false, ambiguous: true }
     }
-    const canRetry = retryable && job.attemptCount < 2
+    const canRetry = retryable && job.attemptCount < 4
     if (canRetry) {
       await ctx.db.patch(job._id, {
         status: providerRunId ? 'pending' : 'created',

@@ -62,7 +62,7 @@ function classifyNetworkError(error: unknown): ProviderApiError {
 function providerRunId(value: unknown): string | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
-  return typeof record.providerRunId === 'string' && record.providerRunId.length <= 256 ? record.providerRunId : null
+  return typeof record.providerRunId === 'string' && record.providerRunId.length > 0 && record.providerRunId.length <= 256 ? record.providerRunId : null
 }
 
 function resultFromResponse(value: unknown, statusCode: number, elapsedMs: number): AgentJobResult<unknown> {

@@ -66,7 +66,7 @@ function optionalEnv(name: string): string | undefined {
 function allowedHosts(name: string): string[] {
   const value = requiredEnv(name)
   const hosts = value.split(',').map((host) => host.trim()).filter(Boolean)
-  if (hosts.length === 0 || hosts.length > 8 || hosts.some((host) => host.length > 253 || host.includes('/'))) {
+  if (hosts.length === 0 || hosts.length > 8 || hosts.some((host) => host.length > 253 || host.includes('/') || host.includes('*'))) {
     throw new Error(`seller provider host allowlist is invalid: ${name}`)
   }
   return [...new Set(hosts)]

@@ -318,3 +318,63 @@ test('HTTP provider adapter requires explicit HTTPS allowlists and sends only sc
   assert.equal('privateMaximumCents' in requestBody.input, false)
   assert.equal(requestBody.input.runId, 'run_demo_1')
 })
+
+test('HTTP provider adapter reconciles an ambiguous start by application job ID', async () => {
+  let requestedUrl = ''
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    reconcileUrlTemplate: 'https://agent.example/jobs/{jobId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-demo-v2',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async (url) => {
+      requestedUrl = url
+      return new Response(JSON.stringify({
+        status: 'completed',
+        providerRunId: 'provider-run-reconciled',
+        model: 'fetch-seller-v1',
+        output: { kind: 'abstain', jobId: 'job_reconcile', reasonCode: 'NO_MATCH' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await port.poll('job_reconcile')
+  assert.equal(result.status, 'completed')
+  assert.equal(requestedUrl, 'https://agent.example/jobs/job_reconcile')
+  if (result.status === 'completed') assert.equal(result.providerRunId, 'provider-run-reconciled')
+})
+
+test('HTTP provider adapter preserves an ambiguous timeout as a retryable failure without inventing a run ID', async () => {
+  const port = createFetchAgentPort({
+    provider: 'fetch',
+    startUrl: 'https://agent.example/start',
+    pollUrlTemplate: 'https://agent.example/runs/{providerRunId}',
+    cancelUrlTemplate: 'https://agent.example/runs/{providerRunId}/cancel',
+    allowedHosts: ['agent.example'],
+    requestTimeoutMs: 5_000,
+    providerConfigRevision: 'fetch-demo-v2',
+  }, {
+    getToken: async () => undefined,
+    resolveInput: async () => fixtures.briefs.laptop,
+    resolveProviderRunId: async () => null,
+    fetchImpl: async () => {
+      throw new Error('provider request timeout')
+    },
+  })
+  const result = await port.start({
+    jobId: 'job_timeout', requestId: 'req_timeout', requestVersion: 1, runId: 'run_timeout', phaseId: 'phase_timeout',
+    role: 'seller_initial', merchantId: 'merchant_a', deadlineAt: Date.now() + 10_000, provider: 'fetch', inputDigest: 'sha256:brief', inputRef: 'brief_timeout',
+  })
+  assert.equal(result.status, 'failed')
+  if (result.status === 'failed') {
+    assert.equal(result.providerRunId, null)
+    assert.equal(result.error.code, 'PROVIDER_TIMEOUT')
+    assert.equal(result.error.retryable, true)
+  }
+})

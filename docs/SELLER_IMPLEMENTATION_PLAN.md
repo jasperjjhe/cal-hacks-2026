@@ -33,6 +33,7 @@ frontend/
     seller.ts                 # public operator queries/mutations only
     sellerInternal.ts         # buyer/workflow integration seam; never browser-callable
     sellerJobs.ts              # job-bound proposal validation and completion transitions
+    sellerAgent.ts             # internal provider action: start/poll/reconcile/cancel
     sellerInventory.ts        # transactional allocation helpers
     sellerPolicy.ts            # policy versions and deterministic checks
     lib/
@@ -60,6 +61,7 @@ The first seller-only checkpoint is now implemented on `feature/seller-side`:
 - `convex/schema.ts`, `seller.ts` and `sellerInternal.ts` define seller-owned Convex tables, authenticated merchant operations, internal job preparation and job-bound proposal validation. The public surface derives merchant identity from authenticated membership and the canonical auth token identifier; IDs supplied by a browser are not authorization.
 - `convex/sellerSeed.ts` provides an internal, revisioned fixture seed for all four profile families, P1–P6, accessories, C1/C2, H1/H2, A1/A2 and three synthetic merchants. It is empty-database-only and idempotent by seed revision; it does not make synthetic inventory or evidence look real.
 - `convex/integrations/` contains a deterministic fixture port plus configuration-only Fetch.ai and CREAO HTTP adapters. They require HTTPS host allowlists, server-side token callbacks, idempotency keys, bounded timeouts, explicit provider run IDs and pending/poll/reconcile semantics. No live provider endpoint or credential is invented.
+- `convex/sellerAgent.ts` now provides the server-only provider action path. It stores sanitized job input separately, claims a job before network I/O, persists provider run/model/status metadata, schedules bounded polling, preserves ambiguous starts for explicit reconciliation, best-effort cancels, and sends terminal output through deterministic seller validation. No provider payload or token is logged or persisted.
 - `scripts/test-seller.mjs` and `convex/tsconfig.json` provide dependency-light deterministic tests and a separate Convex typecheck. The seller schema and generated bindings are now pushed to the linked Convex development deployment and the revisioned fixture catalog has been seeded there. Production/Auth configuration and live provider sponsor evidence remain pending.
 
 Generated Convex bindings remain generated output. Do not hand-write a second `_generated` API or duplicate the seller contracts in browser code.
@@ -72,7 +74,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 4. `OfferVersion` is immutable. Revisions point to a parent candidate/version; no in-place rewrite may change buyer-visible history.
 5. Seller functions never approve, execute or settle a purchase. They expose validated offer data and transaction helpers to the buyer-owned lifecycle.
 6. All browser-facing seller reads are authenticated and merchant-scoped. Internal functions are used for buyer/workflow calls and remain unavailable to the Convex client.
-7. Network/model calls occur in actions or provider workers, never in Convex mutations. Stale, late, duplicated or mismatched completions are audited and ignored.
+7. Network/model calls occur in actions or provider workers, never in Convex mutations. Stale, late, duplicated or mismatched completions are audited and ignored. A start timeout or no-response network failure without a provider reference becomes `ambiguous`; the system never blindly starts a second provider run and can reconcile by application job ID when configured.
 
 ## Implementation phases and push gates
 
@@ -99,7 +101,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 
 - Add one provider-neutral `AgentPort` with `start`, `poll` and best-effort `cancel`.
 - Add deterministic fixture mode for CI and explicit Fetch.ai and CREAO adapters behind the same port.
-- Validate all provider results against role-specific schemas, record provider run IDs/model/build/config revision, deduplicate callbacks and reconcile accepted-but-pending responses.
+- Validate all provider results against role-specific schemas, record provider run IDs/model/config revision, deduplicate repeated results and reconcile accepted-but-pending or ambiguous responses. The internal Convex action path is now implemented; live Fetch deployment/configuration is the next external handoff.
 - Do not claim Fetch.ai or CREAO prize eligibility until a real configured run is captured in the sponsor evidence ledger.
 
 ### S4: integration handoff
@@ -107,6 +109,7 @@ Generated Convex bindings remain generated output. Do not hand-write a second `_
 - Publish generated/type-checked contract usage for the buyer-side contributor.
 - Add a seller-only demo/operator flow and integration tests that a buyer workflow can call without gaining merchant secrets.
 - Record exact live/fixture modes, limitations, run IDs and code paths in `docs/SELLER_SPONSOR_PROOF.md`.
+- See `docs/SELLER_FETCH_CONFIGURATION.md` and `docs/BUYER_SELLER_INTEGRATION_NOTES.md` for the exact environment variables, internal action sequence and merge points.
 
 ## Sponsor eligibility plan for this branch
 
